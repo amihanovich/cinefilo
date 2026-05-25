@@ -25,10 +25,23 @@ const MIME = {
 const ssrHandler = toNodeHandler((req) => serverModule.fetch(req, {}, {}));
 const port = parseInt(process.env.PORT || "3000", 10);
 
+console.log(`[static] clientDir = ${clientDir}`);
+console.log(`[static] exists = ${fs.existsSync(clientDir)}`);
+try {
+  console.log(`[static] assets/ = ${fs.readdirSync(path.join(clientDir, "assets")).join(", ")}`);
+} catch (e) {
+  console.log(`[static] assets/ error: ${e.message}`);
+}
+
 http
   .createServer((req, res) => {
     const urlPath = new URL(req.url, "http://localhost").pathname;
     const filePath = path.join(clientDir, urlPath);
+
+    if (urlPath.startsWith("/assets/")) {
+      const exists = fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+      console.log(`[static] ${urlPath} → ${filePath} exists=${exists}`);
+    }
 
     // Security: prevent path traversal
     if (!filePath.startsWith(clientDir)) {
@@ -40,7 +53,6 @@ http
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath);
       res.setHeader("Content-Type", MIME[ext] || "application/octet-stream");
-      // Cache immutable assets (hashed filenames)
       if (urlPath.startsWith("/assets/")) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       }
