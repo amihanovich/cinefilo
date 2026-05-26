@@ -93,15 +93,18 @@ function HomePage() {
   const [excluded, setExcluded] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
+  const [postersLoading, setPostersLoading] = useState(false);
 
   const loadPostersFor = (data: RecommendationsResult) => {
     const items = [data.main, ...data.alternatives].map((r) => ({
       title: r.title,
       type: r.type,
     }));
+    setPostersLoading(true);
     fetchPosters({ data: { items } })
       .then((res) => setPosters((prev) => ({ ...prev, ...res.posters })))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setPostersLoading(false));
   };
 
   const [session, setSession] = useState<Session | null>(null);
@@ -492,6 +495,7 @@ function HomePage() {
           onRerunExcludingSeen={rerunExcludingSeen}
           isGuestForFeedback={isGuest}
           posters={posters}
+          postersLoading={postersLoading}
           onSaveMoment={async (name) => {
             const ctx = inferContext();
             await saveMoment({
@@ -1393,6 +1397,7 @@ function ResultsScreen({
   onRerunExcludingSeen,
   isGuestForFeedback,
   posters,
+  postersLoading,
 }: {
   results: RecommendationsResult;
   resolvedFilters: SituationFilters;
@@ -1421,6 +1426,7 @@ function ResultsScreen({
   onRerunExcludingSeen: () => void;
   isGuestForFeedback: boolean;
   posters: Record<string, string | null>;
+  postersLoading: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [savedOnce, setSavedOnce] = useState(false);
@@ -1751,6 +1757,7 @@ function ResultsScreen({
                 key={visibleAlts[0].title}
                 rec={visibleAlts[0]}
                 posterUrl={posters[visibleAlts[0].title] ?? null}
+                posterLoading={postersLoading && !(visibleAlts[0].title in posters)}
                 feedback={cardState[visibleAlts[0].title] ?? null}
                 onSeen={() => markSeen(visibleAlts[0])}
                 onLike={() => markFeedback(visibleAlts[0], "like")}
@@ -1765,6 +1772,7 @@ function ResultsScreen({
             <MainCard
               rec={visibleMain}
               posterUrl={posters[visibleMain.title] ?? null}
+              posterLoading={postersLoading && !(visibleMain.title in posters)}
               feedback={cardState[visibleMain.title] ?? null}
               onSeen={() => markSeen(visibleMain)}
               onLike={() => markFeedback(visibleMain, "like")}
@@ -1780,6 +1788,7 @@ function ResultsScreen({
                 key={visibleAlts[1].title}
                 rec={visibleAlts[1]}
                 posterUrl={posters[visibleAlts[1].title] ?? null}
+                posterLoading={postersLoading && !(visibleAlts[1].title in posters)}
                 feedback={cardState[visibleAlts[1].title] ?? null}
                 onSeen={() => markSeen(visibleAlts[1])}
                 onLike={() => markFeedback(visibleAlts[1], "like")}
@@ -1803,6 +1812,7 @@ function ResultsScreen({
                 key={r.title}
                 rec={r}
                 posterUrl={posters[r.title] ?? null}
+                posterLoading={postersLoading && !(r.title in posters)}
                 feedback={cardState[r.title] ?? null}
                 onSeen={() => markSeen(r)}
                 onLike={() => markFeedback(r, "like")}
@@ -1815,10 +1825,24 @@ function ResultsScreen({
         </div>
       )}
 
+      {allDismissed && (
+        <div className="flex flex-col items-center gap-4 py-16 text-center animate-fade-in">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/30">
+            <Film className="h-8 w-8 text-muted-foreground/40" />
+          </div>
+          <div>
+            <p className="font-display text-xl font-bold text-foreground">Nada quedó en pie</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+              Descartaste todo — buscamos algo distinto.
+            </p>
+          </div>
+        </div>
+      )}
+
       {(Object.keys(cardState).length > 0 || allDismissed) && (
         <button
           onClick={onRerunExcludingSeen}
-          className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/10 px-5 text-sm font-semibold text-primary transition-smooth hover:bg-primary/20"
+          className="mt-2 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/10 px-5 text-sm font-semibold text-primary transition-smooth hover:bg-primary/20"
         >
           <RefreshCw className="h-4 w-4" />
           {allDismissed ? "Buscar otras opciones" : "Buscar más, excluyendo lo marcado"}
@@ -1973,6 +1997,7 @@ type CardFeedback = "seen" | "like" | "love" | "dislike" | null;
 function MainCard({
   rec,
   posterUrl,
+  posterLoading = false,
   feedback,
   onSeen,
   onLike,
@@ -1982,6 +2007,7 @@ function MainCard({
 }: {
   rec: Recommendation;
   posterUrl: string | null;
+  posterLoading?: boolean;
   feedback: CardFeedback;
   onSeen: () => void;
   onLike: () => void;
@@ -1998,7 +2024,9 @@ function MainCard({
       </div>
 
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted/40">
-        {posterUrl ? (
+        {posterLoading && !posterUrl ? (
+          <div className="h-full w-full animate-pulse bg-muted/40" />
+        ) : posterUrl ? (
           <img
             src={posterUrl}
             alt={`Portada de ${rec.title}`}
@@ -2061,6 +2089,7 @@ function MainCard({
 function AltCard({
   rec,
   posterUrl,
+  posterLoading = false,
   feedback,
   onSeen,
   onLike,
@@ -2070,6 +2099,7 @@ function AltCard({
 }: {
   rec: Recommendation;
   posterUrl: string | null;
+  posterLoading?: boolean;
   feedback: CardFeedback;
   onSeen: () => void;
   onLike: () => void;
@@ -2080,7 +2110,9 @@ function AltCard({
   return (
     <article className="group overflow-hidden rounded-3xl border border-border bg-card/40 transition-smooth hover:bg-card/70">
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted/40">
-        {posterUrl ? (
+        {posterLoading && !posterUrl ? (
+          <div className="h-full w-full animate-pulse bg-muted/40" />
+        ) : posterUrl ? (
           <img
             src={posterUrl}
             alt={`Portada de ${rec.title}`}
