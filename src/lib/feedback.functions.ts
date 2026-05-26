@@ -5,7 +5,7 @@ import { getOptionalUser } from "@/lib/auth-optional";
 const feedbackSchema = z.object({
   title: z.string().min(1).max(200),
   platform: z.string().min(1).max(80).nullable().optional(),
-  sentiment: z.enum(["seen", "like", "love"]),
+  sentiment: z.enum(["seen", "like", "love", "dislike"]),
 });
 
 export const recordTitleFeedback = createServerFn({ method: "POST" })
@@ -57,6 +57,7 @@ export const resetTitleFeedback = createServerFn({ method: "POST" })
 export type TasteSnapshot = {
   loved: string[];
   liked: string[];
+  disliked: string[];
   seen: string[];
 };
 
@@ -65,10 +66,11 @@ export async function getTasteSnapshot(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   userId: string,
-  opts: { loveLimit?: number; likeLimit?: number; seenLimit?: number } = {},
+  opts: { loveLimit?: number; likeLimit?: number; dislikeLimit?: number; seenLimit?: number } = {},
 ): Promise<TasteSnapshot> {
   const loveLimit = opts.loveLimit ?? 12;
   const likeLimit = opts.likeLimit ?? 12;
+  const dislikeLimit = opts.dislikeLimit ?? 20;
   const seenLimit = opts.seenLimit ?? 40;
 
   const { data, error } = await supabase
@@ -76,16 +78,18 @@ export async function getTasteSnapshot(
     .select("title,sentiment")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(loveLimit + likeLimit + seenLimit);
-  if (error || !data) return { loved: [], liked: [], seen: [] };
+    .limit(loveLimit + likeLimit + dislikeLimit + seenLimit);
+  if (error || !data) return { loved: [], liked: [], disliked: [], seen: [] };
 
   const loved: string[] = [];
   const liked: string[] = [];
+  const disliked: string[] = [];
   const seen: string[] = [];
-  for (const row of data as { title: string; sentiment: "seen" | "like" | "love" }[]) {
+  for (const row of data as { title: string; sentiment: "seen" | "like" | "love" | "dislike" }[]) {
     if (row.sentiment === "love" && loved.length < loveLimit) loved.push(row.title);
     else if (row.sentiment === "like" && liked.length < likeLimit) liked.push(row.title);
+    else if (row.sentiment === "dislike" && disliked.length < dislikeLimit) disliked.push(row.title);
     else if (row.sentiment === "seen" && seen.length < seenLimit) seen.push(row.title);
   }
-  return { loved, liked, seen };
+  return { loved, liked, disliked, seen };
 }

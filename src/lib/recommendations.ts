@@ -94,24 +94,29 @@ export const PLATFORM_COLORS: Record<Platform, string> = {
 };
 
 export function deepLinkFor(platform: string, title: string): string {
-  const q = encodeURIComponent(title);
+  const t = encodeURIComponent(title);
+  // Google site-search es más confiable que los buscadores internos
+  // (muchos requieren sesión activa y rompen si los abrís desde otro sitio).
+  const googleSite = (domain: string) =>
+    `https://www.google.com/search?q=${t}+site%3A${domain}&btnI=1`;
   switch (platform) {
     case "Netflix":
-      return `https://www.netflix.com/search?q=${q}`;
+      return googleSite("netflix.com");
     case "Disney+":
-      return `https://www.disneyplus.com/search/${q}`;
+      return googleSite("disneyplus.com");
     case "Max":
-      return `https://www.max.com/search?q=${q}`;
+      return googleSite("max.com");
     case "Prime Video":
-      return `https://www.amazon.com/s?k=${q}&i=instant-video`;
+      return googleSite("primevideo.com");
     case "Apple TV+":
-      return `https://tv.apple.com/search?term=${q}`;
+      return googleSite("tv.apple.com");
     case "Paramount+":
-      return `https://www.paramountplus.com/search/?q=${q}`;
+      return googleSite("paramountplus.com");
     case "Star+":
-      return `https://www.disneyplus.com/search/${q}`;
+      // Star+ se integró en Disney+ (LatAm, 2024)
+      return googleSite("disneyplus.com");
     default:
-      return `https://www.google.com/search?q=${q}+ver+online`;
+      return `https://www.google.com/search?q=${t}+ver+online`;
   }
 }
 

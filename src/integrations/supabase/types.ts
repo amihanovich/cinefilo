@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      moment_feedback: {
+        Row: {
+          accepted: boolean
+          correction: string | null
+          created_at: string
+          detected_label: string
+          detected_signals: Json
+          id: string
+          user_id: string
+        }
+        Insert: {
+          accepted?: boolean
+          correction?: string | null
+          created_at?: string
+          detected_label: string
+          detected_signals?: Json
+          id?: string
+          user_id: string
+        }
+        Update: {
+          accepted?: boolean
+          correction?: string | null
+          created_at?: string
+          detected_label?: string
+          detected_signals?: Json
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       moments: {
         Row: {
           attention_filter: string | null
@@ -73,21 +103,27 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_bracket: string | null
           created_at: string
           default_platforms: string[]
           id: string
+          seed_loved: string[]
           updated_at: string
         }
         Insert: {
+          age_bracket?: string | null
           created_at?: string
           default_platforms?: string[]
           id: string
+          seed_loved?: string[]
           updated_at?: string
         }
         Update: {
+          age_bracket?: string | null
           created_at?: string
           default_platforms?: string[]
           id?: string
+          seed_loved?: string[]
           updated_at?: string
         }
         Relationships: []

@@ -127,7 +127,13 @@ const filtersInputSchema = z.object({
   source: z.enum(["filters", "moment"]).default("filters"),
   extraText: z.string().max(500).optional().nullable(),
   excludeTitles: z.array(z.string().min(1).max(200)).max(40).optional().default([]),
-  profileSeed: z.string().max(500).optional().nullable(),
+  profileSeed: z
+    .object({
+      ageBracket: z.string().min(1).max(20).optional(),
+      lovedTitles: z.array(z.string().min(1).max(120)).max(8).optional(),
+    })
+    .optional()
+    .nullable(),
 });
 
 function buildTasteLine(taste: TasteSnapshot | null): string {
@@ -135,7 +141,23 @@ function buildTasteLine(taste: TasteSnapshot | null): string {
   const parts: string[] = [];
   if (taste.loved.length > 0) parts.push(`Le encantó (señal fuerte): ${taste.loved.join(", ")}`);
   if (taste.liked.length > 0) parts.push(`Le gustó: ${taste.liked.join(", ")}`);
+  if (taste.disliked.length > 0)
+    parts.push(`NO le gustó (señal negativa fuerte — evitá títulos similares en tono/género/director): ${taste.disliked.join(", ")}`);
   return parts.length ? `\n\nGusto del usuario:\n- ${parts.join("\n- ")}` : "";
+}
+
+function buildProfileSeedLine(
+  seed: { ageBracket?: string; lovedTitles?: string[] } | null | undefined,
+): string {
+  if (!seed) return "";
+  const parts: string[] = [];
+  if (seed.ageBracket) parts.push(`Rango de edad: ${seed.ageBracket}`);
+  if (seed.lovedTitles && seed.lovedTitles.length > 0) {
+    parts.push(
+      `Títulos que el usuario declaró amar (úsalos como ancla de sensibilidad — NUNCA los recomiendes de nuevo, pero buscá títulos en esa línea): ${seed.lovedTitles.join(", ")}`,
+    );
+  }
+  return parts.length ? `\n\nPerfil estable del usuario:\n- ${parts.join("\n- ")}` : "";
 }
 
 export const recommendFromFilters = createServerFn({ method: "POST" })
@@ -162,20 +184,39 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     const taste = user ? await getTasteSnapshot(user.supabase, user.userId) : null;
     const tasteLine = buildTasteLine(taste);
 
-    // Combinamos excluded explícitos + títulos ya vistos en el historial de feedback.
+    // Si el usuario está logueado y no nos mandaron seed desde el cliente,
+    // levantamos su perfil persistido (age_bracket + seed_loved).
+    let effectiveSeed = data.profileSeed ?? null;
+    if (user && !effectiveSeed) {
+      const { data: prof } = await user.supabase
+        .from("profiles")
+        .select("age_bracket, seed_loved")
+        .eq("id", user.userId)
+        .maybeSingle();
+      if (prof?.age_bracket || (prof?.seed_loved && prof.seed_loved.length > 0)) {
+        effectiveSeed = {
+          ageBracket: prof.age_bracket ?? undefined,
+          lovedTitles: (prof.seed_loved ?? []) as string[],
+        };
+      }
+    }
+    const seedLine = buildProfileSeedLine(effectiveSeed);
+
+    // Combinamos excluded explícitos + títulos ya vistos en el historial de feedback
+    // + los lovedTitles del seed (para no re-recomendarlos).
     const exclSet = new Set<string>([
       ...(data.excludeTitles ?? []),
       ...(taste?.seen ?? []),
       ...(taste?.loved ?? []),
       ...(taste?.liked ?? []),
+      ...(taste?.disliked ?? []),
+      ...(effectiveSeed?.lovedTitles ?? []),
     ]);
     const excluded = [...exclSet];
     const excludeLine =
       excluded.length > 0
-        ? `\n\nTítulos a excluir (ya vistos o descartados — NO los recomiendes):\n- ${excluded.join("\n- ")}`
+        ? `\n\nTítulos a excluir (ya vistos o declarados como favoritos — NO los recomiendes):\n- ${excluded.join("\n- ")}`
         : "";
-
-    const seedLine = data.profileSeed ? `\n\n${data.profileSeed}` : "";
 
     const prompt = `${SYSTEM_BASE}
 
@@ -189,6 +230,7 @@ Pedido del usuario (filtros):
 - Atención: ${fmt(data.attention ?? null)}
 - Novedad: ${fmt(data.novelty ?? null)}
 - Plataformas disponibles: ${data.platforms.join(", ")}${extra}${tasteLine}${seedLine}${excludeLine}
+
 
 Recuerda: "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
@@ -225,7 +267,13 @@ const textInputSchema = z.object({
   seasonHint: z.string().max(80).optional().nullable(),
   weatherHint: z.string().max(120).optional().nullable(),
   excludeTitles: z.array(z.string().min(1).max(200)).max(40).optional().default([]),
-  profileSeed: z.string().max(500).optional().nullable(),
+  profileSeed: z
+    .object({
+      ageBracket: z.string().min(1).max(20).optional(),
+      lovedTitles: z.array(z.string().min(1).max(120)).max(8).optional(),
+    })
+    .optional()
+    .nullable(),
 });
 
 export const recommendFromText = createServerFn({ method: "POST" })
@@ -246,19 +294,35 @@ export const recommendFromText = createServerFn({ method: "POST" })
     const taste = user ? await getTasteSnapshot(user.supabase, user.userId) : null;
     const tasteLine = buildTasteLine(taste);
 
+    let effectiveSeed = data.profileSeed ?? null;
+    if (user && !effectiveSeed) {
+      const { data: prof } = await user.supabase
+        .from("profiles")
+        .select("age_bracket, seed_loved")
+        .eq("id", user.userId)
+        .maybeSingle();
+      if (prof?.age_bracket || (prof?.seed_loved && prof.seed_loved.length > 0)) {
+        effectiveSeed = {
+          ageBracket: prof.age_bracket ?? undefined,
+          lovedTitles: (prof.seed_loved ?? []) as string[],
+        };
+      }
+    }
+    const seedLine = buildProfileSeedLine(effectiveSeed);
+
     const exclSet = new Set<string>([
       ...(data.excludeTitles ?? []),
       ...(taste?.seen ?? []),
       ...(taste?.loved ?? []),
       ...(taste?.liked ?? []),
+      ...(taste?.disliked ?? []),
+      ...(effectiveSeed?.lovedTitles ?? []),
     ]);
     const excluded = [...exclSet];
     const excludeLine =
       excluded.length > 0
-        ? `\n\nTítulos a excluir (ya vistos o descartados — NO los recomiendes):\n- ${excluded.join("\n- ")}`
+        ? `\n\nTítulos a excluir (ya vistos o declarados como favoritos — NO los recomiendes):\n- ${excluded.join("\n- ")}`
         : "";
-
-    const seedLine = data.profileSeed ? `\n\n${data.profileSeed}` : "";
 
     const prompt = `${SYSTEM_BASE}
 

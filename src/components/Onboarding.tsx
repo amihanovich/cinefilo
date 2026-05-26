@@ -1,127 +1,180 @@
 import { useState } from "react";
-import { Sparkles, X } from "lucide-react";
-import { saveOnboarding } from "@/lib/guestSeed";
+import { Sparkles, ArrowRight, Heart, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { type AgeBracket, markOnboarded, skipOnboarding } from "@/lib/guestSeed";
 
-const AGE_OPTIONS = ["Menos de 20", "20–29", "30–39", "40–49", "50+"];
+type Step = 1 | 2;
+
+const AGE_OPTIONS: { value: AgeBracket; label: string; hint: string }[] = [
+  { value: "18-29", label: "18–29", hint: "Gen Z / millennials jóvenes" },
+  { value: "30-45", label: "30–45", hint: "Millennials / Gen X jóvenes" },
+  { value: "46+", label: "46+", hint: "Gen X / boomers" },
+];
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const [ageGroup, setAgeGroup] = useState<string | null>(null);
-  const [titleInput, setTitleInput] = useState("");
-  const [titles, setTitles] = useState<string[]>([]);
+  const [step, setStep] = useState<Step>(1);
+  const [age, setAge] = useState<AgeBracket | null>(null);
+  const [titles, setTitles] = useState<string[]>(["", "", ""]);
 
-  const addTitle = () => {
-    const t = titleInput.trim();
-    if (t && titles.length < 5 && !titles.includes(t)) {
-      setTitles([...titles, t]);
-      setTitleInput("");
-    }
+  const setTitle = (idx: number, value: string) => {
+    setTitles((prev) => prev.map((t, i) => (i === idx ? value : t)));
   };
 
-  const removeTitle = (t: string) => setTitles(titles.filter((x) => x !== t));
+  const finish = () => {
+    const cleaned = titles.map((t) => t.trim()).filter((t) => t.length >= 2);
+    markOnboarded(age, cleaned);
+    onDone();
+  };
 
-  const handleDone = () => {
-    saveOnboarding(ageGroup, titles);
+  const skip = () => {
+    skipOnboarding();
     onDone();
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 px-4 pb-6 pt-20 backdrop-blur-sm sm:items-center sm:pb-0 animate-fade-in"
-      onClick={handleDone}
-    >
-      <div
-        className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-card"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-5 flex items-start justify-between gap-2">
-          <div>
-            <div className="mb-1 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
-              <Sparkles className="h-3 w-3" />
-              Personalización rápida
-            </div>
-            <h2 className="text-xl font-bold text-foreground">¿Qué te gusta ver?</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Opcional. Mejora tu primera recomendación.
-            </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 px-5 py-8 backdrop-blur-sm animate-fade-in">
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="mb-6 text-center">
+          <div className="mb-3 inline-flex items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+            En 20 segundos
           </div>
-          <button onClick={handleDone} className="text-muted-foreground hover:text-foreground">
-            <X className="h-4 w-4" />
-          </button>
+          <h1 className="font-display text-3xl font-bold leading-tight text-foreground">
+            Contanos un poco{" "}
+            <span className="text-primary">de vos</span>
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Con esto te proponemos algo afín desde la primera búsqueda.
+            No te pedimos nada más.
+          </p>
         </div>
 
-        {/* Age group */}
-        <div className="mb-5">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            ¿Qué edad tenés? (opcional)
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {AGE_OPTIONS.map((a) => (
-              <button
-                key={a}
-                onClick={() => setAgeGroup(ageGroup === a ? null : a)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-semibold transition-smooth",
-                  ageGroup === a
-                    ? "border-primary bg-primary/15 text-primary"
-                    : "border-border bg-card/60 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Favorite titles */}
-        <div className="mb-6">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            2–3 títulos que te gustaron (opcional)
-          </p>
-          <div className="flex gap-2">
-            <input
-              value={titleInput}
-              onChange={(e) => setTitleInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); addTitle(); }
-              }}
-              placeholder="Ej: Breaking Bad, Interstellar…"
-              className="min-h-[40px] flex-1 rounded-xl border border-border bg-input px-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+        {/* Progreso */}
+        <div className="mb-5 flex items-center gap-2">
+          <div className="h-1 flex-1 rounded-full bg-border">
+            <div
+              className="h-1 rounded-full bg-gradient-primary transition-all"
+              style={{ width: step === 1 ? "50%" : "100%" }}
             />
-            <button
-              onClick={addTitle}
-              disabled={!titleInput.trim() || titles.length >= 5}
-              className="min-h-[40px] rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground disabled:opacity-40"
-            >
-              +
-            </button>
           </div>
-          {titles.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {titles.map((t) => (
-                <span
-                  key={t}
-                  className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary"
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Paso {step} de 2
+          </span>
+        </div>
+
+        <div className="rounded-3xl border-2 border-primary/40 bg-card p-5 shadow-card">
+          {step === 1 && (
+            <div>
+              <h2 className="text-base font-semibold text-foreground">
+                ¿En qué rango de edad estás?
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Nos ayuda con las referencias culturales (no se comparte).
+              </p>
+              <div className="mt-4 grid gap-2">
+                {AGE_OPTIONS.map((opt) => {
+                  const active = age === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setAge(opt.value)}
+                      className={cn(
+                        "flex min-h-[56px] items-center justify-between gap-3 rounded-2xl border px-4 text-left transition-smooth",
+                        active
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-background hover:border-primary/50",
+                      )}
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{opt.label}</div>
+                        <div className="text-[11px] text-muted-foreground">{opt.hint}</div>
+                      </div>
+                      {active && <Check className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <button
+                  onClick={skip}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {t}
-                  <button onClick={() => removeTitle(t)} className="hover:text-destructive">
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
+                  Saltar todo
+                </button>
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={!age}
+                  className={cn(
+                    "inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-5 text-sm font-semibold transition-smooth",
+                    age
+                      ? "bg-gradient-primary text-primary-foreground shadow-primary active:scale-95"
+                      : "cursor-not-allowed bg-background text-muted-foreground",
+                  )}
+                >
+                  Siguiente
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div>
+              <h2 className="flex items-center gap-1.5 text-base font-semibold text-foreground">
+                <Heart className="h-4 w-4 text-primary" />
+                Tres títulos que amaste
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Películas o series. Cualquier época. Los usamos para entender tu sensibilidad.
+              </p>
+              <div className="mt-4 space-y-2">
+                {titles.map((t, i) => (
+                  <input
+                    key={i}
+                    value={t}
+                    onChange={(e) => setTitle(i, e.target.value)}
+                    placeholder={
+                      i === 0
+                        ? "Ej: Breaking Bad"
+                        : i === 1
+                          ? "Ej: La La Land"
+                          : "Ej: Parasite"
+                    }
+                    className="min-h-[48px] w-full rounded-2xl border border-border bg-background px-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Podés dejar alguno vacío. Con uno o dos ya nos ayudás.
+              </p>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  ← Atrás
+                </button>
+                <button
+                  onClick={finish}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-gradient-primary px-5 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-95"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Recomendame algo
+                </button>
+              </div>
             </div>
           )}
         </div>
 
+        {/* Cerrar */}
         <button
-          onClick={handleDone}
-          className="flex min-h-[48px] w-full items-center justify-center rounded-2xl bg-gradient-primary px-6 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
+          onClick={skip}
+          className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+          aria-label="Cerrar"
         >
-          Listo →
+          <X className="h-4 w-4" />
         </button>
-        <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          No guardamos estos datos en ningún servidor.
-        </p>
       </div>
     </div>
   );

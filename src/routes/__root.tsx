@@ -11,6 +11,8 @@ import { useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { supabase } from "@/integrations/supabase/client";
+import { readGuestSeed, writeGuestSeed } from "@/lib/guestSeed";
+import { migrateGuestSeed } from "@/lib/moments.functions";
 
 function NotFoundComponent() {
   return (
@@ -120,9 +122,32 @@ function AuthListener() {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = supabase.auth.onAuthStateChange((event) => {
       router.invalidate();
       queryClient.invalidateQueries();
+
+      // Al loguearse, migramos el seed del invitado a la cuenta.
+      if (event === "SIGNED_IN") {
+        const seed = readGuestSeed();
+        const hasData =
+          seed.ageBracket !== null || (seed.lovedTitles && seed.lovedTitles.length > 0);
+        if (!hasData) return;
+        migrateGuestSeed({
+          data: {
+            ageBracket: seed.ageBracket ?? undefined,
+            lovedTitles: seed.lovedTitles ?? [],
+          },
+        })
+          .then((res) => {
+            if (res?.migrated) {
+              writeGuestSeed({ ageBracket: null, lovedTitles: [] });
+              queryClient.invalidateQueries({ queryKey: ["profile"] });
+            }
+          })
+          .catch((err) => {
+            console.warn("[migrateGuestSeed] falló:", err);
+          });
+      }
     });
     return () => subscription.unsubscribe();
   }, [router, queryClient]);
