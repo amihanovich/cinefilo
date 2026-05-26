@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Sparkles, ArrowLeft, Plus, Bookmark, Check, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, PenLine, Settings2, CloudSun, Film, MapPin } from "lucide-react";
+import { Loader2, Play, Sparkles, ArrowLeft, Plus, Bookmark, Check, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, PenLine, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -348,6 +348,19 @@ function HomePage() {
 
   const handleRefresh = () => runSurprise([]);
 
+  const retryLast = () => {
+    if (resultsSource === "text") {
+      runText(excluded);
+    } else {
+      runFilters(
+        resultsSource === "moment" ? "moment" : "filters",
+        undefined,
+        freeText.trim().length >= 3 ? freeText.trim() : undefined,
+        excluded,
+      );
+    }
+  };
+
   const [setupMode, setSetupMode] = useState(false);
 
   const bootRef = useRef(false);
@@ -441,6 +454,7 @@ function HomePage() {
             useMoment(m);
           }}
           error={error}
+          onRetry={retryLast}
           isGuest={isGuest}
           useLocation={useLocation}
           weather={weather}
@@ -615,6 +629,7 @@ function HomeScreen({
   moments,
   onUseMoment,
   error,
+  onRetry,
   isGuest,
   useLocation,
   weather,
@@ -633,6 +648,7 @@ function HomeScreen({
   moments: MomentRow[];
   onUseMoment: (m: MomentRow) => void;
   error: string | null;
+  onRetry: () => void;
   isGuest: boolean;
   useLocation: boolean;
   weather: WeatherSnapshot | null;
@@ -688,7 +704,7 @@ function HomeScreen({
 
       {/* HERO: pregunta + input izquierda, tarjeta-demo derecha */}
       <div className="flex flex-col items-center py-8 lg:grid lg:grid-cols-12 lg:gap-16 lg:py-16">
-        <div className="mb-16 flex w-full flex-col text-center lg:col-span-7 lg:mb-0 lg:text-left">
+        <div className="flex w-full flex-col text-center lg:col-span-7 lg:text-left">
           <h1 className="mb-6 text-balance font-display text-5xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-7xl lg:text-[88px]">
             ¿Qué te resuelvo{" "}
             <span className="text-primary">esta noche?</span>
@@ -751,7 +767,7 @@ function HomeScreen({
           </div>
         </div>
 
-        <aside className="flex w-full justify-center lg:col-span-5">
+        <aside className="hidden w-full justify-center lg:col-span-5 lg:flex">
           <LiveDemoCard />
         </aside>
       </div>
@@ -909,8 +925,21 @@ function HomeScreen({
       )}
 
       {error && (
-        <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
+        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 animate-fade-in">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/15">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Uy, no pudimos esta vez</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error}</p>
+            <button
+              onClick={onRetry}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive transition-smooth hover:bg-destructive/25 active:scale-95"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Reintentar
+            </button>
+          </div>
         </div>
       )}
 
@@ -1287,19 +1316,56 @@ const TIME_LABELS: Record<string, string> = {
 
 /* ===================== LOADING ===================== */
 
+function SkeletonCard({ main = false }: { main?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "overflow-hidden bg-card/40",
+        main ? "rounded-[2rem] border-2 border-primary/30" : "rounded-3xl border border-border",
+      )}
+    >
+      <div className="aspect-[2/3] w-full animate-pulse bg-muted/40" />
+      <div className={cn("space-y-3", main ? "p-6" : "p-5")}>
+        <div className="h-3 w-24 animate-pulse rounded bg-muted/50" />
+        <div
+          className={cn(
+            "animate-pulse rounded bg-muted/50",
+            main ? "h-7 w-3/4" : "h-5 w-2/3",
+          )}
+        />
+        <div className="h-3 w-full animate-pulse rounded bg-muted/40" />
+        <div className="h-3 w-5/6 animate-pulse rounded bg-muted/40" />
+        <div
+          className={cn(
+            "mt-2 animate-pulse rounded-xl bg-muted/40",
+            main ? "h-12" : "h-9",
+          )}
+        />
+      </div>
+    </div>
+  );
+}
+
 function LoadingScreen() {
   return (
-    <section className="px-2 pt-16 pb-16 animate-fade-in">
-      <div className="text-center">
-        <div className="relative mx-auto mb-5 h-10 w-10">
-          <div className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
+    <section className="animate-fade-in pt-4">
+      <div className="mb-6">
+        <div className="h-8 w-52 animate-pulse rounded-lg bg-muted/50 sm:h-9" />
+        <div className="mt-3 flex items-center gap-1.5 text-xs text-primary">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Buscando algo perfecto para vos…</span>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Buscando algo perfecto para vos…
-        </p>
+      </div>
+      <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
+        <div className="order-2 hidden md:order-1 md:block">
+          <SkeletonCard />
+        </div>
+        <div className="order-1 md:order-2 md:scale-[1.04]">
+          <SkeletonCard main />
+        </div>
+        <div className="order-3 hidden md:block">
+          <SkeletonCard />
+        </div>
       </div>
     </section>
   );
@@ -1924,7 +1990,7 @@ function MainCard({
   allowFeedback: boolean;
 }) {
   return (
-    <article className="relative overflow-hidden rounded-[2rem] border-2 border-primary/50 bg-card shadow-[0_0_60px_-15px_hsl(var(--primary)/0.45)]">
+    <article className="relative overflow-hidden rounded-[2rem] border-2 border-primary/50 bg-card shadow-glow">
       <div className="absolute left-4 top-4 z-20">
         <span className="rounded-lg bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary-foreground shadow-lg">
           Recomendado
