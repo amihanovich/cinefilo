@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Sparkles, ArrowLeft, Plus, Bookmark, Check, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, PenLine, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
+import { Loader2, Play, Sparkles, Plus, Bookmark, Check, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -1433,13 +1433,17 @@ function ResultsScreen({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showPattern, setShowPattern] = useState(true);
 
-  const [tunePanel, setTunePanel] = useState<"none" | "tune" | "write">("none");
-  const [tuneFilters, setTuneFilters] = useState<SituationFilters>(currentFilters);
-  const [tuneText, setTuneText] = useState<string>(source === "text" ? freeText : "");
+  const [showChips, setShowChips] = useState(false);
+  const [refineFilters, setRefineFilters] = useState<SituationFilters>(currentFilters);
+  const [refineText, setRefineText] = useState<string>(source === "text" ? freeText : "");
+
+  const ctx = useMemo(() => inferContext(), []);
+  const ctxLabel = `${ctx.dayOfWeek} ${String(ctx.hour).padStart(2, "0")}h`;
 
   useEffect(() => {
-    setTunePanel("none");
-    setTuneFilters(currentFilters);
+    setShowChips(false);
+    setRefineFilters(currentFilters);
+    setRefineText(source === "text" ? freeText : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results]);
 
@@ -1484,253 +1488,43 @@ function ResultsScreen({
 
   return (
     <section className="animate-fade-in pt-4">
-      <header className="mb-8 flex items-start justify-between gap-3">
+      <header className="mb-6 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
             ¿Qué <span className="text-primary">vemos hoy</span>?
           </h1>
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CloudSun className="h-3.5 w-3.5 text-primary" />
-            <span className="truncate">Para tu {contextChip}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!isGuest && (
-            <Link
-              to="/moments"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card/60 px-3 text-xs font-semibold text-foreground transition-smooth hover:border-primary hover:text-primary"
-              title="Tus Momentos guardados"
-            >
-              <Bookmark className="h-3.5 w-3.5" />
-              Momentos
-              {existingMoments.length > 0 && (
-                <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-bold text-primary">
-                  {existingMoments.length}
-                </span>
-              )}
-            </Link>
-          )}
-          <button
-            onClick={onOpenSetup}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card/60 text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
-            title="Configurar plataformas, ubicación y momentos"
-            aria-label="Configuración"
-          >
-            <Settings2 className="h-4 w-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* Momentos guardados — grid 4 slots */}
-      {!isGuest && (
-        <div className="mb-8">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <Bookmark className="h-3 w-3 text-primary" />
-            Elegí tu Momento actual
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {existingMoments.slice(0, 3).map((m) => (
-              <button
-                key={m.id}
-                onClick={() => onSearchFilters({
-                  time: m.time_filter as SituationFilters["time"],
-                  company: m.company_filter as SituationFilters["company"],
-                  mood: m.mood_filter as SituationFilters["mood"],
-                  type: m.type_filter as SituationFilters["type"],
-                  attention: null,
-                  novelty: null,
-                  platforms: (m.platforms ?? currentFilters.platforms) as SituationFilters["platforms"],
-                })}
-                className="flex min-h-[64px] items-center justify-center gap-1.5 rounded-2xl border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-foreground transition-smooth hover:border-primary hover:bg-primary/10 active:scale-[0.98]"
-                title={`Buscar para tu Momento "${m.name}"`}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <CloudSun className="h-3.5 w-3.5 text-primary" />
+              {contextChip}
+            </span>
+            {chips.map((c) => (
+              <span
+                key={c}
+                className="rounded-full border border-border bg-card/60 px-2 py-0.5 text-[11px] text-muted-foreground"
               >
-                <Bookmark className="h-3.5 w-3.5 shrink-0 text-primary" />
-                <span className="truncate">{m.name}</span>
-              </button>
+                {c}
+              </span>
             ))}
-            <button
-              onClick={() => setShowSaveModal(true)}
-              className="flex min-h-[64px] items-center justify-center gap-1.5 rounded-2xl border border-dashed border-primary/40 bg-transparent px-3 py-2 text-xs font-semibold text-primary transition-smooth hover:border-primary hover:bg-primary/5 active:scale-[0.98]"
-              title="Crear un nuevo Momento con los filtros actuales"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Crear Momento</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 3 acciones rápidas */}
-      <div className="mb-8 grid grid-cols-3 gap-2">
-        <button
-          onClick={onBack}
-          className="flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl border border-primary/40 bg-primary/10 px-2 text-[11px] font-semibold text-primary transition-smooth hover:bg-primary/20 active:scale-[0.98]"
-          title="Sorprendeme con otra recomendación"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Proponeme otra cosa...
-        </button>
-        <button
-          onClick={() => setTunePanel((p) => (p === "tune" ? "none" : "tune"))}
-          className={cn(
-            "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[11px] font-semibold transition-smooth active:scale-[0.98]",
-            tunePanel === "tune"
-              ? "border-primary bg-primary/15 text-primary"
-              : "border-border bg-card/60 text-foreground hover:border-primary/60",
-          )}
-          aria-expanded={tunePanel === "tune"}
-        >
-          <Sliders className="h-4 w-4" />
-          Afinar
-        </button>
-        <button
-          onClick={() => setTunePanel((p) => (p === "write" ? "none" : "write"))}
-          className={cn(
-            "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl border px-2 text-[11px] font-semibold transition-smooth active:scale-[0.98]",
-            tunePanel === "write"
-              ? "border-primary bg-primary/15 text-primary"
-              : "border-border bg-card/60 text-foreground hover:border-primary/60",
-          )}
-          aria-expanded={tunePanel === "write"}
-        >
-          <PenLine className="h-4 w-4" />
-          Pedime lo que querés
-        </button>
-      </div>
-
-      {/* Panel: Afinar */}
-      {tunePanel === "tune" && (
-        <div className="mb-4 rounded-2xl border border-primary/30 bg-card/70 p-4">
-          <p className="mb-3 text-[11px] text-muted-foreground">
-            Tocá uno o más chips. Si dejás vacío un grupo, lo decidimos por vos.
-          </p>
-          <div className="space-y-3">
-            <QuickChips
-              label="Tiempo"
-              options={TIME_OPTIONS}
-              value={tuneFilters.time}
-              labelMap={TIME_LABELS}
-              onSelect={(v) =>
-                setTuneFilters({ ...tuneFilters, time: v as SituationFilters["time"] })
-              }
-            />
-            <QuickChips
-              label="Compañía"
-              options={COMPANY_OPTIONS}
-              value={tuneFilters.company}
-              onSelect={(v) =>
-                setTuneFilters({ ...tuneFilters, company: v as SituationFilters["company"] })
-              }
-            />
-            <QuickChips
-              label="Mood"
-              options={MOOD_OPTIONS}
-              value={tuneFilters.mood}
-              onSelect={(v) =>
-                setTuneFilters({ ...tuneFilters, mood: v as SituationFilters["mood"] })
-              }
-            />
-            <QuickChips
-              label="Tipo"
-              options={TYPE_OPTIONS}
-              value={tuneFilters.type}
-              onSelect={(v) =>
-                setTuneFilters({ ...tuneFilters, type: v as SituationFilters["type"] })
-              }
-            />
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-            <button
-              onClick={() => onSearchFilters(tuneFilters)}
-              className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
-            >
-              <Sparkles className="h-4 w-4" />
-              Recomendar con esto
-            </button>
-            {!isGuest && (
-              <button
-                onClick={() => {
-                  onSearchFilters(tuneFilters);
-                  setTimeout(() => setShowSaveModal(true), 250);
-                }}
-                className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-4 text-xs font-semibold text-primary transition-smooth hover:bg-primary/20"
-                title="Guardar esta combinación como un Momento reutilizable"
-              >
-                <Bookmark className="h-3.5 w-3.5" />
-                Guardar como Momento
-              </button>
+            {source === "text" && freeText && (
+              <span className="text-[11px] text-muted-foreground/80">"{freeText}"</span>
+            )}
+            {excludedCount > 0 && (
+              <span className="text-[11px] text-muted-foreground">
+                · sin {excludedCount} ya {excludedCount === 1 ? "vista" : "vistas"}
+              </span>
             )}
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground">
-            Guardalo como Momento y aparece arriba como tarjeta para reusarlo de un toque.
-          </p>
         </div>
-      )}
-
-      {/* Panel: Escribir */}
-      {tunePanel === "write" && (
-        <div className="mb-4 rounded-2xl border border-primary/30 bg-card/70 p-4">
-          <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-primary">
-            <PenLine className="mr-1 inline h-3 w-3" />
-            Decime algo específico
-          </label>
-          <div className="rounded-xl border border-primary/30 bg-input-surface focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
-            <textarea
-              value={tuneText}
-              onChange={(e) => setTuneText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  if (tuneText.trim().length >= 3) onSearchText(tuneText.trim());
-                }
-              }}
-              rows={2}
-              autoFocus
-              placeholder="Ej: algo de menos de una hora, sin pensar mucho…"
-              className="w-full resize-none bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
-            />
-            <div className="flex items-center justify-between gap-2 px-2 pb-2">
-              <MicButton
-                onTranscript={(t, isFinal) => {
-                  if (!t || !isFinal) return;
-                  setTuneText((prev) => (prev ? `${prev.trim()} ${t}` : t));
-                }}
-              />
-              <button
-                onClick={() => tuneText.trim().length >= 3 && onSearchText(tuneText.trim())}
-                disabled={tuneText.trim().length < 3}
-                className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition-smooth",
-                  tuneText.trim().length >= 3
-                    ? "bg-gradient-primary text-primary-foreground shadow-primary active:scale-95"
-                    : "cursor-not-allowed bg-background text-muted-foreground",
-                )}
-              >
-                <ArrowUp className="h-3.5 w-3.5" /> Buscar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {source === "text" && freeText && tunePanel !== "write" && (
-        <div className="mb-3 rounded-xl border border-border bg-card/60 px-3 py-2 text-xs text-muted-foreground">
-          Entendimos: <span className="text-foreground">"{freeText}"</span>
-        </div>
-      )}
-
-      {chips.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {chips.map((c) => (
-            <span
-              key={c}
-              className="rounded-full border border-border bg-card/60 px-2.5 py-1 text-[11px] text-muted-foreground"
-            >
-              {c}
-            </span>
-          ))}
-        </div>
-      )}
+        <button
+          onClick={onOpenSetup}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card/60 text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
+          title="Configurar plataformas y ubicación"
+          aria-label="Configuración"
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+      </header>
 
       {results.clarification_needed && (
         <div className="mb-4 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
@@ -1738,19 +1532,8 @@ function ResultsScreen({
         </div>
       )}
 
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="text-[11px] uppercase tracking-[0.2em] text-primary">
-          {source === "moment" ? "Para tu Momento, te recomendamos" : "Te proponemos"}
-        </div>
-        {excludedCount > 0 && (
-          <span className="text-[10px] text-muted-foreground">
-            Excluyendo {excludedCount} {excludedCount === 1 ? "ya vista" : "ya vistas"}
-          </span>
-        )}
-      </div>
-
       {visibleMain && (
-        <div className="mt-2 grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
           <div className="order-2 md:order-1">
             {visibleAlts[0] && (
               <AltCard
@@ -1849,24 +1632,159 @@ function ResultsScreen({
         </button>
       )}
 
+      {/* Refinement zone */}
+      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card/40">
+        <div className="p-4">
+          <p className="mb-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            ¿Querés cambiar algo?
+          </p>
+          <div className="relative">
+            <textarea
+              value={refineText}
+              onChange={(e) => setRefineText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (refineText.trim().length >= 3) onSearchText(refineText.trim());
+                }
+              }}
+              rows={1}
+              placeholder="Algo más corto, solo Netflix, sin violencia…"
+              className="h-14 w-full resize-none rounded-xl border border-border bg-background pl-4 pr-32 pt-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              <MicButton
+                onTranscript={(t, isFinal) => {
+                  if (!t || !isFinal) return;
+                  setRefineText((prev) => (prev ? `${prev.trim()} ${t}` : t));
+                }}
+              />
+              <button
+                onClick={() => refineText.trim().length >= 3 && onSearchText(refineText.trim())}
+                disabled={refineText.trim().length < 3}
+                className={cn(
+                  "inline-flex h-10 items-center gap-1 rounded-lg px-3 text-xs font-semibold transition-smooth",
+                  refineText.trim().length >= 3
+                    ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
+                    : "cursor-not-allowed bg-muted text-muted-foreground/60",
+                )}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+                Buscar
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => setShowChips((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-smooth",
+                showChips
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              Afinar con filtros
+            </button>
+            <button
+              onClick={onBack}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-transparent px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-smooth hover:border-primary/60 hover:text-foreground"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Otra cosa
+            </button>
+          </div>
+          {showChips && (
+            <div className="mt-4 space-y-3 border-t border-border pt-4 animate-fade-in">
+              <QuickChips
+                label="Tiempo"
+                options={TIME_OPTIONS}
+                value={refineFilters.time}
+                labelMap={TIME_LABELS}
+                onSelect={(v) =>
+                  setRefineFilters({ ...refineFilters, time: v as SituationFilters["time"] })
+                }
+              />
+              <QuickChips
+                label="Compañía"
+                options={COMPANY_OPTIONS}
+                value={refineFilters.company}
+                onSelect={(v) =>
+                  setRefineFilters({ ...refineFilters, company: v as SituationFilters["company"] })
+                }
+              />
+              <QuickChips
+                label="Mood"
+                options={MOOD_OPTIONS}
+                value={refineFilters.mood}
+                onSelect={(v) =>
+                  setRefineFilters({ ...refineFilters, mood: v as SituationFilters["mood"] })
+                }
+              />
+              <QuickChips
+                label="Tipo"
+                options={TYPE_OPTIONS}
+                value={refineFilters.type}
+                onSelect={(v) =>
+                  setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })
+                }
+              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                <button
+                  onClick={() => onSearchFilters(refineFilters)}
+                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Recomendar con esto
+                </button>
+                {!isGuest && (
+                  <button
+                    onClick={() => {
+                      onSearchFilters(refineFilters);
+                      setTimeout(() => setShowSaveModal(true), 250);
+                    }}
+                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-4 text-xs font-semibold text-primary transition-smooth hover:bg-primary/20"
+                  >
+                    <Bookmark className="h-3.5 w-3.5" />
+                    Guardar como Momento
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {source !== "moment" && !savedOnce && !isGuest && (
-        <button
-          onClick={() => setShowSaveModal(true)}
-          className="mt-8 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-card/60 px-4 text-sm font-medium text-foreground transition-smooth hover:border-primary"
-        >
-          <Bookmark className="h-4 w-4" /> Guardar como Momento
-        </button>
+        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card/40 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-foreground">
+              {ctxLabel} — ¿Guardás este Momento?
+            </p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+              Guardamos el contexto (día, hora, temporada) para que la próxima vez te propongamos algo similar de un toque.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowSaveModal(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-smooth hover:bg-primary/20"
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+            Guardar
+          </button>
+        </div>
       )}
       {source !== "moment" && isGuest && (
         <Link
           to="/login"
-          className="mt-8 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-dashed border-border bg-transparent px-4 text-sm font-medium text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
+          className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-dashed border-border bg-transparent px-4 text-sm font-medium text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
         >
           <Bookmark className="h-4 w-4" /> Iniciá sesión para guardar este Momento
         </Link>
       )}
       {savedOnce && (
-        <div className="mt-8 inline-flex items-center gap-2 text-sm text-primary">
+        <div className="mt-4 inline-flex items-center gap-2 text-sm text-primary">
           <Check className="h-4 w-4" /> Guardado en tus Momentos
         </div>
       )}
