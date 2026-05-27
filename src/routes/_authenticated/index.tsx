@@ -1254,14 +1254,14 @@ function ResultsScreen({
                 onClick={handleRefineSubmit}
                 disabled={refineText.trim().length < 3 && !hasActiveRefineFilters}
                 className={cn(
-                  "inline-flex h-10 items-center gap-1 rounded-lg px-3 text-xs font-semibold transition-smooth",
+                  "inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-smooth",
                   refineText.trim().length >= 3 || hasActiveRefineFilters
-                    ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
+                    ? "bg-gradient-primary text-primary-foreground shadow-primary hover:opacity-90 active:scale-95"
                     : "cursor-not-allowed bg-muted text-muted-foreground/60",
                 )}
               >
-                <ArrowUp className="h-3.5 w-3.5" />
-                Buscar
+                <Sparkles className="h-3.5 w-3.5" />
+                Recomendar
               </button>
             </div>
           </div>
@@ -1321,13 +1321,6 @@ function ResultsScreen({
                   setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })
                 }
               />
-              <button
-                onClick={handleRefineSubmit}
-                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
-              >
-                <Sparkles className="h-4 w-4" />
-                Recomendar con esto
-              </button>
             </div>
           )}
         </div>
