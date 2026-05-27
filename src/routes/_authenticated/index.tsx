@@ -33,6 +33,7 @@ import {
 } from "@/lib/guestSeed";
 
 import {
+  saveMoment,
   getProfile,
   setDefaultPlatforms,
 } from "@/lib/moments.functions";
@@ -445,6 +446,25 @@ function HomePage() {
           isGuestForFeedback={isGuest}
           posters={posters}
           postersLoading={postersLoading}
+          onSaveMoment={async (name) => {
+            const ctx = inferContext();
+            await saveMoment({
+              data: {
+                name,
+                time_filter: results.filters.time,
+                company_filter: results.filters.company,
+                mood_filter: results.filters.mood,
+                type_filter: results.filters.type,
+                attention_filter: results.filters.attention ?? filters.attention ?? null,
+                novelty_filter: results.filters.novelty ?? filters.novelty ?? null,
+                season_hint: seasonHintShort(ctx),
+                weather_hint: weather ? weatherHintShort(weather) : null,
+                use_location: useLocation,
+                platforms: effectivePlatforms,
+                auto_detected: false,
+              },
+            });
+          }}
         />
       )}
     </main>
@@ -960,6 +980,7 @@ function ResultsScreen({
   isGuestForFeedback,
   posters,
   postersLoading,
+  onSaveMoment,
 }: {
   results: RecommendationsResult;
   source: "text" | "filters" | "moment";
@@ -978,8 +999,10 @@ function ResultsScreen({
   isGuestForFeedback: boolean;
   posters: Record<string, string | null>;
   postersLoading: boolean;
+  onSaveMoment: (name: string) => Promise<void>;
 }) {
   const [showChips, setShowChips] = useState(false);
+  const [momentoPopupRec, setMomentoPopupRec] = useState<Recommendation | null>(null);
   const [refineFilters, setRefineFilters] = useState<SituationFilters>(currentFilters);
   const [refineText, setRefineText] = useState<string>("");
 
@@ -1090,6 +1113,7 @@ function ResultsScreen({
                 onLove={() => markFeedback(visibleAlts[0], "love")}
                 onDislike={() => markFeedback(visibleAlts[0], "dislike")}
                 allowFeedback={!isGuestForFeedback}
+                onWantToWatch={() => setMomentoPopupRec(visibleAlts[0])}
               />
             )}
           </div>
@@ -1105,6 +1129,7 @@ function ResultsScreen({
               onLove={() => markFeedback(visibleMain, "love")}
               onDislike={() => markFeedback(visibleMain, "dislike")}
               allowFeedback={!isGuestForFeedback}
+              onWantToWatch={() => setMomentoPopupRec(visibleMain)}
             />
           </div>
 
@@ -1121,6 +1146,7 @@ function ResultsScreen({
                 onLove={() => markFeedback(visibleAlts[1], "love")}
                 onDislike={() => markFeedback(visibleAlts[1], "dislike")}
                 allowFeedback={!isGuestForFeedback}
+                onWantToWatch={() => setMomentoPopupRec(visibleAlts[1])}
               />
             )}
           </div>
@@ -1145,6 +1171,7 @@ function ResultsScreen({
                 onLove={() => markFeedback(r, "love")}
                 onDislike={() => markFeedback(r, "dislike")}
                 allowFeedback={!isGuestForFeedback}
+                onWantToWatch={() => setMomentoPopupRec(r)}
               />
             ))}
           </div>
@@ -1285,7 +1312,180 @@ function ResultsScreen({
         </div>
       </div>
 
+      {momentoPopupRec && (
+        <MomentoPopup
+          rec={momentoPopupRec}
+          weather={weather}
+          isGuest={isGuest}
+          onSave={async (name) => {
+            await onSaveMoment(name);
+            window.open(deepLinkFor(momentoPopupRec.platform, momentoPopupRec.title), "_blank");
+            setMomentoPopupRec(null);
+          }}
+          onSkip={() => {
+            window.open(deepLinkFor(momentoPopupRec.platform, momentoPopupRec.title), "_blank");
+            setMomentoPopupRec(null);
+          }}
+          onClose={() => setMomentoPopupRec(null)}
+        />
+      )}
     </section>
+  );
+}
+
+const MOMENTO_SEEN_KEY = "queveo:momento_seen";
+const hasMomentoExperience = () =>
+  typeof window !== "undefined" && !!localStorage.getItem(MOMENTO_SEEN_KEY);
+const markMomentoSeen = () => {
+  if (typeof window !== "undefined") localStorage.setItem(MOMENTO_SEEN_KEY, "1");
+};
+
+function suggestMomentoName(ctx: ReturnType<typeof inferContext>): string {
+  const h = ctx.hour;
+  const time =
+    h >= 6 && h < 12 ? "mañana"
+    : h >= 12 && h < 18 ? "tarde"
+    : h >= 18 && h < 22 ? "noche"
+    : "madrugada";
+  return `${ctx.dayOfWeek} a la ${time}`;
+}
+
+function MomentoPopup({
+  rec,
+  weather,
+  isGuest,
+  onSave,
+  onSkip,
+  onClose,
+}: {
+  rec: Recommendation;
+  weather: WeatherSnapshot | null;
+  isGuest: boolean;
+  onSave: (name: string) => Promise<void>;
+  onSkip: () => void;
+  onClose: () => void;
+}) {
+  const ctx = useMemo(() => inferContext(), []);
+  const [name, setName] = useState(() => suggestMomentoName(ctx));
+  const [saving, setSaving] = useState(false);
+  const isFirst = !hasMomentoExperience();
+
+  const contextLabel = [
+    `${ctx.dayOfWeek} ${String(ctx.hour).padStart(2, "0")}h`,
+    seasonHintShort(ctx),
+    weather ? weatherHintShort(weather) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-6 pt-20 sm:items-center sm:pb-0"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-card animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
+          aria-label="Cerrar"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="mb-1 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
+            Momento encontrado
+          </span>
+        </div>
+
+        {isFirst ? (
+          <>
+            <h3 className="font-display text-xl font-bold text-foreground">
+              Guardá este Momento
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Cada vez que encontrás algo que querés ver, el sistema captura el contexto: el día,
+              la hora, la temporada y el clima. Guardalo como <strong className="text-foreground">Momento</strong> para que la próxima vez que estés en la misma situación, te traigamos contenido igual de relevante con un solo toque.
+            </p>
+          </>
+        ) : (
+          <h3 className="font-display text-xl font-bold text-foreground">
+            ¿Guardás este Momento?
+          </h3>
+        )}
+
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+          <CloudSun className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="text-xs text-foreground/90">{contextLabel}</span>
+        </div>
+
+        {isGuest ? (
+          <>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Para guardar Momentos necesitás una cuenta.{" "}
+              <Link to="/login" className="font-semibold text-primary hover:underline">
+                Crear cuenta gratis →
+              </Link>
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Link
+                to="/login"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-primary transition-smooth hover:brightness-110"
+              >
+                Crear cuenta y guardar
+              </Link>
+              <button
+                type="button"
+                onClick={onSkip}
+                className="min-h-[44px] w-full rounded-2xl border border-border text-sm font-medium text-muted-foreground transition-smooth hover:text-foreground"
+              >
+                Solo ir a verla
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nombre del Momento"
+              className="mt-3 min-h-[44px] w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+            />
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!name.trim()) return;
+                  setSaving(true);
+                  markMomentoSeen();
+                  try {
+                    await onSave(name.trim());
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+                disabled={saving || !name.trim()}
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-primary transition-smooth hover:brightness-110 disabled:opacity-50"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Guardar y ver
+              </button>
+              <button
+                type="button"
+                onClick={onSkip}
+                className="min-h-[44px] w-full rounded-2xl border border-border text-sm font-medium text-muted-foreground transition-smooth hover:text-foreground"
+              >
+                Solo ver, sin guardar
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1314,6 +1514,7 @@ function MainCard({
   onLove,
   onDislike,
   allowFeedback,
+  onWantToWatch,
 }: {
   rec: Recommendation;
   posterUrl: string | null;
@@ -1324,6 +1525,7 @@ function MainCard({
   onLove: () => void;
   onDislike: () => void;
   allowFeedback: boolean;
+  onWantToWatch: () => void;
 }) {
   return (
     <article className="relative overflow-hidden rounded-[2rem] border-2 border-primary/50 bg-card shadow-glow">
@@ -1371,15 +1573,14 @@ function MainCard({
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-foreground/80">{rec.reason}</p>
 
-        <a
-          href={deepLinkFor(rec.platform, rec.title)}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          onClick={onWantToWatch}
           className="mt-5 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary px-6 text-sm font-bold text-primary-foreground shadow-primary transition-smooth hover:brightness-110 active:scale-[0.98]"
         >
           <Play className="h-4 w-4 fill-current" />
-          Ver ahora en {rec.platform}
-        </a>
+          Quiero verla
+        </button>
 
         <div className="mt-5 border-t border-border/50 pt-4">
           <IconFeedbackRow
@@ -1406,6 +1607,7 @@ function AltCard({
   onLove,
   onDislike,
   allowFeedback,
+  onWantToWatch,
 }: {
   rec: Recommendation;
   posterUrl: string | null;
@@ -1416,6 +1618,7 @@ function AltCard({
   onLove: () => void;
   onDislike: () => void;
   allowFeedback: boolean;
+  onWantToWatch: () => void;
 }) {
   return (
     <article className="group overflow-hidden rounded-3xl border border-border bg-card/40 transition-smooth hover:bg-card/70">
@@ -1455,15 +1658,14 @@ function AltCard({
           {rec.reason}
         </p>
 
-        <a
-          href={deepLinkFor(rec.platform, rec.title)}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
+          onClick={onWantToWatch}
           className="mt-4 inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl border border-border bg-background/60 px-4 text-xs font-bold uppercase tracking-wider text-foreground transition-smooth hover:border-primary hover:text-primary"
         >
           <Play className="h-3 w-3 fill-current" />
-          Ver ahora
-        </a>
+          Quiero verla
+        </button>
 
         <div className="mt-4 border-t border-border/40 pt-3">
           <IconFeedbackRow
