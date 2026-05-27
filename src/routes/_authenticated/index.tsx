@@ -1040,8 +1040,8 @@ function SkeletonCard({ main = false }: { main?: boolean }) {
         main ? "rounded-[2rem] border-2 border-primary/30" : "rounded-3xl border border-border",
       )}
     >
-      <div className="aspect-[2/3] w-full animate-pulse bg-muted/40" />
-      <div className={cn("space-y-3", main ? "p-6" : "p-5")}>
+      <div className={cn("w-full animate-pulse bg-muted/40", main ? "h-[160px]" : "h-[120px]")} />
+      <div className={cn("space-y-3", main ? "p-5" : "p-4")}>
         <div className="h-3 w-24 animate-pulse rounded bg-muted/50" />
         <div
           className={cn(
@@ -1199,12 +1199,12 @@ function ResultsScreen({
 
   return (
     <section className="animate-fade-in pt-4">
-      <header className="mb-6 flex items-start justify-between gap-3">
+      <header className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="font-display text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+          <h1 className="font-display text-xl font-bold leading-tight tracking-tight text-foreground">
             Elegimos esto <span className="text-primary">para vos</span>
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <CloudSun className="h-3.5 w-3.5 text-primary" />
               {contextChip}
@@ -1242,6 +1242,82 @@ function ResultsScreen({
           {results.clarification_needed}
         </div>
       )}
+
+      {/* Refinement — chat input, above cards */}
+      <div className="group relative mb-5">
+        <div className="absolute -inset-0.5 rounded-2xl bg-primary/20 opacity-0 blur-lg transition-all group-focus-within:opacity-100" aria-hidden="true" />
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 transition-smooth focus-within:border-primary/60">
+          <div className="relative flex items-center">
+            <textarea
+              value={refineText}
+              onChange={(e) => setRefineText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleRefineSubmit();
+                }
+              }}
+              rows={1}
+              placeholder="Seguí buscando… algo más oscuro, solo Netflix, sin violencia..."
+              className="h-14 w-full resize-none bg-transparent pl-5 pr-52 pt-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            />
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              <MicButton
+                onTranscript={(t, isFinal) => {
+                  if (!t || !isFinal) return;
+                  setRefineText((prev) => (prev ? `${prev.trim()} ${t}` : t));
+                }}
+              />
+              <button
+                onClick={handleRefineSubmit}
+                disabled={refineText.trim().length < 3 && !hasActiveRefineFilters}
+                className={cn(
+                  "inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-smooth",
+                  refineText.trim().length >= 3 || hasActiveRefineFilters
+                    ? "bg-gradient-primary text-primary-foreground shadow-primary hover:opacity-90 active:scale-95"
+                    : "cursor-not-allowed bg-muted text-muted-foreground/60",
+                )}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Refinar
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 border-t border-border/40 px-3 py-1.5">
+            <button
+              onClick={() => setShowChips((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-smooth",
+                showChips ? "text-primary" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Sliders className="h-3 w-3" />
+              Filtros
+            </button>
+            <div className="ml-auto flex items-center gap-1.5">
+              <button
+                onClick={onBack}
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-smooth hover:text-foreground"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Nueva búsqueda
+              </button>
+            </div>
+          </div>
+          {showChips && (
+            <div className="space-y-2.5 border-t border-border/40 px-3 pb-3 pt-2.5 animate-fade-in">
+              <QuickChips label="Tiempo" options={TIME_OPTIONS} value={refineFilters.time} labelMap={TIME_LABELS}
+                onSelect={(v) => setRefineFilters({ ...refineFilters, time: v as SituationFilters["time"] })} />
+              <QuickChips label="Compañía" options={COMPANY_OPTIONS} value={refineFilters.company}
+                onSelect={(v) => setRefineFilters({ ...refineFilters, company: v as SituationFilters["company"] })} />
+              <QuickChips label="Mood" options={MOOD_OPTIONS} value={refineFilters.mood}
+                onSelect={(v) => setRefineFilters({ ...refineFilters, mood: v as SituationFilters["mood"] })} />
+              <QuickChips label="Tipo" options={TYPE_OPTIONS} value={refineFilters.type}
+                onSelect={(v) => setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })} />
+            </div>
+          )}
+        </div>
+      </div>
 
       {visibleMain && (
         <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
@@ -1350,108 +1426,6 @@ function ResultsScreen({
         </button>
       )}
 
-      {/* Refinement zone */}
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border bg-card/40">
-        <div className="p-4">
-          <p className="mb-3 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            ¿Querés cambiar algo?
-          </p>
-          <div className="relative">
-            <textarea
-              value={refineText}
-              onChange={(e) => setRefineText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleRefineSubmit();
-                }
-              }}
-              rows={1}
-              placeholder="Algo más corto, solo Netflix, sin violencia…"
-              className="h-14 w-full resize-none rounded-xl border border-border bg-background pl-4 pr-52 pt-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              <MicButton
-                onTranscript={(t, isFinal) => {
-                  if (!t || !isFinal) return;
-                  setRefineText((prev) => (prev ? `${prev.trim()} ${t}` : t));
-                }}
-              />
-              <button
-                onClick={handleRefineSubmit}
-                disabled={refineText.trim().length < 3 && !hasActiveRefineFilters}
-                className={cn(
-                  "inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-smooth",
-                  refineText.trim().length >= 3 || hasActiveRefineFilters
-                    ? "bg-gradient-primary text-primary-foreground shadow-primary hover:opacity-90 active:scale-95"
-                    : "cursor-not-allowed bg-muted text-muted-foreground/60",
-                )}
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Refina la recomendación
-              </button>
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              onClick={() => setShowChips((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-smooth",
-                showChips
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Sliders className="h-3.5 w-3.5" />
-              Describir situación
-            </button>
-            <button
-              onClick={onBack}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-transparent px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-smooth hover:border-primary/60 hover:text-foreground"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Otra cosa
-            </button>
-          </div>
-          {showChips && (
-            <div className="mt-4 space-y-3 border-t border-border pt-4 animate-fade-in">
-              <QuickChips
-                label="Tiempo"
-                options={TIME_OPTIONS}
-                value={refineFilters.time}
-                labelMap={TIME_LABELS}
-                onSelect={(v) =>
-                  setRefineFilters({ ...refineFilters, time: v as SituationFilters["time"] })
-                }
-              />
-              <QuickChips
-                label="Compañía"
-                options={COMPANY_OPTIONS}
-                value={refineFilters.company}
-                onSelect={(v) =>
-                  setRefineFilters({ ...refineFilters, company: v as SituationFilters["company"] })
-                }
-              />
-              <QuickChips
-                label="Mood"
-                options={MOOD_OPTIONS}
-                value={refineFilters.mood}
-                onSelect={(v) =>
-                  setRefineFilters({ ...refineFilters, mood: v as SituationFilters["mood"] })
-                }
-              />
-              <QuickChips
-                label="Tipo"
-                options={TYPE_OPTIONS}
-                value={refineFilters.type}
-                onSelect={(v) =>
-                  setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })
-                }
-              />
-            </div>
-          )}
-        </div>
-      </div>
 
       {momentoPopupRec && (
         <MomentoPopup
