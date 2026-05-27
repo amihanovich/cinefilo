@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Sparkles, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
+import { Loader2, Play, Sparkles, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle, TrendingUp } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -37,6 +37,7 @@ import {
   getProfile,
   setDefaultPlatforms,
 } from "@/lib/moments.functions";
+import { getTrending, type TrendingTitle } from "@/lib/trending.functions";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
 import {
   getWeatherSnapshot,
@@ -581,6 +582,115 @@ function LiveDemoCard() {
 }
 
 
+function TrendingCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["trending-justwatch"],
+    queryFn: () => getTrending(),
+    staleTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const titles: TrendingTitle[] = data?.titles ?? [];
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    if (titles.length <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % titles.length), 6000);
+    return () => clearInterval(t);
+  }, [titles.length]);
+
+  if (isLoading) {
+    return (
+      <div className="flex w-full max-w-[380px] flex-col gap-3">
+        <div className="h-4 w-40 animate-pulse rounded-full bg-muted/40" />
+        <div className="h-[340px] animate-pulse rounded-[28px] bg-muted/40" />
+      </div>
+    );
+  }
+
+  if (!titles.length) return null;
+
+  const item = titles[idx];
+  const visibleDots = titles.slice(0, 8);
+
+  return (
+    <div className="flex w-full max-w-[380px] flex-col gap-3">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp className="h-3.5 w-3.5 text-primary" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            En tendencia · Argentina
+          </span>
+        </div>
+        <span className="text-[10px] text-muted-foreground/40">vía JustWatch</span>
+      </div>
+
+      {/* Card */}
+      <div className="group relative overflow-hidden rounded-[28px] border border-border bg-card shadow-card">
+        <div className="relative h-[200px] overflow-hidden">
+          {item.posterUrl ? (
+            <img
+              key={item.id}
+              src={item.posterUrl}
+              alt={item.title}
+              loading="lazy"
+              className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105 animate-fade-in"
+            />
+          ) : (
+            <div className="h-full w-full bg-gradient-to-br from-indigo-700 via-purple-900 to-slate-900" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
+          <div className="absolute left-4 top-4">
+            <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-black tracking-[0.2em] text-white backdrop-blur-md">
+              {item.platform.toUpperCase()}
+            </span>
+          </div>
+          <div className="absolute right-4 top-4">
+            <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold text-white/70 backdrop-blur-md">
+              {idx + 1} / {titles.length}
+            </span>
+          </div>
+        </div>
+
+        <div className="-mt-6 p-5">
+          <span className="text-[11px] text-muted-foreground">
+            {item.type === "show" ? "Serie" : "Película"}
+            {item.year ? ` · ${item.year}` : ""}
+          </span>
+          <h3 className="mt-0.5 font-display text-xl font-bold leading-tight text-foreground">
+            {item.title}
+          </h3>
+        </div>
+      </div>
+
+      {/* Dots */}
+      <div className="flex justify-center gap-1.5">
+        {visibleDots.map((_, i) => (
+          <button
+            key={i}
+            onClick={() => setIdx(i)}
+            aria-label={`Ver título ${i + 1}`}
+            className={cn(
+              "h-1.5 rounded-full transition-all duration-300",
+              i === idx ? "w-5 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground/40",
+            )}
+          />
+        ))}
+      </div>
+
+      {/* Disclaimer */}
+      <p className="text-center text-[11px] leading-relaxed text-muted-foreground/60">
+        Lo que está mirando todo el mundo ahora · no es para vos.
+        <br />
+        <span className="font-medium text-primary/80">
+          Buscá arriba ↑ para recomendaciones personalizadas.
+        </span>
+      </p>
+    </div>
+  );
+}
+
 function HomeScreen({
   freeText,
   onFreeTextChange,
@@ -707,7 +817,7 @@ function HomeScreen({
         </div>
 
         <aside className="hidden w-full justify-center lg:col-span-5 lg:flex">
-          <LiveDemoCard />
+          <TrendingCard />
         </aside>
       </div>
 
