@@ -431,10 +431,11 @@ function HomePage() {
             setExcluded([]);
             runText([], t);
           }}
-          onSearchFilters={(f) => {
+          onSearchFilters={(f, text) => {
             setFilters(f);
+            setFreeText(text ?? "");
             setExcluded([]);
-            runFilters("filters", f, undefined, []);
+            runFilters("filters", f, text, []);
           }}
           currentFilters={filters}
           weather={weather}
@@ -446,21 +447,23 @@ function HomePage() {
           isGuestForFeedback={isGuest}
           posters={posters}
           postersLoading={postersLoading}
-          onSaveMoment={async (name) => {
+          onSaveMoment={async (name, situationFilters) => {
             const ctx = inferContext();
             await saveMoment({
               data: {
                 name,
-                time_filter: results.filters.time,
-                company_filter: results.filters.company,
-                mood_filter: results.filters.mood,
-                type_filter: results.filters.type,
-                attention_filter: results.filters.attention ?? filters.attention ?? null,
-                novelty_filter: results.filters.novelty ?? filters.novelty ?? null,
+                time_filter: situationFilters?.time ?? results.filters.time,
+                company_filter: situationFilters?.company ?? results.filters.company,
+                mood_filter: situationFilters?.mood ?? results.filters.mood,
+                type_filter: situationFilters?.type ?? results.filters.type,
+                attention_filter: situationFilters?.attention ?? results.filters.attention ?? filters.attention ?? null,
+                novelty_filter: situationFilters?.novelty ?? results.filters.novelty ?? filters.novelty ?? null,
                 season_hint: seasonHintShort(ctx),
                 weather_hint: weather ? weatherHintShort(weather) : null,
                 use_location: useLocation,
-                platforms: effectivePlatforms,
+                platforms: (situationFilters?.platforms?.length ?? 0) > 0
+                  ? (situationFilters!.platforms as Platform[])
+                  : effectivePlatforms,
                 auto_detected: false,
               },
             });
@@ -988,7 +991,7 @@ function ResultsScreen({
   onBack: () => void;
   onOpenSetup: () => void;
   onSearchText: (text: string) => void;
-  onSearchFilters: (filters: SituationFilters) => void;
+  onSearchFilters: (filters: SituationFilters, text?: string) => void;
   currentFilters: SituationFilters;
   weather: WeatherSnapshot | null;
   isGuest: boolean;
@@ -999,12 +1002,30 @@ function ResultsScreen({
   isGuestForFeedback: boolean;
   posters: Record<string, string | null>;
   postersLoading: boolean;
-  onSaveMoment: (name: string) => Promise<void>;
+  onSaveMoment: (name: string, situationFilters?: SituationFilters) => Promise<void>;
 }) {
   const [showChips, setShowChips] = useState(false);
   const [momentoPopupRec, setMomentoPopupRec] = useState<Recommendation | null>(null);
   const [refineFilters, setRefineFilters] = useState<SituationFilters>(currentFilters);
   const [refineText, setRefineText] = useState<string>("");
+
+  const hasActiveRefineFilters = [
+    refineFilters.time,
+    refineFilters.company,
+    refineFilters.mood,
+    refineFilters.type,
+  ].some(Boolean);
+
+  const handleRefineSubmit = () => {
+    const text = refineText.trim();
+    if (text.length >= 3 && hasActiveRefineFilters) {
+      onSearchFilters(refineFilters, text);
+    } else if (text.length >= 3) {
+      onSearchText(text);
+    } else if (hasActiveRefineFilters) {
+      onSearchFilters(refineFilters);
+    }
+  };
 
   useEffect(() => {
     setShowChips(false);
@@ -1215,7 +1236,7 @@ function ResultsScreen({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  if (refineText.trim().length >= 3) onSearchText(refineText.trim());
+                  handleRefineSubmit();
                 }
               }}
               rows={1}
@@ -1230,11 +1251,11 @@ function ResultsScreen({
                 }}
               />
               <button
-                onClick={() => refineText.trim().length >= 3 && onSearchText(refineText.trim())}
-                disabled={refineText.trim().length < 3}
+                onClick={handleRefineSubmit}
+                disabled={refineText.trim().length < 3 && !hasActiveRefineFilters}
                 className={cn(
                   "inline-flex h-10 items-center gap-1 rounded-lg px-3 text-xs font-semibold transition-smooth",
-                  refineText.trim().length >= 3
+                  refineText.trim().length >= 3 || hasActiveRefineFilters
                     ? "bg-primary text-primary-foreground hover:opacity-90 active:scale-95"
                     : "cursor-not-allowed bg-muted text-muted-foreground/60",
                 )}
@@ -1255,7 +1276,7 @@ function ResultsScreen({
               )}
             >
               <Sliders className="h-3.5 w-3.5" />
-              Afinar con filtros
+              Describir situación
             </button>
             <button
               onClick={onBack}
@@ -1301,7 +1322,7 @@ function ResultsScreen({
                 }
               />
               <button
-                onClick={() => onSearchFilters(refineFilters)}
+                onClick={handleRefineSubmit}
                 className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
               >
                 <Sparkles className="h-4 w-4" />
@@ -1317,8 +1338,9 @@ function ResultsScreen({
           rec={momentoPopupRec}
           weather={weather}
           isGuest={isGuest}
+          situationFilters={hasActiveRefineFilters ? refineFilters : undefined}
           onSave={async (name) => {
-            await onSaveMoment(name);
+            await onSaveMoment(name, hasActiveRefineFilters ? refineFilters : undefined);
             window.open(deepLinkFor(momentoPopupRec.platform, momentoPopupRec.title), "_blank");
             setMomentoPopupRec(null);
           }}
@@ -1354,6 +1376,7 @@ function MomentoPopup({
   rec,
   weather,
   isGuest,
+  situationFilters,
   onSave,
   onSkip,
   onClose,
@@ -1361,6 +1384,7 @@ function MomentoPopup({
   rec: Recommendation;
   weather: WeatherSnapshot | null;
   isGuest: boolean;
+  situationFilters?: SituationFilters;
   onSave: (name: string) => Promise<void>;
   onSkip: () => void;
   onClose: () => void;
@@ -1377,6 +1401,15 @@ function MomentoPopup({
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const situationChips = situationFilters
+    ? [
+        situationFilters.time,
+        situationFilters.company,
+        situationFilters.mood,
+        situationFilters.type,
+      ].filter(Boolean) as string[]
+    : [];
 
   return (
     <div
@@ -1418,9 +1451,23 @@ function MomentoPopup({
           </h3>
         )}
 
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-          <CloudSun className="h-3.5 w-3.5 shrink-0 text-primary" />
-          <span className="text-xs text-foreground/90">{contextLabel}</span>
+        <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <CloudSun className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="text-xs text-foreground/90">{contextLabel}</span>
+          </div>
+          {situationChips.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {situationChips.map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {isGuest ? (
