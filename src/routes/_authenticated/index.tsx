@@ -22,7 +22,7 @@ import {
   recommendFromFilters,
 } from "@/lib/recommendations.functions";
 import { recordTitleFeedback } from "@/lib/feedback.functions";
-import { fetchPosters } from "@/lib/posters.functions";
+import { fetchPostersClient } from "@/lib/itunes";
 import { Onboarding } from "@/components/Onboarding";
 import {
   readGuestSeed,
@@ -96,8 +96,8 @@ function HomePage() {
       type: r.type,
     }));
     setPostersLoading(true);
-    fetchPosters({ data: { items } })
-      .then((res) => setPosters((prev) => ({ ...prev, ...res.posters })))
+    fetchPostersClient(items)
+      .then((res) => setPosters((prev) => ({ ...prev, ...res })))
       .catch(() => {})
       .finally(() => setPostersLoading(false));
   };
