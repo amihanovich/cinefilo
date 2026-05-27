@@ -515,8 +515,8 @@ function LiveDemoCard() {
         aria-hidden="true"
       />
 
-      <div className="group relative overflow-hidden rounded-[40px] border border-border bg-card shadow-card transition-transform duration-500 hover:scale-[1.01]">
-        <div className="relative h-[420px] overflow-hidden">
+      <div className="group relative overflow-hidden rounded-[32px] border border-border bg-card shadow-card transition-transform duration-500 hover:scale-[1.01]">
+        <div className="relative h-[220px] overflow-hidden">
           <div
             key={idx}
             className={cn(
@@ -525,43 +525,43 @@ function LiveDemoCard() {
             )}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-black/30" />
-          <div className="absolute left-6 top-6">
-            <span className="rounded-full border border-white/10 bg-black/60 px-4 py-1.5 text-[10px] font-black tracking-[0.2em] text-foreground backdrop-blur-md shadow-xl">
+          <div className="absolute left-4 top-4">
+            <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-black tracking-[0.2em] text-foreground backdrop-blur-md shadow-xl">
               {ex.platform}
             </span>
           </div>
         </div>
 
-        <div className="relative -mt-20 p-8">
-          <div className="mb-4 flex items-center gap-3">
-            <span className="rounded-md border border-primary/30 bg-primary/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+        <div className="relative -mt-10 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-md border border-primary/30 bg-primary/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
               Recomendado
             </span>
-            <span className="text-sm font-medium text-muted-foreground">{ex.duration}</span>
+            <span className="text-xs font-medium text-muted-foreground">{ex.duration}</span>
           </div>
 
-          <h2 className="mb-1 font-display text-2xl font-bold leading-tight text-foreground lg:text-3xl">
+          <h2 className="mb-0.5 font-display text-xl font-bold leading-tight text-foreground">
             {ex.title}
           </h2>
-          <p className="mb-5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
             ¿Por qué verla?
           </p>
 
-          <div className="relative mb-8">
+          <div className="relative mb-5">
             <div
               className="absolute bottom-0 left-0 top-0 w-1 rounded-full bg-gradient-to-b from-primary to-transparent"
               aria-hidden="true"
             />
-            <p className="pl-6 text-base italic leading-relaxed text-foreground/85 lg:text-lg">
+            <p className="pl-5 text-sm italic leading-relaxed text-foreground/85">
               "{ex.reason}"
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" disabled className="cursor-default rounded-2xl bg-foreground py-4 text-center font-display text-sm font-bold tracking-wide text-background opacity-80">
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" disabled className="cursor-default rounded-xl bg-foreground py-3 text-center font-display text-xs font-bold tracking-wide text-background opacity-80">
               Ver ahora
             </button>
-            <button type="button" disabled className="cursor-default rounded-2xl border border-border py-4 text-center font-display text-sm font-bold tracking-wide text-foreground opacity-80">
+            <button type="button" disabled className="cursor-default rounded-xl border border-border py-3 text-center font-display text-xs font-bold tracking-wide text-foreground opacity-80">
               Afinar
             </button>
           </div>
@@ -633,13 +633,13 @@ function HomeScreen({
       <div className="ambient-glow-bottom" aria-hidden="true" />
 
       {/* HERO: pregunta + input izquierda, tarjeta-demo derecha */}
-      <div className="flex flex-col items-center py-8 lg:grid lg:grid-cols-12 lg:gap-16 lg:py-16">
+      <div className="flex flex-col items-center py-4 lg:grid lg:grid-cols-12 lg:gap-12 lg:py-8">
         <div className="flex w-full flex-col text-center lg:col-span-7 lg:text-left">
-          <h1 className="mb-6 text-balance font-display text-5xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-7xl lg:text-[88px]">
+          <h1 className="mb-3 text-balance font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-5xl lg:text-7xl">
             ¿Qué te resuelvo{" "}
             <span className="text-primary">esta noche?</span>
           </h1>
-          <p className="mb-10 max-w-lg text-lg leading-relaxed text-muted-foreground lg:text-xl">
+          <p className="mb-5 max-w-lg text-sm leading-relaxed text-muted-foreground lg:text-base">
             Contanos tu mood y te damos una recomendación editorial definitiva en menos de 2 segundos.
           </p>
 
@@ -657,7 +657,7 @@ function HomeScreen({
                 }}
                 rows={1}
                 placeholder="una serie cortita, no muy densa…"
-                className="h-20 w-full resize-none rounded-2xl border border-border bg-input pl-7 pr-40 pt-7 text-lg font-medium text-foreground placeholder:text-muted-foreground/70 transition-smooth focus:outline-none focus:ring-1 focus:ring-primary/50"
+                className="h-14 w-full resize-none rounded-2xl border border-border bg-input pl-5 pr-36 pt-4 text-base font-medium text-foreground placeholder:text-muted-foreground/70 transition-smooth focus:outline-none focus:ring-1 focus:ring-primary/50"
               />
               <div className="absolute right-3 flex items-center gap-2">
                 <MicButton
@@ -671,7 +671,7 @@ function HomeScreen({
                   onClick={onSubmitText}
                   disabled={freeText.trim().length < 3}
                   className={cn(
-                    "inline-flex h-14 items-center justify-center gap-2 rounded-xl px-7 text-sm font-bold tracking-wide transition-smooth active:scale-95",
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold tracking-wide transition-smooth active:scale-95",
                     freeText.trim().length >= 3
                       ? "bg-primary text-primary-foreground shadow-primary hover:opacity-95"
                       : "cursor-not-allowed bg-muted text-muted-foreground/60",
@@ -684,7 +684,7 @@ function HomeScreen({
             </div>
           </div>
 
-          <div className="mt-8 flex justify-center lg:justify-start">
+          <div className="mt-4 flex justify-center lg:justify-start">
             <button
               type="button"
               onClick={onSurprise}
@@ -703,7 +703,7 @@ function HomeScreen({
       </div>
 
       {/* Ajustes */}
-      <div className="mt-8 space-y-4 rounded-2xl border border-border bg-card/40 p-4">
+      <div className="mt-4 space-y-3 rounded-2xl border border-border bg-card/40 p-3">
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -786,7 +786,7 @@ function HomeScreen({
             )}
           </div>
 
-          <div className="flex items-start justify-between gap-3 border-t border-border pt-3">
+          <div className="flex items-start justify-between gap-3 border-t border-border pt-2">
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 <MapPin className="h-3 w-3 text-primary" />
