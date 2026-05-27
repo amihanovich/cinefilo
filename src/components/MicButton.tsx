@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MicOff } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Web Speech API types (no DOM lib types incluidas)
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
@@ -22,32 +22,25 @@ function getRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
 
 export function MicButton({
   onTranscript,
-  lang = "es-ES",
+  lang = "es-AR",
   className,
 }: {
-  /** Recibe el texto reconocido — el llamador decide si reemplaza o concatena. */
   onTranscript: (text: string, isFinal: boolean) => void;
   lang?: string;
   className?: string;
 }) {
   const [supported, setSupported] = useState(true);
   const [listening, setListening] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
 
   useEffect(() => {
     setSupported(!!getRecognitionCtor());
     return () => {
-      try {
-        recRef.current?.stop();
-      } catch {
-        /* noop */
-      }
+      try { recRef.current?.stop(); } catch { /* noop */ }
     };
   }, []);
 
   const start = () => {
-    setErr(null);
     const Ctor = getRecognitionCtor();
     if (!Ctor) {
       setSupported(false);
@@ -69,31 +62,32 @@ export function MicButton({
       if (final) onTranscript(final.trim(), true);
       else if (interim) onTranscript(interim.trim(), false);
     };
+
     rec.onerror = (e: any) => {
-      setErr(
-        e?.error === "not-allowed"
-          ? "Permití el micrófono en el navegador."
-          : "No pudimos escuchar. Intentá otra vez.",
-      );
       setListening(false);
+      if (e?.error === "not-allowed") {
+        toast.error("Permití el micrófono en el navegador (ícono del candado en la barra).");
+      } else if (e?.error === "network") {
+        toast.error("Error de red con el reconocimiento de voz. Intentá de nuevo.");
+      } else if (e?.error !== "aborted") {
+        toast.error("No se pudo escuchar. Intentá de nuevo.");
+      }
     };
+
     rec.onend = () => setListening(false);
 
     recRef.current = rec;
     try {
       rec.start();
       setListening(true);
-    } catch {
+    } catch (e: any) {
       setListening(false);
+      toast.error("No se pudo iniciar el micrófono. ¿Está permitido en este navegador?");
     }
   };
 
   const stop = () => {
-    try {
-      recRef.current?.stop();
-    } catch {
-      /* noop */
-    }
+    try { recRef.current?.stop(); } catch { /* noop */ }
     setListening(false);
   };
 
@@ -103,8 +97,8 @@ export function MicButton({
     <button
       type="button"
       onClick={listening ? stop : start}
-      title={err ?? (listening ? "Detener" : "Hablar")}
       aria-label={listening ? "Detener grabación" : "Dictar por voz"}
+      title={listening ? "Detener" : "Hablar"}
       className={cn(
         "inline-flex h-8 w-8 items-center justify-center rounded-full border transition-smooth",
         listening

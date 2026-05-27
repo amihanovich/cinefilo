@@ -38,6 +38,13 @@ function normalizeTitle(title: string): string {
     .trim();
 }
 
+// Strip leading Spanish/English articles that iTunes might not include
+function stripArticle(title: string): string {
+  return title
+    .replace(/^(el|la|los|las|un|una|the|a|an)\s+/i, "")
+    .trim();
+}
+
 async function searchOne(
   title: string,
   entity: "movie" | "tvShow",
@@ -45,7 +52,7 @@ async function searchOne(
 ): Promise<string | null> {
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(
     title,
-  )}&entity=${entity}&limit=1&country=${country}`;
+  )}&entity=${entity}&limit=3&country=${country}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
@@ -65,7 +72,7 @@ async function searchOne(
     const art = data.results?.[0]?.artworkUrl100;
     if (art) {
       const upscaled = upscale(art);
-      console.log(`[posters] ✓ "${title}" → ${upscaled}`);
+      console.log(`[posters] ✓ "${title}" (${country}/${entity}) → ${upscaled}`);
       return upscaled;
     }
     console.log(`[posters] ✗ "${title}" (${country}/${entity}) no results`);
@@ -79,15 +86,31 @@ async function searchOne(
 
 async function fetchPosterForTitle(title: string, type: string): Promise<string | null> {
   const clean = normalizeTitle(title);
+  const noArticle = stripArticle(clean);
   const entity: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const alt: "movie" | "tvShow" = entity === "movie" ? "tvShow" : "movie";
 
-  const [usMain, arMain, usAlt] = await Promise.all([
+  // Round 1: try all combinations in parallel
+  const [usMain, arMain, usAlt, arAlt] = await Promise.all([
     searchOne(clean, entity, "us"),
     searchOne(clean, entity, "ar"),
     searchOne(clean, alt, "us"),
+    searchOne(clean, alt, "ar"),
   ]);
-  return usMain ?? arMain ?? usAlt ?? null;
+
+  const round1 = usMain ?? arMain ?? usAlt ?? arAlt;
+  if (round1) return round1;
+
+  // Round 2: if title starts with an article, try without it
+  if (noArticle !== clean) {
+    const [usNo, arNo] = await Promise.all([
+      searchOne(noArticle, entity, "us"),
+      searchOne(noArticle, entity, "ar"),
+    ]);
+    return usNo ?? arNo ?? null;
+  }
+
+  return null;
 }
 
 export const fetchPosters = createServerFn({ method: "POST" })
