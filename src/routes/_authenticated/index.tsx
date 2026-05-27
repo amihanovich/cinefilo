@@ -367,7 +367,7 @@ function HomePage() {
         />
       )}
 
-      {showLoginNudge && showSetup && (
+      {showLoginNudge && (showSetup || showHome) && (
         <div className="mb-4 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card/60 to-card/40 p-4 backdrop-blur-sm animate-fade-in">
           <div className="flex items-start gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20">
