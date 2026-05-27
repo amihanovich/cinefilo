@@ -48,9 +48,7 @@ import {
 } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/MicButton";
-
-
-export const Route = createFileRoute("/_authenticated/")({
+import { toast } from "sonner";export const Route = createFileRoute("/_authenticated/")({
   component: HomePage,
 });
 
@@ -198,6 +196,7 @@ function HomePage() {
     if (text.length < 3) return;
     if (isGuest && readGuestSeed().searchCount >= 15) {
       setShowLoginNudge(true);
+      toast("Límite de búsquedas alcanzado. Creá una cuenta para continuar.", { duration: 4000 });
       return;
     }
     const plats =
@@ -226,7 +225,9 @@ function HomePage() {
         setGuestSeedVersion((v) => v + 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Algo salió mal.");
+      const msg = err instanceof Error ? err.message : "Algo salió mal.";
+      setError(msg);
+      toast.error(msg, { duration: 6000 });
       setStep("home");
     }
   };
@@ -239,6 +240,7 @@ function HomePage() {
   ) => {
     if (isGuest && readGuestSeed().searchCount >= 15) {
       setShowLoginNudge(true);
+      toast("Límite de búsquedas alcanzado. Creá una cuenta para continuar.", { duration: 4000 });
       return;
     }
     const f = overrideFilters ?? filters;
@@ -275,7 +277,9 @@ function HomePage() {
         setGuestSeedVersion((v) => v + 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Algo salió mal.");
+      const msg = err instanceof Error ? err.message : "Algo salió mal.";
+      setError(msg);
+      toast.error(msg, { duration: 6000 });
       setStep("home");
     }
   };
