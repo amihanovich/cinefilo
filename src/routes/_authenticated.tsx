@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { LogOut, Sparkles, Bookmark, LogIn, RotateCcw, Loader2 } from "lucide-react";
+import { LogOut, Sparkles, LogIn, RotateCcw, Loader2 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -76,7 +76,7 @@ function AuthLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-xl items-center justify-between px-5 pt-6 pb-2">
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 pt-6 pb-2 sm:px-8">
         <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
           <Sparkles className="h-4 w-4 text-primary" />
           ¿Qué Veo?
@@ -87,13 +87,6 @@ function AuthLayout() {
         <div className="flex items-center gap-1">
           {session ? (
             <>
-              <Link
-                to="/moments"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-                aria-label="Mis Momentos"
-              >
-                <Bookmark className="h-4 w-4" />
-              </Link>
               <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
                 <AlertDialogTrigger asChild>
                   <button

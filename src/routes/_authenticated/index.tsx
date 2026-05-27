@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Sparkles, Plus, Bookmark, Check, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
+import { Loader2, Play, Sparkles, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -10,8 +10,6 @@ import {
   COMPANY_OPTIONS,
   MOOD_OPTIONS,
   TYPE_OPTIONS,
-  ATTENTION_OPTIONS,
-  NOVELTY_OPTIONS,
   colorForPlatform,
   deepLinkFor,
   type Platform,
@@ -22,7 +20,6 @@ import {
 import {
   recommendFromText,
   recommendFromFilters,
-  inferMomentFilters,
 } from "@/lib/recommendations.functions";
 import { recordTitleFeedback } from "@/lib/feedback.functions";
 import { fetchPosters } from "@/lib/posters.functions";
@@ -36,12 +33,8 @@ import {
 } from "@/lib/guestSeed";
 
 import {
-  listMoments,
-  saveMoment,
-  detectPattern,
   getProfile,
   setDefaultPlatforms,
-  type MomentRow,
 } from "@/lib/moments.functions";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
 import {
@@ -150,17 +143,6 @@ function HomePage() {
     queryFn: () => getProfile(),
     enabled: !!session,
   });
-  const { data: moments } = useQuery({
-    queryKey: ["moments"],
-    queryFn: () => listMoments(),
-    enabled: !!session,
-  });
-  const { data: patternData } = useQuery({
-    queryKey: ["pattern"],
-    queryFn: () => detectPattern(),
-    enabled: step === "results" && !!session,
-  });
-
   const defaultPlatforms = (
     isGuest ? guestPlatforms : (profile?.default_platforms ?? [])
   ) as Platform[];
@@ -272,7 +254,6 @@ function HomePage() {
       setResults(data);
       loadPostersFor(data);
       setStep("results");
-      if (!isGuest) qc.invalidateQueries({ queryKey: ["pattern"] });
       if (isGuest) {
         bumpSearchCount();
         setGuestSeedVersion((v) => v + 1);
@@ -304,25 +285,6 @@ function HomePage() {
         excluded,
       );
     }
-  };
-
-  const useMoment = (m: MomentRow) => {
-    const f: SituationFilters = {
-      time: (m.time_filter as SituationFilters["time"]) ?? null,
-      company: (m.company_filter as SituationFilters["company"]) ?? null,
-      mood: (m.mood_filter as SituationFilters["mood"]) ?? null,
-      type: (m.type_filter as SituationFilters["type"]) ?? null,
-      attention: (m.attention_filter as SituationFilters["attention"]) ?? null,
-      novelty: (m.novelty_filter as SituationFilters["novelty"]) ?? null,
-      platforms: (m.platforms as Platform[]) ?? [],
-    };
-    setFilters(f);
-    setExcluded([]);
-    if (m.use_location && !useLocation) {
-      toggleLocation(true);
-    }
-    const extra = freeText.trim().length >= 3 ? freeText.trim() : undefined;
-    runFilters("moment", f, extra, []);
   };
 
   const saveDefaultPlatforms = async (plats: Platform[]) => {
@@ -440,22 +402,12 @@ function HomePage() {
           }}
           filters={filters}
           onFiltersChange={setFilters}
-          onSubmitFilters={() => {
-            setExcluded([]);
-            setSetupMode(false);
-            runFilters("filters", undefined, undefined, []);
-          }}
           onSurprise={() => {
             setSetupMode(false);
             runSurprise([]);
           }}
           onSaveDefaultPlatforms={saveDefaultPlatforms}
           defaultPlatforms={defaultPlatforms}
-          moments={isGuest ? [] : (moments ?? [])}
-          onUseMoment={(m) => {
-            setSetupMode(false);
-            useMoment(m);
-          }}
           error={error}
           onRetry={retryLast}
           isGuest={isGuest}
@@ -469,13 +421,10 @@ function HomePage() {
       {showResults && results && (
         <ResultsScreen
           results={results}
-          resolvedFilters={filters}
           source={resultsSource}
           freeText={freeText}
-          patternSuggestion={isGuest ? null : (patternData?.suggestion ?? null)}
-          existingMoments={isGuest ? [] : (moments ?? [])}
           onBack={handleRefresh}
-          onOpenSetup={() => setSetupMode(true)}
+          onOpenSetup={() => { setResults(null); setStep("home"); }}
           onSearchText={(t) => {
             setFreeText(t);
             setExcluded([]);
@@ -496,26 +445,6 @@ function HomePage() {
           isGuestForFeedback={isGuest}
           posters={posters}
           postersLoading={postersLoading}
-          onSaveMoment={async (name) => {
-            const ctx = inferContext();
-            await saveMoment({
-              data: {
-                name,
-                time_filter: results.filters.time,
-                company_filter: results.filters.company,
-                mood_filter: results.filters.mood,
-                type_filter: results.filters.type,
-                attention_filter: results.filters.attention ?? filters.attention ?? null,
-                novelty_filter: results.filters.novelty ?? filters.novelty ?? null,
-                season_hint: seasonHintShort(ctx),
-                weather_hint: weather ? weatherHintShort(weather) : null,
-                use_location: useLocation,
-                platforms: effectivePlatforms,
-                auto_detected: false,
-              },
-            });
-            qc.invalidateQueries({ queryKey: ["moments"] });
-          }}
         />
       )}
     </main>
@@ -584,16 +513,19 @@ function LiveDemoCard() {
         </div>
 
         <div className="relative -mt-20 p-8">
-          <div className="mb-5 flex items-center gap-3">
+          <div className="mb-4 flex items-center gap-3">
             <span className="rounded-md border border-primary/30 bg-primary/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
               Recomendado
             </span>
             <span className="text-sm font-medium text-muted-foreground">{ex.duration}</span>
           </div>
 
-          <h2 className="mb-5 font-display text-2xl font-bold leading-tight text-foreground lg:text-3xl">
-            ¿Por qué verla?
+          <h2 className="mb-1 font-display text-2xl font-bold leading-tight text-foreground lg:text-3xl">
+            {ex.title}
           </h2>
+          <p className="mb-5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            ¿Por qué verla?
+          </p>
 
           <div className="relative mb-8">
             <div
@@ -606,12 +538,12 @@ function LiveDemoCard() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-foreground py-4 text-center font-display text-sm font-bold tracking-wide text-background">
+            <button type="button" disabled className="cursor-default rounded-2xl bg-foreground py-4 text-center font-display text-sm font-bold tracking-wide text-background opacity-80">
               Ver ahora
-            </div>
-            <div className="rounded-2xl border border-border py-4 text-center font-display text-sm font-bold tracking-wide text-foreground">
+            </button>
+            <button type="button" disabled className="cursor-default rounded-2xl border border-border py-4 text-center font-display text-sm font-bold tracking-wide text-foreground opacity-80">
               Afinar
-            </div>
+            </button>
           </div>
         </div>
       </div>
@@ -626,12 +558,9 @@ function HomeScreen({
   onSubmitText,
   filters,
   onFiltersChange,
-  onSubmitFilters,
   onSurprise,
   onSaveDefaultPlatforms,
   defaultPlatforms,
-  moments,
-  onUseMoment,
   error,
   onRetry,
   isGuest,
@@ -645,12 +574,9 @@ function HomeScreen({
   onSubmitText: () => void;
   filters: SituationFilters;
   onFiltersChange: (f: SituationFilters) => void;
-  onSubmitFilters: () => void;
   onSurprise: () => void;
   onSaveDefaultPlatforms: (plats: Platform[]) => Promise<void>;
   defaultPlatforms: string[];
-  moments: MomentRow[];
-  onUseMoment: (m: MomentRow) => void;
   error: string | null;
   onRetry: () => void;
   isGuest: boolean;
@@ -659,7 +585,6 @@ function HomeScreen({
   weatherLoading: boolean;
   onToggleLocation: (enabled: boolean) => void;
 }) {
-  const [createOpen, setCreateOpen] = useState(false);
   const [restrictPlatforms, setRestrictPlatforms] = useState<boolean>(
     defaultPlatforms.length > 0,
   );
@@ -681,25 +606,6 @@ function HomeScreen({
         : [...filters.platforms, p],
     });
   };
-
-  const activeFilterCount = [
-    filters.time,
-    filters.company,
-    filters.mood,
-    filters.type,
-    filters.attention,
-    filters.novelty,
-  ].filter(Boolean).length;
-
-  const [optionsOpen, setOptionsOpen] = useState(false);
-  const optionsSummary = useMemo(() => {
-    const parts: string[] = [];
-    parts.push(restrictPlatforms && filters.platforms.length > 0
-      ? `${filters.platforms.length} plataforma${filters.platforms.length > 1 ? "s" : ""}`
-      : "Todas las plataformas");
-    if (useLocation) parts.push("ubicación on");
-    return parts.join(" · ");
-  }, [restrictPlatforms, filters.platforms, useLocation]);
 
   return (
     <section className="animate-fade-in">
@@ -776,30 +682,8 @@ function HomeScreen({
         </aside>
       </div>
 
-      {/* Ajustes colapsables */}
-      <button
-        onClick={() => setOptionsOpen((v) => !v)}
-        className="mt-10 flex w-full items-center justify-between gap-3 rounded-2xl border border-border bg-card/40 px-4 py-3 text-left transition-smooth hover:border-primary/60"
-        aria-expanded={optionsOpen}
-      >
-        <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Ajustes de búsqueda
-          </div>
-          <div className="mt-0.5 truncate text-[11px] text-foreground/70">
-            {optionsSummary}
-          </div>
-        </div>
-        <Plus
-          className={cn(
-            "h-5 w-5 shrink-0 text-muted-foreground transition-transform",
-            optionsOpen && "rotate-45",
-          )}
-        />
-      </button>
-
-      {optionsOpen && (
-        <div className="mt-2 space-y-4 rounded-2xl border border-border bg-card/40 p-4">
+      {/* Ajustes */}
+      <div className="mt-8 space-y-4 rounded-2xl border border-border bg-card/40 p-4">
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -926,7 +810,6 @@ function HomeScreen({
             </button>
           </div>
         </div>
-      )}
 
       {error && (
         <div className="mt-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 animate-fade-in">
@@ -946,325 +829,7 @@ function HomeScreen({
           </div>
         </div>
       )}
-
-      <div className="mt-10 flex items-center gap-3" aria-hidden="true">
-        <div className="h-px flex-1 bg-border" />
-        <span className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">o</span>
-        <div className="h-px flex-1 bg-border" />
-      </div>
-
-      {/* Momentos */}
-      <div className="mt-6">
-        <div className="mb-3">
-          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <Bookmark className="h-4 w-4 text-primary" />
-            Configurá un Momento
-          </div>
-          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-            Una situación recurrente (tiempo, compañía, mood…) que querés reusar.
-            {" "}
-            {freeText.trim().length >= 3 ? (
-              <span className="text-primary">Tu texto de arriba se combina como matiz extra.</span>
-            ) : (
-              <span>También podés combinarlo con el texto de arriba.</span>
-            )}
-          </p>
-          {!isGuest && moments.length > 0 && (
-            <Link
-              to="/moments"
-              className="mt-1 inline-block text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              Gestionar mis Momentos →
-            </Link>
-          )}
-        </div>
-
-        {!isGuest && moments.length > 0 && (
-          <div className="mb-3 grid grid-cols-2 gap-3">
-            {moments.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => onUseMoment(m)}
-                className="flex min-h-[88px] flex-col items-start gap-1 rounded-2xl border border-border bg-card/70 p-3 text-left transition-smooth hover:border-primary/60 hover:bg-card"
-              >
-                <span className="text-sm font-semibold text-foreground line-clamp-2">
-                  {m.name}
-                </span>
-                <span className="text-[11px] text-muted-foreground line-clamp-2">
-                  {summarizeMoment(m)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isGuest && (
-          <div className="mb-3 rounded-2xl border border-dashed border-border bg-transparent p-3 text-center text-[11px] text-muted-foreground">
-            <Link to="/login" className="text-primary hover:underline">
-              Iniciá sesión
-            </Link>{" "}
-            para guardar tus Momentos y reutilizarlos. Sin login, podés armar uno para esta búsqueda.
-          </div>
-        )}
-
-        <button
-          onClick={() => setCreateOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-transparent px-4 py-3 text-left transition-smooth hover:border-primary"
-          aria-expanded={createOpen}
-        >
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              {createOpen ? "Armá tu Momento" : "Crear nuevo Momento"}
-            </div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {activeFilterCount > 0
-                ? `${activeFilterCount} filtro${activeFilterCount > 1 ? "s" : ""} elegido${activeFilterCount > 1 ? "s" : ""}`
-                : "Tiempo, compañía, mood, tipo"}
-            </div>
-          </div>
-          <Plus
-            className={cn(
-              "h-5 w-5 shrink-0 text-muted-foreground transition-transform",
-              createOpen && "rotate-45",
-            )}
-          />
-        </button>
-
-        {createOpen && (
-          <div className="mt-3 space-y-6 rounded-2xl border border-border bg-card/40 p-4">
-            <MomentAiBuilder
-              onInferred={(f) =>
-                onFiltersChange({
-                  ...filters,
-                  time: (f.time as SituationFilters["time"]) ?? null,
-                  company: (f.company as SituationFilters["company"]) ?? null,
-                  mood: (f.mood as SituationFilters["mood"]) ?? null,
-                  type: (f.type as SituationFilters["type"]) ?? null,
-                  attention:
-                    (f.attention as SituationFilters["attention"]) ?? filters.attention ?? null,
-                  novelty:
-                    (f.novelty as SituationFilters["novelty"]) ?? filters.novelty ?? null,
-                })
-              }
-            />
-            <FilterGroup
-              label="¿Cuánto tiempo tenés?"
-              options={TIME_OPTIONS}
-              value={filters.time}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, time: v as SituationFilters["time"] })
-              }
-            />
-            <FilterGroup
-              label="¿Con quién?"
-              options={COMPANY_OPTIONS}
-              value={filters.company}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, company: v as SituationFilters["company"] })
-              }
-            />
-            <FilterGroup
-              label="¿Qué mood?"
-              options={MOOD_OPTIONS}
-              value={filters.mood}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, mood: v as SituationFilters["mood"] })
-              }
-            />
-            <FilterGroup
-              label="¿Tipo?"
-              options={TYPE_OPTIONS}
-              value={filters.type}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, type: v as SituationFilters["type"] })
-              }
-            />
-            <FilterGroup
-              label="¿Nivel de atención?"
-              options={ATTENTION_OPTIONS}
-              value={filters.attention}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, attention: v as SituationFilters["attention"] })
-              }
-            />
-            <FilterGroup
-              label="¿Novedad?"
-              options={NOVELTY_OPTIONS}
-              value={filters.novelty}
-              onSelect={(v) =>
-                onFiltersChange({ ...filters, novelty: v as SituationFilters["novelty"] })
-              }
-            />
-
-            <button
-              onClick={onSubmitFilters}
-              className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary px-6 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
-            >
-              {isGuest ? "Buscar con este Momento" : "Buscar (y guardalo después)"}
-            </button>
-            {!isGuest && (
-              <p className="-mt-3 text-center text-[11px] text-muted-foreground">
-                Si te gustan los resultados, podrás guardarlo con nombre.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
     </section>
-  );
-}
-
-function summarizeMoment(m: MomentRow): string {
-  const parts = [m.time_filter, m.company_filter, m.mood_filter, m.type_filter].filter(Boolean);
-  if (parts.length === 0 && (m.platforms?.length ?? 0) > 0) {
-    return m.platforms.slice(0, 3).join(" · ");
-  }
-  return parts.length > 0 ? parts.join(" · ") : "Sin filtros";
-}
-
-function MomentAiBuilder({
-  onInferred,
-}: {
-  onInferred: (f: {
-    time: string | null;
-    company: string | null;
-    mood: string | null;
-    type: string | null;
-    attention?: string | null;
-    novelty?: string | null;
-  }) => void;
-}) {
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
-
-  const run = async () => {
-    if (text.trim().length < 3) return;
-    setLoading(true);
-    setErr(null);
-    setOk(false);
-    try {
-      const f = await inferMomentFilters({ data: { text: text.trim() } });
-      onInferred(f);
-      setOk(true);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "No pudimos inferir.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-3">
-      <label className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-primary">
-        <Sparkles className="mr-1 inline h-3 w-3" />
-        Armalo con IA (opcional)
-      </label>
-      <div className="rounded-lg border border-primary/30 bg-input-surface transition-smooth focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30">
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            setOk(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (!loading && text.trim().length >= 3) run();
-            }
-          }}
-          rows={2}
-          placeholder="Ej: viernes a la noche con mi pareja, algo liviano…"
-          className="w-full resize-none bg-transparent px-3 pt-3 pb-1.5 text-sm text-foreground placeholder:text-muted-foreground/80 focus:outline-none"
-        />
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
-          <span className="text-[11px] text-muted-foreground">
-            Pre-llenamos los filtros abajo.
-          </span>
-          <div className="flex items-center gap-2">
-            <MicButton
-              onTranscript={(t, isFinal) => {
-                if (!t || !isFinal) return;
-                setText((prev) => (prev ? `${prev.trim()} ${t}` : t));
-                setOk(false);
-              }}
-            />
-            <button
-              type="button"
-              onClick={run}
-              disabled={loading || text.trim().length < 3}
-              aria-label="Enviar"
-              title="Enviar"
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
-                loading || text.trim().length < 3
-                  ? "cursor-not-allowed bg-background text-muted-foreground"
-                  : "bg-primary text-primary-foreground hover:opacity-90 active:scale-95",
-              )}
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-      </div>
-      {ok && (
-        <p className="mt-2 text-[11px] text-primary">
-          Listo — revisá y ajustá los filtros abajo.
-        </p>
-      )}
-      {err && <p className="mt-2 text-[11px] text-destructive">{err}</p>}
-    </div>
-  );
-}
-
-function FilterGroup({
-  label,
-  options,
-  value,
-  onSelect,
-}: {
-  label: string;
-  options: readonly string[];
-  value: string | null;
-  onSelect: (v: string | null) => void;
-}) {
-  return (
-    <div>
-      <h3 className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </h3>
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => onSelect(null)}
-          className={cn(
-            "min-h-[44px] rounded-full border px-4 text-xs font-semibold transition-smooth",
-            value === null
-              ? "border-primary bg-primary/15 text-primary"
-              : "border-dashed border-border bg-transparent text-muted-foreground hover:border-primary hover:text-primary",
-          )}
-        >
-          ✨ Que decida la IA
-        </button>
-        {options.map((opt) => {
-          const active = value === opt;
-          return (
-            <button
-              key={opt}
-              onClick={() => onSelect(active ? null : opt)}
-              className={cn(
-                "min-h-[44px] rounded-full border px-4 text-sm font-medium transition-smooth",
-                active
-                  ? "border-transparent bg-primary text-primary-foreground shadow-primary"
-                  : "border-border bg-card/50 text-foreground/80 hover:bg-card",
-              )}
-            >
-              {opt}
-            </button>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -1381,15 +946,12 @@ function ResultsScreen({
   results,
   source,
   freeText,
-  patternSuggestion,
-  existingMoments,
   onBack,
   onOpenSetup,
   onSearchText,
   onSearchFilters,
   currentFilters,
   weather,
-  onSaveMoment,
   isGuest,
   excludedCount,
   onSeen,
@@ -1400,25 +962,14 @@ function ResultsScreen({
   postersLoading,
 }: {
   results: RecommendationsResult;
-  resolvedFilters: SituationFilters;
   source: "text" | "filters" | "moment";
   freeText: string;
-  patternSuggestion: {
-    time_filter: string | null;
-    company_filter: string | null;
-    mood_filter: string | null;
-    type_filter: string | null;
-    platforms: string[];
-    count: number;
-  } | null;
-  existingMoments: MomentRow[];
   onBack: () => void;
   onOpenSetup: () => void;
   onSearchText: (text: string) => void;
   onSearchFilters: (filters: SituationFilters) => void;
   currentFilters: SituationFilters;
   weather: WeatherSnapshot | null;
-  onSaveMoment: (name: string) => Promise<void>;
   isGuest: boolean;
   excludedCount: number;
   onSeen: (title: string, platform: string) => void;
@@ -1428,22 +979,14 @@ function ResultsScreen({
   posters: Record<string, string | null>;
   postersLoading: boolean;
 }) {
-  const [saving, setSaving] = useState(false);
-  const [savedOnce, setSavedOnce] = useState(false);
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [showPattern, setShowPattern] = useState(true);
-
   const [showChips, setShowChips] = useState(false);
   const [refineFilters, setRefineFilters] = useState<SituationFilters>(currentFilters);
-  const [refineText, setRefineText] = useState<string>(source === "text" ? freeText : "");
-
-  const ctx = useMemo(() => inferContext(), []);
-  const ctxLabel = `${ctx.dayOfWeek} ${String(ctx.hour).padStart(2, "0")}h`;
+  const [refineText, setRefineText] = useState<string>("");
 
   useEffect(() => {
     setShowChips(false);
     setRefineFilters(currentFilters);
-    setRefineText(source === "text" ? freeText : "");
+    setRefineText("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results]);
 
@@ -1730,170 +1273,19 @@ function ResultsScreen({
                   setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })
                 }
               />
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
-                <button
-                  onClick={() => onSearchFilters(refineFilters)}
-                  className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  Recomendar con esto
-                </button>
-                {!isGuest && (
-                  <button
-                    onClick={() => {
-                      onSearchFilters(refineFilters);
-                      setTimeout(() => setShowSaveModal(true), 250);
-                    }}
-                    className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-4 text-xs font-semibold text-primary transition-smooth hover:bg-primary/20"
-                  >
-                    <Bookmark className="h-3.5 w-3.5" />
-                    Guardar como Momento
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => onSearchFilters(refineFilters)}
+                className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary transition-smooth active:scale-[0.98]"
+              >
+                <Sparkles className="h-4 w-4" />
+                Recomendar con esto
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {source !== "moment" && !savedOnce && !isGuest && (
-        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card/40 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-foreground">
-              {ctxLabel} — ¿Guardás este Momento?
-            </p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-              Guardamos el contexto (día, hora, temporada) para que la próxima vez te propongamos algo similar de un toque.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowSaveModal(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-smooth hover:bg-primary/20"
-          >
-            <Bookmark className="h-3.5 w-3.5" />
-            Guardar
-          </button>
-        </div>
-      )}
-      {source !== "moment" && isGuest && (
-        <Link
-          to="/login"
-          className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-dashed border-border bg-transparent px-4 text-sm font-medium text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
-        >
-          <Bookmark className="h-4 w-4" /> Iniciá sesión para guardar este Momento
-        </Link>
-      )}
-      {savedOnce && (
-        <div className="mt-4 inline-flex items-center gap-2 text-sm text-primary">
-          <Check className="h-4 w-4" /> Guardado en tus Momentos
-        </div>
-      )}
-
-      {showPattern &&
-        patternSuggestion &&
-        existingMoments.length < 12 &&
-        !savedOnce && (
-          <div className="mt-6 rounded-2xl border border-primary/40 bg-primary/10 p-4">
-            <div className="mb-2 flex items-start justify-between gap-2">
-              <p className="text-sm text-foreground">
-                Notamos que repetís esta combinación ({patternSuggestion.count} veces).
-                ¿La guardás como Momento?
-              </p>
-              <button
-                onClick={() => setShowPattern(false)}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label="Descartar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <button
-              onClick={() => {
-                setShowSaveModal(true);
-                setShowPattern(false);
-              }}
-              className="text-sm font-semibold text-primary hover:underline"
-            >
-              Crear Momento →
-            </button>
-          </div>
-        )}
-
-      {showSaveModal && (
-        <SaveMomentModal
-          defaultName={suggestNameFromFilters(results.filters)}
-          onClose={() => setShowSaveModal(false)}
-          onSave={async (name) => {
-            setSaving(true);
-            try {
-              await onSaveMoment(name);
-              setSavedOnce(true);
-              setShowSaveModal(false);
-            } finally {
-              setSaving(false);
-            }
-          }}
-          saving={saving}
-        />
-      )}
     </section>
-  );
-}
-
-function suggestNameFromFilters(f: RecommendationsResult["filters"]): string {
-  const parts = [f.time, f.company, f.mood, f.type].filter(Boolean) as string[];
-  return parts.slice(0, 3).join(" · ") || "Mi Momento";
-}
-
-function SaveMomentModal({
-  defaultName,
-  onClose,
-  onSave,
-  saving,
-}: {
-  defaultName: string;
-  onClose: () => void;
-  onSave: (name: string) => Promise<void>;
-  saving: boolean;
-}) {
-  const [name, setName] = useState(defaultName);
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-6 pt-20 sm:items-center sm:pb-0"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-card"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold text-foreground">Nombrá tu Momento</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Ej: &quot;Martes noche, serie solo&quot;, &quot;Finde con María&quot;.
-        </p>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="mt-4 min-h-[48px] w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none"
-        />
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={onClose}
-            className="min-h-[44px] flex-1 rounded-xl border border-border px-4 text-sm font-medium text-foreground hover:bg-background"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={() => name.trim() && onSave(name.trim())}
-            disabled={saving || !name.trim()}
-            className="flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary px-4 text-sm font-semibold text-primary-foreground shadow-primary disabled:opacity-50"
-          >
-            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Guardar
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
