@@ -29,6 +29,15 @@ function isSeries(type: string): boolean {
   return t.includes("serie") || t.includes("capítulo") || t.includes("capitulo");
 }
 
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/\s*\([^)]*\)\s*$/, "")           // remove trailing (...)
+    .replace(/:\s*(temporada|season|capítulo|chapter)\s*\d+.*/i, "")
+    .replace(/,?\s*(temporada|season)\s*\d+.*/i, "")
+    .replace(/\s*[-–]\s*(temporada|season)\s*\d+.*/i, "")
+    .trim();
+}
+
 async function searchOne(
   title: string,
   entity: "movie" | "tvShow",
@@ -38,7 +47,7 @@ async function searchOne(
     title,
   )}&entity=${entity}&limit=1&country=${country}`;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
+  const timer = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(url, {
       signal: controller.signal,
@@ -69,14 +78,14 @@ async function searchOne(
 }
 
 async function fetchPosterForTitle(title: string, type: string): Promise<string | null> {
+  const clean = normalizeTitle(title);
   const entity: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const alt: "movie" | "tvShow" = entity === "movie" ? "tvShow" : "movie";
 
-  // Run all fallback searches in parallel
   const [usMain, arMain, usAlt] = await Promise.all([
-    searchOne(title, entity, "us"),
-    searchOne(title, entity, "ar"),
-    searchOne(title, alt, "us"),
+    searchOne(clean, entity, "us"),
+    searchOne(clean, entity, "ar"),
+    searchOne(clean, alt, "us"),
   ]);
   return usMain ?? arMain ?? usAlt ?? null;
 }
