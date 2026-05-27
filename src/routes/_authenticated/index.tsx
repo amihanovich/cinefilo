@@ -1247,7 +1247,7 @@ function ResultsScreen({
               }}
               rows={1}
               placeholder="Algo más corto, solo Netflix, sin violencia…"
-              className="h-14 w-full resize-none rounded-xl border border-border bg-background pl-4 pr-32 pt-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
+              className="h-14 w-full resize-none rounded-xl border border-border bg-background pl-4 pr-52 pt-4 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
               <MicButton
@@ -1267,7 +1267,7 @@ function ResultsScreen({
                 )}
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                Recomendar
+                Refina la recomendación
               </button>
             </div>
           </div>
