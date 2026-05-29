@@ -1,28 +1,31 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Play, Sparkles, X, ArrowUp, ThumbsUp, ThumbsDown, Heart, RefreshCw, EyeOff, Sliders, Settings2, CloudSun, Film, MapPin, AlertTriangle, TrendingUp } from "lucide-react";
+import {
+  Loader2,
+  ArrowUp,
+  ThumbsUp,
+  ThumbsDown,
+  Heart,
+  EyeOff,
+  RefreshCw,
+  Mic,
+  ExternalLink,
+  AlertTriangle,
+  MapPin,
+} from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
   PLATFORM_OPTIONS,
-  TIME_OPTIONS,
-  COMPANY_OPTIONS,
-  MOOD_OPTIONS,
-  TYPE_OPTIONS,
   colorForPlatform,
   deepLinkFor,
   type Platform,
-  type SituationFilters,
-  type Recommendation,
   type RecommendationsResult,
 } from "@/lib/recommendations";
-import {
-  recommendFromText,
-  recommendFromFilters,
-} from "@/lib/recommendations.functions";
+import { recommendConversational } from "@/lib/recommendations.functions";
 import { recordTitleFeedback } from "@/lib/feedback.functions";
-import { fetchPostersClient } from "@/lib/itunes";
+import { getProfile, setDefaultPlatforms } from "@/lib/profile.functions";
 import { Onboarding } from "@/components/Onboarding";
 import {
   readGuestSeed,
@@ -31,13 +34,6 @@ import {
   bumpSearchCount,
   dismissLoginNudge,
 } from "@/lib/guestSeed";
-
-import {
-  saveMoment,
-  getProfile,
-  setDefaultPlatforms,
-} from "@/lib/moments.functions";
-import { getTrending, type TrendingTitle } from "@/lib/trending.functions";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
 import {
   getWeatherSnapshot,
@@ -48,11 +44,19 @@ import {
 } from "@/lib/environment";
 import { cn } from "@/lib/utils";
 import { MicButton } from "@/components/MicButton";
-import { toast } from "sonner";export const Route = createFileRoute("/_authenticated/")({
+import { toast } from "sonner";
+
+export const Route = createFileRoute("/_authenticated/")({
   component: HomePage,
 });
 
-type Step = "home" | "filters" | "loading" | "results";
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  data?: RecommendationsResult;
+  feedbackGiven?: Record<string, "love" | "like" | "dislike" | "seen">;
+};
 
 const GUEST_PLATFORMS_KEY = "queveo:guest:default_platforms";
 
@@ -68,43 +72,17 @@ function readGuestPlatforms(): Platform[] {
   }
 }
 
+function uid() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
 function HomePage() {
   const qc = useQueryClient();
-  const [step, setStep] = useState<Step>("home");
-  const [freeText, setFreeText] = useState("");
-  const [filters, setFilters] = useState<SituationFilters>({
-    time: null,
-    company: null,
-    mood: null,
-    type: null,
-    attention: null,
-    novelty: null,
-    platforms: [],
-  });
-  const [results, setResults] = useState<RecommendationsResult | null>(null);
-  const [resultsSource, setResultsSource] = useState<"text" | "filters" | "moment">("filters");
+  const [step, setStep] = useState<"home" | "chat">("home");
+  const [isLoading, setIsLoading] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
   const [excluded, setExcluded] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [posters, setPosters] = useState<Record<string, string | null>>({});
-  const [postersLoading, setPostersLoading] = useState(false);
-
-  const loadPostersFor = (data: RecommendationsResult) => {
-    const items = [data.main, ...data.alternatives].map((r) => ({
-      title: r.title,
-      type: r.type,
-    }));
-    setPostersLoading(true);
-    fetchPostersClient(items)
-      .then((res) => setPosters((prev) => ({ ...prev, ...res })))
-      .catch(() => {})
-      .finally(() => setPostersLoading(false));
-  };
-
-  useEffect(() => {
-    const handler = () => { setStep("home"); setResults(null); };
-    window.addEventListener("que-veo:go-home", handler);
-    return () => window.removeEventListener("que-veo:go-home", handler);
-  }, []);
 
   const [session, setSession] = useState<Session | null>(null);
   const [sessionReady, setSessionReady] = useState(false);
@@ -119,181 +97,148 @@ function HomePage() {
   const isGuest = sessionReady && !session;
 
   const [guestPlatforms, setGuestPlatforms] = useState<Platform[]>(() => readGuestPlatforms());
-
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
   const [guestSeedVersion, setGuestSeedVersion] = useState(0);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {
-    if (!sessionReady) return;
-    if (!isGuest) return;
+    if (!sessionReady || !isGuest) return;
     if (isOnboarded()) return;
     setShowOnboarding(true);
   }, [sessionReady, isGuest]);
 
   const [showLoginNudge, setShowLoginNudge] = useState(false);
   useEffect(() => {
-    if (!sessionReady || !isGuest) {
-      setShowLoginNudge(false);
-      return;
-    }
+    if (!sessionReady || !isGuest) { setShowLoginNudge(false); return; }
     const seed = readGuestSeed();
     setShowLoginNudge(seed.searchCount >= 3 && !seed.loginNudgeDismissedAt);
   }, [sessionReady, isGuest, guestSeedVersion]);
-
-  const dismissNudge = () => {
-    dismissLoginNudge();
-    setShowLoginNudge(false);
-  };
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
     queryFn: () => getProfile(),
     enabled: !!session,
   });
-  const defaultPlatforms = (
-    isGuest ? guestPlatforms : (profile?.default_platforms ?? [])
-  ) as Platform[];
+  const defaultPlatforms = (isGuest ? guestPlatforms : (profile?.default_platforms ?? [])) as Platform[];
 
-  const effectivePlatforms = (
-    filters.platforms.length > 0 ? filters.platforms : defaultPlatforms
-  ) as Platform[];
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
+  useEffect(() => {
+    if (defaultPlatforms.length > 0 && selectedPlatforms.length === 0) {
+      setSelectedPlatforms(defaultPlatforms);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultPlatforms.join(",")]);
 
-  const [useLocation, setUseLocation] = useState<boolean>(() => isWeatherEnabled());
+  const effectivePlatforms =
+    selectedPlatforms.length > 0 ? selectedPlatforms : (PLATFORM_OPTIONS as Platform[]);
+
+  const [useLocation, setUseLocation] = useState(() => isWeatherEnabled());
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-
   useEffect(() => {
     if (!useLocation) return;
     setWeatherLoading(true);
-    getWeatherSnapshot()
-      .then((w) => setWeather(w))
-      .finally(() => setWeatherLoading(false));
+    getWeatherSnapshot().then(setWeather).finally(() => setWeatherLoading(false));
   }, [useLocation]);
 
   const toggleLocation = async (enabled: boolean) => {
     setWeatherEnabled(enabled);
     setUseLocation(enabled);
-    if (!enabled) {
-      setWeather(null);
-      return;
-    }
+    if (!enabled) { setWeather(null); return; }
     setWeatherLoading(true);
     const w = await getWeatherSnapshot();
     setWeather(w);
     setWeatherLoading(false);
   };
 
-  const buildEnvHints = () => {
+  useEffect(() => {
+    const handler = () => { setStep("home"); setMessages([]); setInputText(""); setExcluded([]); };
+    window.addEventListener("que-veo:go-home", handler);
+    return () => window.removeEventListener("que-veo:go-home", handler);
+  }, []);
+
+  const submit = async (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length < 2) return;
+
+    const userMsg: ChatMessage = { id: uid(), role: "user", text: trimmed };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInputText("");
+    setIsLoading(true);
+    if (step === "home") setStep("chat");
+
     const ctx = inferContext();
-    return {
-      contextHint: contextToPromptHint(ctx),
-      seasonHint: seasonHintShort(ctx),
-      weatherHint: weather ? weatherHintShort(weather) : null,
-    };
-  };
+    const contextHint = contextToPromptHint(ctx);
+    const seasonHint = seasonHintShort(ctx);
+    const weatherHint = weather ? weatherHintShort(weather) : null;
 
-  const runText = async (excludeList: string[] = excluded, textOverride?: string) => {
-    const text = (textOverride ?? freeText).trim();
-    if (text.length < 3) return;
-    const plats =
-      effectivePlatforms.length > 0 ? effectivePlatforms : (PLATFORM_OPTIONS as Platform[]);
-    setError(null);
-    setResultsSource("text");
-    setStep("loading");
+    // Build conversation history for AI: assistant messages summarized as titles
+    const aiHistory = nextMessages.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content:
+        m.role === "user"
+          ? m.text
+          : m.data
+            ? `Recomendé: ${m.data.main.title} (${m.data.main.platform}), alternativas: ${m.data.alternatives.map((a) => `${a.title} (${a.platform})`).join(", ")}`
+            : m.text,
+    }));
+
     try {
-      const env = buildEnvHints();
-      const data = await recommendFromText({
+      const data = await recommendConversational({
         data: {
-          text,
-          platforms: plats,
-          contextHint: env.contextHint,
-          seasonHint: env.seasonHint,
-          weatherHint: env.weatherHint,
-          excludeTitles: excludeList,
+          messages: aiHistory,
+          platforms: effectivePlatforms,
+          contextHint,
+          seasonHint,
+          weatherHint,
+          excludeTitles: excluded,
           profileSeed: isGuest ? seedForServer(readGuestSeed()) : undefined,
         },
       });
-      setResults(data);
-      loadPostersFor(data);
-      setStep("results");
+
+      const aiMsg: ChatMessage = {
+        id: uid(),
+        role: "assistant",
+        text: "",
+        data,
+        feedbackGiven: {},
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      // Track recommended titles to avoid repeating
+      const newExcluded = [data.main.title, ...data.alternatives.map((a) => a.title)];
+      setExcluded((prev) => [...prev, ...newExcluded.filter((t) => !prev.includes(t))]);
+
       if (isGuest) {
         bumpSearchCount();
         setGuestSeedVersion((v) => v + 1);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Algo salió mal.";
-      setError(msg);
       toast.error(msg, { duration: 6000 });
-      setStep("home");
+      setMessages(nextMessages.slice(0, -1)); // revert user message
+      if (step === "home" && nextMessages.length === 1) setStep("home");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const runFilters = async (
-    source: "filters" | "moment",
-    overrideFilters?: SituationFilters,
-    extraText?: string,
-    excludeList: string[] = excluded,
+  const handleFeedbackInMessage = (
+    msgId: string,
+    title: string,
+    platform: string,
+    sentiment: "love" | "like" | "dislike" | "seen",
   ) => {
-    const f = overrideFilters ?? filters;
-    let plats = (f.platforms.length > 0 ? f.platforms : defaultPlatforms) as Platform[];
-    if (plats.length === 0) plats = PLATFORM_OPTIONS as Platform[];
-    setError(null);
-    setResultsSource(source);
-    setStep("loading");
-    try {
-      const env = buildEnvHints();
-      const data = await recommendFromFilters({
-        data: {
-          time: f.time,
-          company: f.company,
-          mood: f.mood,
-          type: f.type,
-          attention: f.attention,
-          novelty: f.novelty,
-          platforms: plats,
-          contextHint: env.contextHint,
-          seasonHint: env.seasonHint,
-          weatherHint: env.weatherHint,
-          source,
-          extraText: extraText ?? null,
-          excludeTitles: excludeList,
-          profileSeed: isGuest ? seedForServer(readGuestSeed()) : undefined,
-        },
-      });
-      setResults(data);
-      loadPostersFor(data);
-      setStep("results");
-      if (isGuest) {
-        bumpSearchCount();
-        setGuestSeedVersion((v) => v + 1);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Algo salió mal.";
-      setError(msg);
-      toast.error(msg, { duration: 6000 });
-      setStep("home");
-    }
-  };
-
-  const handleSeen = (title: string, platform: string) => {
-    if (!excluded.includes(title)) setExcluded([...excluded, title]);
-    void recordTitleFeedback({ data: { title, platform, sentiment: "seen" } }).catch(() => {});
-  };
-
-  const handleFeedback = (title: string, platform: string, sentiment: "like" | "love" | "dislike") => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId
+          ? { ...m, feedbackGiven: { ...(m.feedbackGiven ?? {}), [title]: sentiment } }
+          : m,
+      ),
+    );
     void recordTitleFeedback({ data: { title, platform, sentiment } }).catch(() => {});
-    if (sentiment === "dislike" && !excluded.includes(title)) setExcluded([...excluded, title]);
-  };
-
-  const rerunExcludingSeen = () => {
-    if (resultsSource === "text") {
-      runText(excluded);
-    } else {
-      runFilters(
-        resultsSource,
-        undefined,
-        freeText.trim().length >= 3 ? freeText.trim() : undefined,
-        excluded,
-      );
+    if (sentiment === "dislike" || sentiment === "seen") {
+      setExcluded((prev) => (prev.includes(title) ? prev : [...prev, title]));
     }
   };
 
@@ -307,51 +252,8 @@ function HomePage() {
     qc.invalidateQueries({ queryKey: ["profile"] });
   };
 
-  const runSurprise = (excludeList: string[] = []) => {
-    setExcluded(excludeList);
-    const emptyFilters: SituationFilters = {
-      time: null,
-      company: null,
-      mood: null,
-      type: null,
-      attention: null,
-      novelty: null,
-      platforms: filters.platforms,
-    };
-    runFilters("filters", emptyFilters, undefined, excludeList);
-  };
-
-  const handleRefresh = () => runSurprise([]);
-
-  const retryLast = () => {
-    if (resultsSource === "text") {
-      runText(excluded);
-    } else {
-      runFilters(
-        resultsSource === "moment" ? "moment" : "filters",
-        undefined,
-        freeText.trim().length >= 3 ? freeText.trim() : undefined,
-        excluded,
-      );
-    }
-  };
-
-  const [setupMode, setSetupMode] = useState(false);
-
-  const bootRef = useRef(false);
-  useEffect(() => {
-    if (bootRef.current) return;
-    if (!sessionReady) return;
-    bootRef.current = true;
-  }, [sessionReady]);
-
-  const showSetup = setupMode && !results;
-  const showLoading = !setupMode && step === "loading";
-  const showResults = !setupMode && step === "results" && !!results;
-  const showHome = !setupMode && !showLoading && !showResults;
-
   return (
-    <main className="mx-auto max-w-6xl px-6 pb-12 sm:px-8">
+    <main className="min-h-[calc(100vh-65px)]">
       {showOnboarding && (
         <Onboarding
           onDone={() => {
@@ -361,1545 +263,664 @@ function HomePage() {
         />
       )}
 
-      {showLoginNudge && (showSetup || showHome) && (
-        <div className="mb-4 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card/60 to-card/40 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20">
-              <Heart className="h-4 w-4 text-primary" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                Guardá tu perfil de gusto
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Llevás varias búsquedas. Si querés que tus Momentos, plataformas y feedback te sigan
-                en cualquier dispositivo, creá tu cuenta. Sin emails ni datos compartidos.
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-smooth hover:bg-primary/90"
-                >
-                  Guardar mi perfil →
-                </Link>
-                <button
-                  onClick={dismissNudge}
-                  className="text-xs font-medium text-muted-foreground transition-smooth hover:text-foreground"
-                >
-                  Ahora no
-                </button>
-              </div>
-            </div>
-            <button
-              onClick={dismissNudge}
-              aria-label="Cerrar"
-              className="text-muted-foreground transition-smooth hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {(showSetup || showHome) && (
+      {step === "home" && (
         <HomeScreen
-          freeText={freeText}
-          onFreeTextChange={setFreeText}
-          onSubmitText={() => {
-            setExcluded([]);
-            setSetupMode(false);
-            runText([]);
-          }}
-          filters={filters}
-          onFiltersChange={setFilters}
-          onSurprise={() => {
-            setSetupMode(false);
-            runSurprise([]);
-          }}
-          onSaveDefaultPlatforms={saveDefaultPlatforms}
+          onSubmit={submit}
           defaultPlatforms={defaultPlatforms}
-          error={error}
-          onRetry={retryLast}
-          isGuest={isGuest}
+          selectedPlatforms={selectedPlatforms}
+          onSelectedPlatformsChange={setSelectedPlatforms}
+          onSaveDefaultPlatforms={saveDefaultPlatforms}
           useLocation={useLocation}
           weather={weather}
           weatherLoading={weatherLoading}
           onToggleLocation={toggleLocation}
+          isGuest={isGuest}
+          showLoginNudge={showLoginNudge}
+          onDismissLoginNudge={() => { dismissLoginNudge(); setShowLoginNudge(false); }}
         />
       )}
-      {showLoading && <LoadingScreen />}
-      {showResults && results && (
-        <ResultsScreen
-          results={results}
-          source={resultsSource}
-          freeText={freeText}
-          onBack={handleRefresh}
-          onOpenSetup={() => { setResults(null); setStep("home"); }}
-          onSearchText={(t) => {
-            setFreeText(t);
-            setExcluded([]);
-            runText([], t);
-          }}
-          onSearchFilters={(f, text) => {
-            setFilters(f);
-            setFreeText(text ?? "");
-            setExcluded([]);
-            runFilters("filters", f, text, []);
-          }}
-          currentFilters={filters}
-          weather={weather}
+
+      {step === "chat" && (
+        <ChatScreen
+          messages={messages}
+          isLoading={isLoading}
           isGuest={isGuest}
-          excludedCount={excluded.length}
-          onSeen={handleSeen}
-          onFeedback={handleFeedback}
-          onRerunExcludingSeen={rerunExcludingSeen}
-          isGuestForFeedback={isGuest}
-          posters={posters}
-          postersLoading={postersLoading}
-          onSaveMoment={async (name, situationFilters) => {
-            const ctx = inferContext();
-            await saveMoment({
-              data: {
-                name,
-                time_filter: situationFilters?.time ?? results.filters.time,
-                company_filter: situationFilters?.company ?? results.filters.company,
-                mood_filter: situationFilters?.mood ?? results.filters.mood,
-                type_filter: situationFilters?.type ?? results.filters.type,
-                attention_filter: situationFilters?.attention ?? results.filters.attention ?? filters.attention ?? null,
-                novelty_filter: situationFilters?.novelty ?? results.filters.novelty ?? filters.novelty ?? null,
-                season_hint: seasonHintShort(ctx),
-                weather_hint: weather ? weatherHintShort(weather) : null,
-                use_location: useLocation,
-                platforms: (situationFilters?.platforms?.length ?? 0) > 0
-                  ? (situationFilters!.platforms as Platform[])
-                  : effectivePlatforms,
-                auto_detected: false,
-              },
-            });
-          }}
+          inputText={inputText}
+          onInputChange={setInputText}
+          onSubmit={submit}
+          onFeedback={handleFeedbackInMessage}
+          onNewSearch={() => { setStep("home"); setMessages([]); setInputText(""); setExcluded([]); }}
         />
       )}
     </main>
   );
 }
 
-/* ===================== HOME ===================== */
+/* ===================== HOME SCREEN ===================== */
 
-function LiveDemoCard() {
-  const examples = [
-    {
-      title: "El Silencio de los Datos",
-      platform: "DISNEY+",
-      duration: "1h 52m",
-      reason:
-        "Un martes a las 23h, con clima nublado, necesitás algo que te atrape sin sacarte el sueño.",
-      gradient: "from-indigo-700 via-purple-900 to-slate-900",
-    },
-    {
-      title: "Noches de Tokio",
-      platform: "NETFLIX",
-      duration: "8 ep · 45 min",
-      reason:
-        "Para una cena solo, neón y jazz: te dura toda la semana sin pedirte concentración.",
-      gradient: "from-cyan-700 via-indigo-900 to-black",
-    },
-    {
-      title: "La Última Carta",
-      platform: "MAX",
-      duration: "2h 08m",
-      reason:
-        "Domingo lluvioso con tu pareja, querés sentir algo. Sin spoilers: lloran los dos.",
-      gradient: "from-rose-800 via-indigo-950 to-slate-950",
-    },
-  ];
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % examples.length), 6000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const ex = examples[idx];
-
-  return (
-    <div className="relative w-full max-w-[440px]">
-      <div
-        className="pointer-events-none absolute -inset-10 rounded-full bg-primary/10 blur-[100px]"
-        aria-hidden="true"
-      />
-
-      <div className="group relative overflow-hidden rounded-[32px] border border-border bg-card shadow-card transition-transform duration-500 hover:scale-[1.01]">
-        <div className="relative h-[220px] overflow-hidden">
-          <div
-            key={idx}
-            className={cn(
-              "h-full w-full bg-gradient-to-br transition-transform duration-1000 group-hover:scale-105 animate-fade-in",
-              ex.gradient,
-            )}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-black/30" />
-          <div className="absolute left-4 top-4">
-            <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-black tracking-[0.2em] text-foreground backdrop-blur-md shadow-xl">
-              {ex.platform}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative -mt-10 p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="rounded-md border border-primary/30 bg-primary/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary">
-              Recomendado
-            </span>
-            <span className="text-xs font-medium text-muted-foreground">{ex.duration}</span>
-          </div>
-
-          <h2 className="mb-0.5 font-display text-xl font-bold leading-tight text-foreground">
-            {ex.title}
-          </h2>
-          <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-            ¿Por qué verla?
-          </p>
-
-          <div className="relative mb-5">
-            <div
-              className="absolute bottom-0 left-0 top-0 w-1 rounded-full bg-gradient-to-b from-primary to-transparent"
-              aria-hidden="true"
-            />
-            <p className="pl-5 text-sm italic leading-relaxed text-foreground/85">
-              "{ex.reason}"
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" disabled className="cursor-default rounded-xl bg-foreground py-3 text-center font-display text-xs font-bold tracking-wide text-background opacity-80">
-              Ver ahora
-            </button>
-            <button type="button" disabled className="cursor-default rounded-xl border border-border py-3 text-center font-display text-xs font-bold tracking-wide text-foreground opacity-80">
-              Afinar
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-function TrendingCard() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["trending-justwatch"],
-    queryFn: () => getTrending(),
-    staleTime: 30 * 60_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const titles: TrendingTitle[] = data?.titles ?? [];
-  const [idx, setIdx] = useState(0);
-
-  useEffect(() => {
-    if (titles.length <= 1) return;
-    const t = setInterval(() => setIdx((i) => (i + 1) % titles.length), 6000);
-    return () => clearInterval(t);
-  }, [titles.length]);
-
-  if (isLoading) {
-    return (
-      <div className="flex w-full max-w-[380px] flex-col gap-3">
-        <div className="h-4 w-40 animate-pulse rounded-full bg-muted/40" />
-        <div className="h-[340px] animate-pulse rounded-[28px] bg-muted/40" />
-      </div>
-    );
-  }
-
-  if (!titles.length) return null;
-
-  const item = titles[idx];
-  const visibleDots = titles.slice(0, 8);
-
-  return (
-    <div className="flex w-full max-w-[380px] flex-col gap-3">
-      {/* Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-            En tendencia · Argentina
-          </span>
-        </div>
-        <span className="text-[10px] text-muted-foreground/40">vía JustWatch</span>
-      </div>
-
-      {/* Card */}
-      <div className="group relative overflow-hidden rounded-[28px] border border-border bg-card shadow-card">
-        <div className="relative h-[200px] overflow-hidden">
-          {item.posterUrl ? (
-            <img
-              key={item.id}
-              src={item.posterUrl}
-              alt={item.title}
-              loading="lazy"
-              className="h-full w-full object-cover object-top transition-transform duration-700 group-hover:scale-105 animate-fade-in"
-            />
-          ) : (
-            <div className="h-full w-full bg-gradient-to-br from-indigo-700 via-purple-900 to-slate-900" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/20 to-transparent" />
-          <div className="absolute left-4 top-4">
-            <span className="rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-black tracking-[0.2em] text-white backdrop-blur-md">
-              {item.platform.toUpperCase()}
-            </span>
-          </div>
-          <div className="absolute right-4 top-4">
-            <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-bold text-white/70 backdrop-blur-md">
-              {idx + 1} / {titles.length}
-            </span>
-          </div>
-        </div>
-
-        <div className="-mt-6 p-5">
-          <span className="text-[11px] text-muted-foreground">
-            {item.type === "show" ? "Serie" : "Película"}
-            {item.year ? ` · ${item.year}` : ""}
-          </span>
-          <h3 className="mt-0.5 font-display text-xl font-bold leading-tight text-foreground">
-            {item.title}
-          </h3>
-        </div>
-      </div>
-
-      {/* Dots */}
-      <div className="flex justify-center gap-1.5">
-        {visibleDots.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => setIdx(i)}
-            aria-label={`Ver título ${i + 1}`}
-            className={cn(
-              "h-1.5 rounded-full transition-all duration-300",
-              i === idx ? "w-5 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground/40",
-            )}
-          />
-        ))}
-      </div>
-
-      {/* Disclaimer */}
-      <p className="text-center text-[11px] leading-relaxed text-muted-foreground/60">
-        Lo que está mirando todo el mundo ahora · no es para vos.
-        <br />
-        <span className="font-medium text-primary/80">
-          Buscá arriba ↑ para recomendaciones personalizadas.
-        </span>
-      </p>
-    </div>
-  );
-}
+const FLOATING_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+"];
 
 function HomeScreen({
-  freeText,
-  onFreeTextChange,
-  onSubmitText,
-  filters,
-  onFiltersChange,
-  onSurprise,
-  onSaveDefaultPlatforms,
+  onSubmit,
   defaultPlatforms,
-  error,
-  onRetry,
-  isGuest,
+  selectedPlatforms,
+  onSelectedPlatformsChange,
+  onSaveDefaultPlatforms,
   useLocation,
   weather,
   weatherLoading,
   onToggleLocation,
+  isGuest,
+  showLoginNudge,
+  onDismissLoginNudge,
 }: {
-  freeText: string;
-  onFreeTextChange: (v: string) => void;
-  onSubmitText: () => void;
-  filters: SituationFilters;
-  onFiltersChange: (f: SituationFilters) => void;
-  onSurprise: () => void;
-  onSaveDefaultPlatforms: (plats: Platform[]) => Promise<void>;
-  defaultPlatforms: string[];
-  error: string | null;
-  onRetry: () => void;
-  isGuest: boolean;
+  onSubmit: (text: string) => void;
+  defaultPlatforms: Platform[];
+  selectedPlatforms: Platform[];
+  onSelectedPlatformsChange: (p: Platform[]) => void;
+  onSaveDefaultPlatforms: (p: Platform[]) => Promise<void>;
   useLocation: boolean;
   weather: WeatherSnapshot | null;
   weatherLoading: boolean;
-  onToggleLocation: (enabled: boolean) => void;
+  onToggleLocation: (v: boolean) => void;
+  isGuest: boolean;
+  showLoginNudge: boolean;
+  onDismissLoginNudge: () => void;
 }) {
-  const [restrictPlatforms, setRestrictPlatforms] = useState<boolean>(
-    defaultPlatforms.length > 0,
-  );
+  const [text, setText] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (defaultPlatforms.length > 0 && filters.platforms.length === 0) {
-      onFiltersChange({ ...filters, platforms: defaultPlatforms as Platform[] });
-      setRestrictPlatforms(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultPlatforms.join(",")]);
+  const handleSubmit = () => {
+    if (text.trim().length >= 2) onSubmit(text.trim());
+  };
 
   const togglePlatform = (p: Platform) => {
-    const has = filters.platforms.includes(p);
-    onFiltersChange({
-      ...filters,
-      platforms: has
-        ? filters.platforms.filter((x) => x !== p)
-        : [...filters.platforms, p],
-    });
+    const has = selectedPlatforms.includes(p);
+    onSelectedPlatformsChange(has ? selectedPlatforms.filter((x) => x !== p) : [...selectedPlatforms, p]);
   };
 
   return (
-    <section className="animate-fade-in">
-      <div className="ambient-glow-top" aria-hidden="true" />
-      <div className="ambient-glow-bottom" aria-hidden="true" />
-
-      {/* HERO: pregunta + input izquierda, tarjeta-demo derecha */}
-      <div className="flex flex-col items-center py-4 lg:grid lg:grid-cols-12 lg:gap-12 lg:py-8">
-        <div className="flex w-full flex-col text-center lg:col-span-7 lg:text-left">
-          <h1 className="mb-3 text-balance font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-foreground md:text-5xl lg:text-7xl">
-            ¿Qué te resuelvo{" "}
-            <span className="text-primary">esta noche?</span>
-          </h1>
-          <p className="mb-5 max-w-lg text-sm leading-relaxed text-muted-foreground lg:text-base">
-            Contanos tu mood y te damos una recomendación editorial definitiva en menos de 2 segundos.
-          </p>
-
-          <div className="group relative mx-auto w-full max-w-2xl lg:mx-0">
-            <div className="absolute -inset-1 rounded-2xl bg-primary/20 opacity-0 blur-xl transition-all group-focus-within:opacity-100" aria-hidden="true" />
-            <div className="relative flex items-center">
-              <textarea
-                value={freeText}
-                onChange={(e) => onFreeTextChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (freeText.trim().length >= 3) onSubmitText();
-                  }
-                }}
-                rows={1}
-                placeholder="una serie cortita, no muy densa…"
-                className="h-14 w-full resize-none rounded-2xl border border-border bg-input pl-5 pr-36 pt-4 text-base font-medium text-foreground placeholder:text-muted-foreground/70 transition-smooth focus:outline-none focus:ring-1 focus:ring-primary/50"
-              />
-              <div className="absolute right-3 flex items-center gap-2">
-                <MicButton
-                  onTranscript={(t, isFinal) => {
-                    if (!t || !isFinal) return;
-                    onFreeTextChange(freeText ? `${freeText.trim()} ${t}` : t);
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={onSubmitText}
-                  disabled={freeText.trim().length < 3}
-                  className={cn(
-                    "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-5 text-sm font-bold tracking-wide transition-smooth active:scale-95",
-                    freeText.trim().length >= 3
-                      ? "bg-primary text-primary-foreground shadow-primary hover:opacity-95"
-                      : "cursor-not-allowed bg-muted text-muted-foreground/60",
-                  )}
-                >
-                  <span>Pedir</span>
-                  <ArrowUp className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex justify-center lg:justify-start">
-            <button
-              type="button"
-              onClick={onSurprise}
-              className="inline-flex items-center gap-3 rounded-full border border-border bg-card/60 px-6 py-3 text-sm font-bold text-foreground/85 transition-smooth hover:border-primary/40 hover:bg-card"
-              title="Recomendación basada en tu historial, el momento del día y el clima"
-            >
-              <Sparkles className="h-4 w-4 text-primary" />
-              Decidí vos por mí
-            </button>
-          </div>
-        </div>
-
-        <aside className="hidden w-full justify-center lg:col-span-5 lg:flex">
-          <TrendingCard />
-        </aside>
-      </div>
-
-      {/* Ajustes */}
-      <div className="mt-4 space-y-3 rounded-2xl border border-border bg-card/40 p-3">
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                ¿Dónde buscamos?
-              </span>
-              <div className="flex rounded-full border border-border bg-background p-0.5 text-[11px]">
-                <button
-                  onClick={() => setRestrictPlatforms(false)}
-                  className={cn(
-                    "rounded-full px-3 py-1 transition-smooth",
-                    !restrictPlatforms
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Todas
-                </button>
-                <button
-                  onClick={() => setRestrictPlatforms(true)}
-                  className={cn(
-                    "rounded-full px-3 py-1 transition-smooth",
-                    restrictPlatforms
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Mis plataformas
-                </button>
-              </div>
-            </div>
-
-            {!restrictPlatforms ? (
-              <p className="text-[11px] text-muted-foreground">
-                Buscamos en todas las plataformas (puede sugerirte algo donde no estés suscrito).
+    <section className="flex flex-col items-center px-6 pb-16 pt-16 sm:px-8 animate-fade-in">
+      {/* Login nudge */}
+      {showLoginNudge && (
+        <div className="mb-8 w-full max-w-xl rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Guardá tu perfil de gusto</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Creá tu cuenta para que tus plataformas y preferencias te sigan en cualquier dispositivo.
               </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap gap-1.5">
-                  {PLATFORM_OPTIONS.map((p) => {
-                    const active = filters.platforms.includes(p);
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => togglePlatform(p)}
-                        style={
-                          active
-                            ? {
-                                borderColor: colorForPlatform(p),
-                                background: `${colorForPlatform(p)}22`,
-                              }
-                            : undefined
-                        }
-                        className={cn(
-                          "inline-flex min-h-[32px] items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-smooth",
-                          active
-                            ? "text-foreground"
-                            : "border-border bg-card/50 text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ background: colorForPlatform(p) }}
-                        />
-                        {p === "Star+" ? "Star+ (Disney+)" : p}
-                      </button>
-                    );
-                  })}
-                </div>
-                {filters.platforms.length > 0 &&
-                  JSON.stringify([...filters.platforms].sort()) !==
-                    JSON.stringify([...defaultPlatforms].sort()) && (
-                    <button
-                      onClick={() => onSaveDefaultPlatforms(filters.platforms as Platform[])}
-                      className="mt-2 text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                    >
-                      Guardar como mis plataformas predeterminadas
-                    </button>
-                  )}
-              </>
-            )}
-          </div>
-
-          <div className="flex items-start justify-between gap-3 border-t border-border pt-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                <MapPin className="h-3 w-3 text-primary" />
-                Usar mi ubicación
+              <div className="mt-3 flex items-center gap-2">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  Crear cuenta gratis →
+                </Link>
+                <button onClick={onDismissLoginNudge} className="text-xs text-muted-foreground hover:text-foreground">
+                  Ahora no
+                </button>
               </div>
-              {useLocation && weatherLoading && (
-                <p className="mt-1 text-[11px] text-muted-foreground">Leyendo clima…</p>
-              )}
-              {useLocation && !weatherLoading && weather && (
-                <p className="mt-1 text-[11px] text-primary">
-                  Ahora: {weatherHintShort(weather)}
-                </p>
-              )}
-              {useLocation && !weatherLoading && !weather && (
-                <p className="mt-1 text-[11px] text-destructive">
-                  No pudimos leer el clima (¿permiso denegado?).
-                </p>
-              )}
-              {!useLocation && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Suma el clima actual al contexto. Tu ubicación no se guarda.
-                </p>
-              )}
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={useLocation}
-              onClick={() => onToggleLocation(!useLocation)}
-              className={cn(
-                "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-                useLocation ? "bg-primary" : "bg-border",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-block h-5 w-5 transform rounded-full bg-background transition-transform",
-                  useLocation ? "translate-x-5" : "translate-x-0.5",
-                )}
-              />
-            </button>
-          </div>
-        </div>
-
-      {error && (
-        <div className="mt-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 animate-fade-in">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/15">
-            <AlertTriangle className="h-4 w-4 text-destructive" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">Uy, no pudimos esta vez</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error}</p>
-            <button
-              onClick={onRetry}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-destructive/15 px-3 py-1.5 text-xs font-semibold text-destructive transition-smooth hover:bg-destructive/25 active:scale-95"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              Reintentar
+            <button onClick={onDismissLoginNudge} className="text-muted-foreground hover:text-foreground">
+              ✕
             </button>
           </div>
         </div>
       )}
-    </section>
-  );
-}
 
-/* ===================== QUICK CHIPS ===================== */
+      {/* Hero */}
+      <div className="w-full max-w-2xl text-center">
+        <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm">
+          <span className="text-primary">✦</span>
+          Descubrí tu próxima película con IA
+        </div>
 
-function QuickChips({
-  label,
-  options,
-  value,
-  onSelect,
-  labelMap,
-}: {
-  label: string;
-  options: readonly string[];
-  value: string | null;
-  onSelect: (v: string | null) => void;
-  labelMap?: Record<string, string>;
-}) {
-  return (
-    <div>
-      <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((o) => {
-          const active = value === o;
-          return (
-            <button
-              key={o}
-              onClick={() => onSelect(active ? null : o)}
-              className={cn(
-                "inline-flex min-h-[32px] items-center rounded-full border px-3 text-[12px] font-medium transition-smooth",
-                active
-                  ? "border-primary bg-primary/15 text-primary"
-                  : "border-border bg-card/50 text-muted-foreground hover:text-foreground",
-              )}
+        <h1 className="mb-4 font-serif text-5xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+          ¿Qué querés ver hoy?
+        </h1>
+        <p className="mb-10 text-base leading-relaxed text-muted-foreground sm:text-lg">
+          Describilo con tus palabras. Te encontramos lo perfecto en todas tus plataformas.
+        </p>
+
+        {/* Input card with floating platforms */}
+        <div className="relative">
+          {/* Floating platform chips — desktop */}
+          {FLOATING_PLATFORMS.slice(0, 2).map((p, i) => (
+            <div
+              key={p}
+              className="pointer-events-none absolute hidden select-none lg:flex"
+              style={{
+                left: i === 0 ? "-9rem" : "-6.5rem",
+                top: i === 0 ? "20%" : "58%",
+              }}
             >
-              {labelMap?.[o] ?? o}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-const TIME_LABELS: Record<string, string> = {
-  "30 min": "Hasta 30 min",
-  "1 hora": "Una hora",
-  "1.5 horas": "Una peli (90 min)",
-  "Noche entera": "Maratón / noche entera",
-};
-
-/* ===================== LOADING ===================== */
-
-function SkeletonCard({ main = false }: { main?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "overflow-hidden bg-card/40",
-        main ? "rounded-[2rem] border-2 border-primary/30" : "rounded-3xl border border-border",
-      )}
-    >
-      <div className={cn("w-full animate-pulse bg-muted/40", main ? "h-[160px]" : "h-[120px]")} />
-      <div className={cn("space-y-3", main ? "p-5" : "p-4")}>
-        <div className="h-3 w-24 animate-pulse rounded bg-muted/50" />
-        <div
-          className={cn(
-            "animate-pulse rounded bg-muted/50",
-            main ? "h-7 w-3/4" : "h-5 w-2/3",
-          )}
-        />
-        <div className="h-3 w-full animate-pulse rounded bg-muted/40" />
-        <div className="h-3 w-5/6 animate-pulse rounded bg-muted/40" />
-        <div
-          className={cn(
-            "mt-2 animate-pulse rounded-xl bg-muted/40",
-            main ? "h-12" : "h-9",
-          )}
-        />
-      </div>
-    </div>
-  );
-}
-
-function LoadingScreen() {
-  return (
-    <section className="animate-fade-in pt-4">
-      <div className="mb-6">
-        <div className="h-8 w-52 animate-pulse rounded-lg bg-muted/50 sm:h-9" />
-        <div className="mt-3 flex items-center gap-1.5 text-xs text-primary">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>Buscando algo perfecto para vos…</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
-        <div className="order-2 hidden md:order-1 md:block">
-          <SkeletonCard />
-        </div>
-        <div className="order-1 md:order-2 md:scale-[1.04]">
-          <SkeletonCard main />
-        </div>
-        <div className="order-3 hidden md:block">
-          <SkeletonCard />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ===================== RESULTS ===================== */
-
-function ResultsScreen({
-  results,
-  source,
-  freeText,
-  onBack,
-  onOpenSetup,
-  onSearchText,
-  onSearchFilters,
-  currentFilters,
-  weather,
-  isGuest,
-  excludedCount,
-  onSeen,
-  onFeedback,
-  onRerunExcludingSeen,
-  isGuestForFeedback,
-  posters,
-  postersLoading,
-  onSaveMoment,
-}: {
-  results: RecommendationsResult;
-  source: "text" | "filters" | "moment";
-  freeText: string;
-  onBack: () => void;
-  onOpenSetup: () => void;
-  onSearchText: (text: string) => void;
-  onSearchFilters: (filters: SituationFilters, text?: string) => void;
-  currentFilters: SituationFilters;
-  weather: WeatherSnapshot | null;
-  isGuest: boolean;
-  excludedCount: number;
-  onSeen: (title: string, platform: string) => void;
-  onFeedback: (title: string, platform: string, sentiment: "like" | "love" | "dislike") => void;
-  onRerunExcludingSeen: () => void;
-  isGuestForFeedback: boolean;
-  posters: Record<string, string | null>;
-  postersLoading: boolean;
-  onSaveMoment: (name: string, situationFilters?: SituationFilters) => Promise<void>;
-}) {
-  const [showChips, setShowChips] = useState(false);
-  const [momentoPopupRec, setMomentoPopupRec] = useState<Recommendation | null>(null);
-  const [refineFilters, setRefineFilters] = useState<SituationFilters>(currentFilters);
-  const [refineText, setRefineText] = useState<string>("");
-
-  const hasActiveRefineFilters = [
-    refineFilters.time,
-    refineFilters.company,
-    refineFilters.mood,
-    refineFilters.type,
-  ].some(Boolean);
-
-  const handleRefineSubmit = () => {
-    const text = refineText.trim();
-    if (text.length >= 3 && hasActiveRefineFilters) {
-      onSearchFilters(refineFilters, text);
-    } else if (text.length >= 3) {
-      onSearchText(text);
-    } else if (hasActiveRefineFilters) {
-      onSearchFilters(refineFilters);
-    }
-  };
-
-  useEffect(() => {
-    setShowChips(false);
-    setRefineFilters(currentFilters);
-    setRefineText("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [results]);
-
-  const [cardState, setCardState] = useState<Record<string, "seen" | "like" | "love" | "dislike">>({});
-  useEffect(() => {
-    setCardState({});
-  }, [results]);
-
-  const markSeen = (rec: Recommendation) => {
-    setCardState((s) => ({ ...s, [rec.title]: "seen" }));
-    onSeen(rec.title, rec.platform);
-  };
-  const markFeedback = (rec: Recommendation, sentiment: "like" | "love" | "dislike") => {
-    setCardState((s) => ({ ...s, [rec.title]: sentiment }));
-    onFeedback(rec.title, rec.platform, sentiment);
-  };
-
-  const allCards: Recommendation[] = [results.main, ...results.alternatives];
-  const visibleCards = allCards.filter((r) => cardState[r.title] !== "seen" && cardState[r.title] !== "dislike");
-  const visibleMain = visibleCards[0] ?? null;
-  const visibleAlts = visibleCards.slice(1);
-  const allDismissed = visibleCards.length === 0;
-
-  const chips = useMemo(() => {
-    return [
-      results.filters.time,
-      results.filters.company,
-      results.filters.mood,
-      results.filters.type,
-    ].filter(Boolean) as string[];
-  }, [results]);
-
-  const contextChip = useMemo(() => {
-    const ctx = inferContext();
-    const parts = [
-      `${ctx.dayOfWeek} ${ctx.hour.toString().padStart(2, "0")}h`,
-      ctx.season,
-    ];
-    if (weather) parts.push(weatherHintShort(weather));
-    return parts.join(" · ");
-  }, [weather]);
-
-  return (
-    <section className="animate-fade-in pt-4">
-      <header className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <h1 className="font-display text-xl font-bold leading-tight tracking-tight text-foreground">
-            Elegimos esto <span className="text-primary">para vos</span>
-          </h1>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <CloudSun className="h-3.5 w-3.5 text-primary" />
-              {contextChip}
-            </span>
-            {chips.map((c) => (
-              <span
-                key={c}
-                className="rounded-full border border-border bg-card/60 px-2 py-0.5 text-[11px] text-muted-foreground"
-              >
-                {c}
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3.5 py-2 text-sm font-semibold shadow-float">
+                <span className="h-2 w-2 rounded-full" style={{ background: colorForPlatform(p) }} />
+                {p}
               </span>
-            ))}
-            {source === "text" && freeText && (
-              <span className="text-[11px] text-muted-foreground/80">"{freeText}"</span>
-            )}
-            {excludedCount > 0 && (
-              <span className="text-[11px] text-muted-foreground">
-                · sin {excludedCount} ya {excludedCount === 1 ? "vista" : "vistas"}
+            </div>
+          ))}
+          {FLOATING_PLATFORMS.slice(2).map((p, i) => (
+            <div
+              key={p}
+              className="pointer-events-none absolute hidden select-none lg:flex"
+              style={{
+                right: i === 0 ? "-8.5rem" : i === 1 ? "-7rem" : "-9.5rem",
+                top: i === 0 ? "15%" : i === 1 ? "50%" : "78%",
+              }}
+            >
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-white px-3.5 py-2 text-sm font-semibold shadow-float">
+                <span className="h-2 w-2 rounded-full" style={{ background: colorForPlatform(p) }} />
+                {p === "Prime Video" ? "Prime" : p}
               </span>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={onOpenSetup}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card/60 text-muted-foreground transition-smooth hover:border-primary hover:text-primary"
-          title="Configurar plataformas y ubicación"
-          aria-label="Configuración"
-        >
-          <Settings2 className="h-4 w-4" />
-        </button>
-      </header>
+            </div>
+          ))}
 
-      {results.clarification_needed && (
-        <div className="mb-4 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 text-sm text-foreground">
-          {results.clarification_needed}
-        </div>
-      )}
-
-      {/* Refinement — chat input, above cards */}
-      <div className="group relative mb-5">
-        <div className="absolute -inset-0.5 rounded-2xl bg-primary/20 opacity-0 blur-lg transition-all group-focus-within:opacity-100" aria-hidden="true" />
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-card/60 transition-smooth focus-within:border-primary/60">
-          <div className="relative flex items-center">
+          {/* Main input card */}
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-white shadow-float">
             <textarea
-              value={refineText}
-              onChange={(e) => setRefineText(e.target.value)}
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleRefineSubmit();
+                  handleSubmit();
                 }
               }}
-              rows={1}
-              placeholder="Seguí buscando… algo más oscuro, solo Netflix, sin violencia..."
-              className="h-14 w-full resize-none bg-transparent pl-5 pr-52 pt-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+              rows={2}
+              placeholder="una película de acción para ver esta noche..."
+              className="w-full resize-none bg-transparent px-5 pb-2 pt-5 text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-              <MicButton
-                onTranscript={(t, isFinal) => {
-                  if (!t || !isFinal) return;
-                  setRefineText((prev) => (prev ? `${prev.trim()} ${t}` : t));
-                }}
-              />
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
+              <div className="flex items-center gap-2">
+                <MicButton
+                  onTranscript={(t, isFinal) => {
+                    if (!t || !isFinal) return;
+                    setText((prev) => (prev ? `${prev.trim()} ${t}` : t));
+                    textareaRef.current?.focus();
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                />
+                <span className="text-xs text-muted-foreground/60">
+                  Funciona con Netflix, Prime, Disney+ y más
+                </span>
+              </div>
               <button
-                onClick={handleRefineSubmit}
-                disabled={refineText.trim().length < 3 && !hasActiveRefineFilters}
+                type="button"
+                onClick={handleSubmit}
+                disabled={text.trim().length < 2}
                 className={cn(
-                  "inline-flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-smooth",
-                  refineText.trim().length >= 3 || hasActiveRefineFilters
-                    ? "bg-gradient-primary text-primary-foreground shadow-primary hover:opacity-90 active:scale-95"
-                    : "cursor-not-allowed bg-muted text-muted-foreground/60",
+                  "inline-flex h-9 w-9 items-center justify-center rounded-full transition-smooth",
+                  text.trim().length >= 2
+                    ? "bg-foreground text-background hover:bg-foreground/85"
+                    : "bg-muted text-muted-foreground/40 cursor-not-allowed",
                 )}
+                aria-label="Buscar"
               >
-                <Sparkles className="h-3.5 w-3.5" />
-                Refinar
+                <ArrowUp className="h-4 w-4" />
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-2 border-t border-border/40 px-3 py-1.5">
-            <button
-              onClick={() => setShowChips((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-smooth",
-                showChips ? "text-primary" : "text-muted-foreground hover:text-foreground",
+        </div>
+
+        <p className="mt-4 text-xs text-muted-foreground">
+          Gratis{isGuest ? " — sin cuenta necesaria" : ""}
+        </p>
+      </div>
+
+      {/* Settings: platforms + location */}
+      <div className="mt-10 w-full max-w-xl space-y-4">
+        {/* Platform selector */}
+        <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              ¿Dónde buscamos?
+            </span>
+            {selectedPlatforms.length > 0 &&
+              JSON.stringify([...selectedPlatforms].sort()) !==
+                JSON.stringify([...defaultPlatforms].sort()) && (
+                <button
+                  onClick={() => onSaveDefaultPlatforms(selectedPlatforms)}
+                  className="text-[11px] text-primary hover:underline"
+                >
+                  Guardar como predeterminadas
+                </button>
               )}
-            >
-              <Sliders className="h-3 w-3" />
-              Filtros
-            </button>
-            <div className="ml-auto flex items-center gap-1.5">
-              <button
-                onClick={onBack}
-                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-smooth hover:text-foreground"
-              >
-                <RefreshCw className="h-3 w-3" />
-                Nueva búsqueda
-              </button>
-            </div>
           </div>
-          {showChips && (
-            <div className="space-y-2.5 border-t border-border/40 px-3 pb-3 pt-2.5 animate-fade-in">
-              <QuickChips label="Tiempo" options={TIME_OPTIONS} value={refineFilters.time} labelMap={TIME_LABELS}
-                onSelect={(v) => setRefineFilters({ ...refineFilters, time: v as SituationFilters["time"] })} />
-              <QuickChips label="Compañía" options={COMPANY_OPTIONS} value={refineFilters.company}
-                onSelect={(v) => setRefineFilters({ ...refineFilters, company: v as SituationFilters["company"] })} />
-              <QuickChips label="Mood" options={MOOD_OPTIONS} value={refineFilters.mood}
-                onSelect={(v) => setRefineFilters({ ...refineFilters, mood: v as SituationFilters["mood"] })} />
-              <QuickChips label="Tipo" options={TYPE_OPTIONS} value={refineFilters.type}
-                onSelect={(v) => setRefineFilters({ ...refineFilters, type: v as SituationFilters["type"] })} />
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {(PLATFORM_OPTIONS as Platform[]).map((p) => {
+              const active = selectedPlatforms.includes(p);
+              return (
+                <button
+                  key={p}
+                  onClick={() => togglePlatform(p)}
+                  style={active ? { borderColor: colorForPlatform(p), background: `${colorForPlatform(p)}18` } : undefined}
+                  className={cn(
+                    "inline-flex min-h-[32px] items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-smooth",
+                    active ? "text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
+                  {p === "Star+" ? "Star+ (Disney+)" : p}
+                </button>
+              );
+            })}
+          </div>
+          {selectedPlatforms.length === 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Buscamos en todas las plataformas.
+            </p>
           )}
+        </div>
+
+        {/* Location toggle */}
+        <div className="flex items-center justify-between rounded-2xl border border-border bg-white px-4 py-3 shadow-sm">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <MapPin className="h-3 w-3 text-primary" />
+              Usar mi ubicación
+            </div>
+            {useLocation && weatherLoading && (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Leyendo clima…</p>
+            )}
+            {useLocation && !weatherLoading && weather && (
+              <p className="mt-0.5 text-[11px] text-primary">{weatherHintShort(weather)}</p>
+            )}
+            {useLocation && !weatherLoading && !weather && (
+              <p className="mt-0.5 text-[11px] text-destructive">No pudimos leer el clima.</p>
+            )}
+            {!useLocation && (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Suma el clima actual al contexto.
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={useLocation}
+            onClick={() => onToggleLocation(!useLocation)}
+            className={cn(
+              "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+              useLocation ? "bg-primary" : "bg-border",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform",
+                useLocation ? "translate-x-5" : "translate-x-0.5",
+              )}
+            />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ===================== CHAT SCREEN ===================== */
+
+function ChatScreen({
+  messages,
+  isLoading,
+  isGuest,
+  inputText,
+  onInputChange,
+  onSubmit,
+  onFeedback,
+  onNewSearch,
+}: {
+  messages: ChatMessage[];
+  isLoading: boolean;
+  isGuest: boolean;
+  inputText: string;
+  onInputChange: (v: string) => void;
+  onSubmit: (text: string) => void;
+  onFeedback: (msgId: string, title: string, platform: string, sentiment: "love" | "like" | "dislike" | "seen") => void;
+  onNewSearch: () => void;
+}) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  const handleSubmit = () => {
+    if (inputText.trim().length >= 2) onSubmit(inputText.trim());
+  };
+
+  return (
+    <section className="mx-auto flex max-w-2xl flex-col px-4 pb-6 pt-6 sm:px-6 animate-fade-in">
+      {/* Chat window */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-card">
+        {/* Window header */}
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-red-400" />
+            <span className="h-3 w-3 rounded-full bg-yellow-400" />
+            <span className="h-3 w-3 rounded-full bg-green-400" />
+            <span className="ml-2 text-xs font-semibold text-muted-foreground">CineAI</span>
+          </div>
+          <button
+            onClick={onNewSearch}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-smooth hover:bg-muted hover:text-foreground"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Nueva búsqueda
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="max-h-[65vh] overflow-y-auto px-5 py-5">
+          <div className="space-y-5">
+            {messages.map((msg) =>
+              msg.role === "user" ? (
+                <UserBubble key={msg.id} text={msg.text} />
+              ) : (
+                <AssistantBubble
+                  key={msg.id}
+                  msg={msg}
+                  isGuest={isGuest}
+                  onFeedback={(title, platform, sentiment) =>
+                    onFeedback(msg.id, title, platform, sentiment)
+                  }
+                />
+              ),
+            )}
+
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground animate-fade-in">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span>Buscando algo perfecto…</span>
+              </div>
+            )}
+          </div>
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {visibleMain && (
-        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-3 md:items-center md:gap-6">
-          <div className="order-2 md:order-1">
-            {visibleAlts[0] && (
-              <AltCard
-                key={visibleAlts[0].title}
-                rec={visibleAlts[0]}
-                posterUrl={posters[visibleAlts[0].title] ?? null}
-                posterLoading={postersLoading && !(visibleAlts[0].title in posters)}
-                feedback={cardState[visibleAlts[0].title] ?? null}
-                onSeen={() => markSeen(visibleAlts[0])}
-                onLike={() => markFeedback(visibleAlts[0], "like")}
-                onLove={() => markFeedback(visibleAlts[0], "love")}
-                onDislike={() => markFeedback(visibleAlts[0], "dislike")}
-                allowFeedback={!isGuestForFeedback}
-                onWantToWatch={() => setMomentoPopupRec(visibleAlts[0])}
-              />
+      {/* Input bar */}
+      <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-white shadow-card">
+        <div className="relative flex items-end">
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={(e) => onInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+            rows={1}
+            placeholder="Seguí pidiendo… algo más oscuro, solo Netflix…"
+            className="w-full resize-none bg-transparent px-5 pb-3 pt-4 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+            style={{ maxHeight: "120px" }}
+          />
+        </div>
+        <div className="flex items-center justify-between border-t border-border px-4 py-2">
+          <MicButton
+            onTranscript={(t, isFinal) => {
+              if (!t || !isFinal) return;
+              onInputChange(inputText ? `${inputText.trim()} ${t}` : t);
+              inputRef.current?.focus();
+            }}
+            className="text-muted-foreground hover:text-foreground"
+          />
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={inputText.trim().length < 2 || isLoading}
+            className={cn(
+              "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
+              inputText.trim().length >= 2 && !isLoading
+                ? "bg-foreground text-background hover:bg-foreground/85"
+                : "bg-muted text-muted-foreground/40 cursor-not-allowed",
             )}
-          </div>
-
-          <div className="order-1 md:order-2 md:scale-[1.04] md:z-10">
-            <MainCard
-              rec={visibleMain}
-              posterUrl={posters[visibleMain.title] ?? null}
-              posterLoading={postersLoading && !(visibleMain.title in posters)}
-              feedback={cardState[visibleMain.title] ?? null}
-              onSeen={() => markSeen(visibleMain)}
-              onLike={() => markFeedback(visibleMain, "like")}
-              onLove={() => markFeedback(visibleMain, "love")}
-              onDislike={() => markFeedback(visibleMain, "dislike")}
-              allowFeedback={!isGuestForFeedback}
-              onWantToWatch={() => setMomentoPopupRec(visibleMain)}
-            />
-            <p className="mt-2 text-center text-[11px] text-muted-foreground/50">
-              Verificá disponibilidad en tu plataforma — el catálogo puede variar.
-            </p>
-          </div>
-
-          <div className="order-3 md:order-3">
-            {visibleAlts[1] && (
-              <AltCard
-                key={visibleAlts[1].title}
-                rec={visibleAlts[1]}
-                posterUrl={posters[visibleAlts[1].title] ?? null}
-                posterLoading={postersLoading && !(visibleAlts[1].title in posters)}
-                feedback={cardState[visibleAlts[1].title] ?? null}
-                onSeen={() => markSeen(visibleAlts[1])}
-                onLike={() => markFeedback(visibleAlts[1], "like")}
-                onLove={() => markFeedback(visibleAlts[1], "love")}
-                onDislike={() => markFeedback(visibleAlts[1], "dislike")}
-                allowFeedback={!isGuestForFeedback}
-                onWantToWatch={() => setMomentoPopupRec(visibleAlts[1])}
-              />
-            )}
-          </div>
+            aria-label="Enviar"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
         </div>
-      )}
+      </div>
 
-      {visibleAlts.length > 2 && (
-        <div className="mt-8">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            O si no…
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {visibleAlts.slice(2).map((r) => (
-              <AltCard
-                key={r.title}
-                rec={r}
-                posterUrl={posters[r.title] ?? null}
-                posterLoading={postersLoading && !(r.title in posters)}
-                feedback={cardState[r.title] ?? null}
-                onSeen={() => markSeen(r)}
-                onLike={() => markFeedback(r, "like")}
-                onLove={() => markFeedback(r, "love")}
-                onDislike={() => markFeedback(r, "dislike")}
-                allowFeedback={!isGuestForFeedback}
-                onWantToWatch={() => setMomentoPopupRec(r)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {allDismissed && (
-        <div className="flex flex-col items-center gap-4 py-16 text-center animate-fade-in">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted/30">
-            <Film className="h-8 w-8 text-muted-foreground/40" />
-          </div>
-          <div>
-            <p className="font-display text-xl font-bold text-foreground">Nada quedó en pie</p>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-              Descartaste todo — buscamos algo distinto.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {(Object.keys(cardState).length > 0 || allDismissed) && (
-        <button
-          onClick={onRerunExcludingSeen}
-          className="mt-2 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-primary/50 bg-primary/10 px-5 text-sm font-semibold text-primary transition-smooth hover:bg-primary/20"
-        >
-          <RefreshCw className="h-4 w-4" />
-          {allDismissed ? "Buscar otras opciones" : "Buscar más, excluyendo lo marcado"}
-        </button>
-      )}
-
-
-      {momentoPopupRec && (
-        <MomentoPopup
-          rec={momentoPopupRec}
-          weather={weather}
-          isGuest={isGuest}
-          situationFilters={hasActiveRefineFilters ? refineFilters : undefined}
-          onSave={async (name) => {
-            await onSaveMoment(name, hasActiveRefineFilters ? refineFilters : undefined);
-            window.open(deepLinkFor(momentoPopupRec.platform, momentoPopupRec.title), "_blank");
-            setMomentoPopupRec(null);
-          }}
-          onSkip={() => {
-            window.open(deepLinkFor(momentoPopupRec.platform, momentoPopupRec.title), "_blank");
-            setMomentoPopupRec(null);
-          }}
-          onClose={() => setMomentoPopupRec(null)}
-        />
+      {isGuest && (
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          ¿Querés guardar tu historial?{" "}
+          <Link to="/login" className="font-semibold text-primary hover:underline">
+            Crear cuenta gratis →
+          </Link>
+        </p>
       )}
     </section>
   );
 }
 
-const MOMENTO_SEEN_KEY = "queveo:momento_seen";
-const hasMomentoExperience = () =>
-  typeof window !== "undefined" && !!localStorage.getItem(MOMENTO_SEEN_KEY);
-const markMomentoSeen = () => {
-  if (typeof window !== "undefined") localStorage.setItem(MOMENTO_SEEN_KEY, "1");
-};
+/* ===================== CHAT BUBBLES ===================== */
 
-function suggestMomentoName(ctx: ReturnType<typeof inferContext>): string {
-  const h = ctx.hour;
-  const time =
-    h >= 6 && h < 12 ? "mañana"
-    : h >= 12 && h < 18 ? "tarde"
-    : h >= 18 && h < 22 ? "noche"
-    : "madrugada";
-  return `${ctx.dayOfWeek} a la ${time}`;
-}
-
-function MomentoPopup({
-  rec,
-  weather,
-  isGuest,
-  situationFilters,
-  onSave,
-  onSkip,
-  onClose,
-}: {
-  rec: Recommendation;
-  weather: WeatherSnapshot | null;
-  isGuest: boolean;
-  situationFilters?: SituationFilters;
-  onSave: (name: string) => Promise<void>;
-  onSkip: () => void;
-  onClose: () => void;
-}) {
-  const ctx = useMemo(() => inferContext(), []);
-  const [name, setName] = useState(() => suggestMomentoName(ctx));
-  const [saving, setSaving] = useState(false);
-  const isFirst = !hasMomentoExperience();
-
-  const contextLabel = [
-    `${ctx.dayOfWeek} ${String(ctx.hour).padStart(2, "0")}h`,
-    seasonHintShort(ctx),
-    weather ? weatherHintShort(weather) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
-  const situationChips = situationFilters
-    ? [
-        situationFilters.time,
-        situationFilters.company,
-        situationFilters.mood,
-        situationFilters.type,
-      ].filter(Boolean) as string[]
-    : [];
-
+function UserBubble({ text }: { text: string }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-6 pt-20 sm:items-center sm:pb-0"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-card animate-fade-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 text-muted-foreground hover:text-foreground"
-          aria-label="Cerrar"
-        >
-          <X className="h-4 w-4" />
-        </button>
-
-        <div className="mb-1 flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-[11px] font-bold uppercase tracking-widest text-primary">
-            Momento encontrado
-          </span>
-        </div>
-
-        {isFirst ? (
-          <>
-            <h3 className="font-display text-xl font-bold text-foreground">
-              Guardá este Momento
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Cada vez que encontrás algo que querés ver, el sistema captura el contexto: el día,
-              la hora, la temporada y el clima. Guardalo como <strong className="text-foreground">Momento</strong> para que la próxima vez que estés en la misma situación, te traigamos contenido igual de relevante con un solo toque.
-            </p>
-          </>
-        ) : (
-          <h3 className="font-display text-xl font-bold text-foreground">
-            ¿Guardás este Momento?
-          </h3>
-        )}
-
-        <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <CloudSun className="h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="text-xs text-foreground/90">{contextLabel}</span>
-          </div>
-          {situationChips.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {situationChips.map((c) => (
-                <span
-                  key={c}
-                  className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] text-primary"
-                >
-                  {c}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {isGuest ? (
-          <>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-              Para guardar Momentos necesitás una cuenta.{" "}
-              <Link to="/login" className="font-semibold text-primary hover:underline">
-                Crear cuenta gratis →
-              </Link>
-            </p>
-            <div className="mt-4 flex flex-col gap-2">
-              <Link
-                to="/login"
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-primary transition-smooth hover:brightness-110"
-              >
-                Crear cuenta y guardar
-              </Link>
-              <button
-                type="button"
-                onClick={onSkip}
-                className="min-h-[44px] w-full rounded-2xl border border-border text-sm font-medium text-muted-foreground transition-smooth hover:text-foreground"
-              >
-                Solo ir a verla
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nombre del Momento"
-              className="mt-3 min-h-[44px] w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
-            />
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!name.trim()) return;
-                  setSaving(true);
-                  markMomentoSeen();
-                  try {
-                    await onSave(name.trim());
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-                disabled={saving || !name.trim()}
-                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-primary transition-smooth hover:brightness-110 disabled:opacity-50"
-              >
-                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Guardar y ver
-              </button>
-              <button
-                type="button"
-                onClick={onSkip}
-                className="min-h-[44px] w-full rounded-2xl border border-border text-sm font-medium text-muted-foreground transition-smooth hover:text-foreground"
-              >
-                Solo ver, sin guardar
-              </button>
-            </div>
-          </>
-        )}
+    <div className="flex justify-end">
+      <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-foreground px-4 py-3">
+        <p className="text-sm leading-relaxed text-background">{text}</p>
       </div>
     </div>
   );
 }
 
-function PlatformBadge({ platform }: { platform: string }) {
-  const color = colorForPlatform(platform);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-white"
-      style={{ background: color }}
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
-      {platform}
-    </span>
-  );
-}
-
-type CardFeedback = "seen" | "like" | "love" | "dislike" | null;
-
-function MainCard({
-  rec,
-  posterUrl,
-  posterLoading = false,
-  feedback,
-  onSeen,
-  onLike,
-  onLove,
-  onDislike,
-  allowFeedback,
-  onWantToWatch,
+function AssistantBubble({
+  msg,
+  isGuest,
+  onFeedback,
 }: {
-  rec: Recommendation;
-  posterUrl: string | null;
-  posterLoading?: boolean;
-  feedback: CardFeedback;
-  onSeen: () => void;
-  onLike: () => void;
-  onLove: () => void;
-  onDislike: () => void;
-  allowFeedback: boolean;
-  onWantToWatch: () => void;
+  msg: ChatMessage;
+  isGuest: boolean;
+  onFeedback: (title: string, platform: string, sentiment: "love" | "like" | "dislike" | "seen") => void;
 }) {
+  const { data } = msg;
+  if (!data) return null;
+
+  const { main, alternatives } = data;
+  const mainFeedback = msg.feedbackGiven?.[main.title] ?? null;
+  const deepLink = deepLinkFor(main.platform, main.title);
+
   return (
-    <article className="relative overflow-hidden rounded-[2rem] border-2 border-primary/50 bg-card shadow-glow">
-      <div className="absolute left-4 top-4 z-20">
-        <span className="rounded-lg bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary-foreground shadow-lg">
-          Recomendado
-        </span>
-      </div>
-
-      <div className="relative h-[160px] w-full overflow-hidden bg-muted/40">
-        {posterLoading && !posterUrl ? (
-          <div className="h-full w-full animate-pulse bg-muted/40" />
-        ) : posterUrl ? (
-          <img
-            src={posterUrl}
-            alt={`Portada de ${rec.title}`}
-            loading="lazy"
-            className="h-full w-full object-cover object-top"
-          />
-        ) : (
-          <div
-            className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center"
-            style={{
-              background: `linear-gradient(135deg, ${colorForPlatform(rec.platform)}33, ${colorForPlatform(rec.platform)}11)`,
-            }}
-          >
-            <Film className="h-8 w-8 text-foreground/40" />
-          </div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-card via-card/85 to-transparent" />
-      </div>
-
-      <div className="relative px-5 pb-5 pt-3">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
-            {rec.platform} · {rec.type}
-          </span>
-          <span className="text-[11px] text-muted-foreground">· {rec.duration}</span>
-        </div>
-        <h2 className="font-display text-2xl font-bold leading-tight tracking-tight text-foreground">
-          {rec.title}
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-foreground/80 line-clamp-3">{rec.reason}</p>
-
-        <button
-          type="button"
-          onClick={onWantToWatch}
-          className="mt-4 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary px-6 text-sm font-bold text-primary-foreground shadow-primary transition-smooth hover:brightness-110 active:scale-[0.98]"
-        >
-          <Play className="h-4 w-4 fill-current" />
-          Quiero verla
-        </button>
-
-        <div className="mt-4 border-t border-border/50 pt-3">
-          <IconFeedbackRow
-            feedback={feedback}
-            onSeen={onSeen}
-            onLike={onLike}
-            onLove={onLove}
-            onDislike={onDislike}
-            allowFeedback={allowFeedback}
-          />
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function AltCard({
-  rec,
-  posterUrl,
-  posterLoading = false,
-  feedback,
-  onSeen,
-  onLike,
-  onLove,
-  onDislike,
-  allowFeedback,
-  onWantToWatch,
-}: {
-  rec: Recommendation;
-  posterUrl: string | null;
-  posterLoading?: boolean;
-  feedback: CardFeedback;
-  onSeen: () => void;
-  onLike: () => void;
-  onLove: () => void;
-  onDislike: () => void;
-  allowFeedback: boolean;
-  onWantToWatch: () => void;
-}) {
-  return (
-    <article className="group overflow-hidden rounded-3xl border border-border bg-card/40 transition-smooth hover:bg-card/70">
-      <div className="relative h-[120px] w-full overflow-hidden bg-muted/40">
-        {posterLoading && !posterUrl ? (
-          <div className="h-full w-full animate-pulse bg-muted/40" />
-        ) : posterUrl ? (
-          <img
-            src={posterUrl}
-            alt={`Portada de ${rec.title}`}
-            loading="lazy"
-            className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-[1.03]"
-          />
-        ) : (
-          <div
-            className="flex h-full w-full items-center justify-center"
-            style={{
-              background: `linear-gradient(135deg, ${colorForPlatform(rec.platform)}33, ${colorForPlatform(rec.platform)}11)`,
-            }}
-          >
-            <Film className="h-8 w-8 text-foreground/40" />
-          </div>
-        )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-card/80 to-transparent" />
-      </div>
-
-      <div className="p-4">
-        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-          {rec.platform} · {rec.duration}
-        </div>
-        <h3 className="font-display text-base font-bold leading-tight tracking-tight text-foreground">
-          {rec.title}
-        </h3>
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-foreground/65">
-          {rec.reason}
+    <div className="flex flex-col gap-3">
+      {/* Main recommendation */}
+      <div className="max-w-[88%] rounded-2xl rounded-tl-md border border-border bg-white px-4 py-4 shadow-sm">
+        <p className="text-sm leading-relaxed text-foreground">
+          Te recomiendo{" "}
+          <strong className="font-bold">{main.title}</strong>{" "}
+          <span className="text-muted-foreground">({main.duration})</span>
+          {" — "}
+          {main.reason}
+          {" "}
+          Disponible en{" "}
+          <strong className="font-bold" style={{ color: colorForPlatform(main.platform) }}>
+            {main.platform}
+          </strong>
+          .
         </p>
 
-        <button
-          type="button"
-          onClick={onWantToWatch}
-          className="mt-3 inline-flex min-h-[36px] w-full items-center justify-center gap-2 rounded-xl border border-border bg-background/60 px-4 text-xs font-bold uppercase tracking-wider text-foreground transition-smooth hover:border-primary hover:text-primary"
-        >
-          <Play className="h-3 w-3 fill-current" />
-          Quiero verla
-        </button>
-
-        <div className="mt-3 border-t border-border/40 pt-2.5">
-          <IconFeedbackRow
-            feedback={feedback}
-            onSeen={onSeen}
-            onLike={onLike}
-            onLove={onLove}
-            onDislike={onDislike}
-            allowFeedback={allowFeedback}
-            compact
-          />
+        <div className="mt-3 flex items-center gap-2">
+          <a
+            href={deepLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground transition-smooth hover:border-foreground"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Ver en {main.platform}
+          </a>
         </div>
+
+        {!isGuest && (
+          <div className="mt-3 border-t border-border pt-3">
+            <FeedbackRow
+              feedback={mainFeedback}
+              onLove={() => onFeedback(main.title, main.platform, "love")}
+              onLike={() => onFeedback(main.title, main.platform, "like")}
+              onDislike={() => onFeedback(main.title, main.platform, "dislike")}
+              onSeen={() => onFeedback(main.title, main.platform, "seen")}
+            />
+          </div>
+        )}
       </div>
-    </article>
+
+      {/* Alternatives */}
+      {alternatives.length > 0 && (
+        <div className="max-w-[85%] space-y-2">
+          {alternatives.map((alt) => {
+            const altFeedback = msg.feedbackGiven?.[alt.title] ?? null;
+            return (
+              <div
+                key={alt.title}
+                className="rounded-xl border border-border bg-muted/40 px-4 py-3"
+              >
+                <p className="text-xs leading-relaxed text-foreground">
+                  O también:{" "}
+                  <strong className="font-semibold">{alt.title}</strong>
+                  {" "}en{" "}
+                  <span className="font-medium" style={{ color: colorForPlatform(alt.platform) }}>
+                    {alt.platform}
+                  </span>
+                  {" — "}
+                  <span className="text-muted-foreground">{alt.reason}</span>
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <a
+                    href={deepLinkFor(alt.platform, alt.title)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    <ExternalLink className="h-2.5 w-2.5" />
+                    {alt.platform}
+                  </a>
+                  {!isGuest && (
+                    <CompactFeedback
+                      feedback={altFeedback}
+                      onLike={() => onFeedback(alt.title, alt.platform, "like")}
+                      onDislike={() => onFeedback(alt.title, alt.platform, "dislike")}
+                      onSeen={() => onFeedback(alt.title, alt.platform, "seen")}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
-function IconFeedbackRow({
+/* ===================== FEEDBACK ===================== */
+
+function FeedbackRow({
   feedback,
-  onSeen,
-  onLike,
   onLove,
+  onLike,
   onDislike,
-  allowFeedback,
-  compact = false,
+  onSeen,
 }: {
-  feedback: CardFeedback;
-  onSeen: () => void;
-  onLike: () => void;
+  feedback: "love" | "like" | "dislike" | "seen" | null;
   onLove: () => void;
+  onLike: () => void;
   onDislike: () => void;
-  allowFeedback: boolean;
-  compact?: boolean;
+  onSeen: () => void;
 }) {
-  if (feedback === "like" || feedback === "love") {
+  if (feedback === "love") {
     return (
-      <div className="flex items-center justify-center gap-2 text-xs font-semibold text-primary">
-        <Heart className={cn("h-4 w-4", feedback === "love" && "fill-current")} />
-        {feedback === "love" ? "Te encanta — lo recordamos" : "Te gusta — lo recordamos"}
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        <Heart className="h-3.5 w-3.5 fill-current" />
+        ¡Te encanta! Lo recordamos.
+      </div>
+    );
+  }
+  if (feedback === "like") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+        <ThumbsUp className="h-3.5 w-3.5" />
+        Te gusta. Lo recordamos.
+      </div>
+    );
+  }
+  if (feedback === "dislike" || feedback === "seen") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <AlertTriangle className="h-3.5 w-3.5" />
+        {feedback === "seen" ? "Marcado como ya vista." : "Descartado."}
       </div>
     );
   }
 
-  const btnSize = compact ? "p-2" : "p-2.5";
-  const iconSize = compact ? "h-4 w-4" : "h-5 w-5";
-  const labelSize = compact ? "text-[10px]" : "text-[11px]";
-
   return (
-    <div className="flex items-start justify-around gap-2">
-      {allowFeedback && (
-        <>
-          <button
-            onClick={onLove}
-            title="Me encanta"
-            className="group/btn flex flex-col items-center gap-1"
-          >
-            <div className={cn("rounded-full bg-muted/50 transition-colors group-hover/btn:bg-primary/15", btnSize)}>
-              <Heart className={cn(iconSize, "text-muted-foreground transition-colors group-hover/btn:text-primary")} />
-            </div>
-            <span className={cn("font-bold uppercase tracking-wider text-muted-foreground transition-colors group-hover/btn:text-primary", labelSize)}>
-              Amo
-            </span>
-          </button>
-          <button
-            onClick={onLike}
-            title="Me gusta"
-            className="group/btn flex flex-col items-center gap-1"
-          >
-            <div className={cn("rounded-full bg-muted/50 transition-colors group-hover/btn:bg-primary/15", btnSize)}>
-              <ThumbsUp className={cn(iconSize, "text-muted-foreground transition-colors group-hover/btn:text-primary")} />
-            </div>
-            <span className={cn("font-bold uppercase tracking-wider text-muted-foreground transition-colors group-hover/btn:text-primary", labelSize)}>
-              Va
-            </span>
-          </button>
-          <button
-            onClick={onDislike}
-            title="No me gusta"
-            className="group/btn flex flex-col items-center gap-1"
-          >
-            <div className={cn("rounded-full bg-muted/50 transition-colors group-hover/btn:bg-destructive/15", btnSize)}>
-              <ThumbsDown className={cn(iconSize, "text-muted-foreground transition-colors group-hover/btn:text-destructive")} />
-            </div>
-            <span className={cn("font-bold uppercase tracking-wider text-muted-foreground transition-colors group-hover/btn:text-destructive", labelSize)}>
-              No
-            </span>
-          </button>
-        </>
-      )}
+    <div className="flex items-center gap-3">
+      <button
+        onClick={onLove}
+        className="group flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary"
+      >
+        <Heart className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+        <span>Amo</span>
+      </button>
+      <button
+        onClick={onLike}
+        className="group flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-primary"
+      >
+        <ThumbsUp className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+        <span>Va</span>
+      </button>
+      <button
+        onClick={onDislike}
+        className="group flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-destructive"
+      >
+        <ThumbsDown className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+        <span>No</span>
+      </button>
       <button
         onClick={onSeen}
-        title="Ya la vi"
-        className="group/btn flex flex-col items-center gap-1"
+        className="group flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
-        <div className={cn("rounded-full bg-muted/50 transition-colors group-hover/btn:bg-foreground/10", btnSize)}>
-          <EyeOff className={cn(iconSize, "text-muted-foreground transition-colors group-hover/btn:text-foreground")} />
-        </div>
-        <span className={cn("font-bold uppercase tracking-wider text-muted-foreground transition-colors group-hover/btn:text-foreground", labelSize)}>
-          Vista
-        </span>
+        <EyeOff className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+        <span>Ya la vi</span>
       </button>
     </div>
   );
 }
 
-// Suppress unused variable warning — PlatformBadge kept for potential future use
-void PlatformBadge;
+function CompactFeedback({
+  feedback,
+  onLike,
+  onDislike,
+  onSeen,
+}: {
+  feedback: "love" | "like" | "dislike" | "seen" | null;
+  onLike: () => void;
+  onDislike: () => void;
+  onSeen: () => void;
+}) {
+  if (feedback) {
+    return (
+      <span className="text-[11px] text-muted-foreground">
+        {feedback === "like" || feedback === "love" ? "✓ Guardado" : "✗ Descartado"}
+      </span>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={onLike} className="text-muted-foreground transition-colors hover:text-primary" title="Me gusta">
+        <ThumbsUp className="h-3.5 w-3.5" />
+      </button>
+      <button onClick={onDislike} className="text-muted-foreground transition-colors hover:text-destructive" title="No me gusta">
+        <ThumbsDown className="h-3.5 w-3.5" />
+      </button>
+      <button onClick={onSeen} className="text-muted-foreground transition-colors hover:text-foreground" title="Ya la vi">
+        <EyeOff className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
