@@ -5,7 +5,6 @@ import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { inferContext } from "@/lib/context";
 import { resetTitleFeedback } from "@/lib/feedback.functions";
 import { toast } from "sonner";
 import {
@@ -27,7 +26,6 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthLayout() {
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const [label, setLabel] = useState(() => inferContext().label);
   const [session, setSession] = useState<Session | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [scope, setScope] = useState<"all" | "preferences" | "seen">("all");
@@ -38,11 +36,6 @@ function AuthLayout() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => sub.subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const i = setInterval(() => setLabel(inferContext().label), 60_000);
-    return () => clearInterval(i);
   }, []);
 
   const handleLogout = async () => {
@@ -75,107 +68,109 @@ function AuthLayout() {
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 pt-6 pb-2 sm:px-8">
-        <Link
-          to="/"
-          onClick={() => window.dispatchEvent(new CustomEvent("que-veo:go-home"))}
-          className="inline-flex items-center gap-2 text-lg font-bold text-foreground"
-        >
-          <Sparkles className="h-5 w-5 text-primary" />
-          ¿Qué Veo?
-          <span className="ml-1 text-xs font-normal capitalize text-muted-foreground">
-            · {label}
-          </span>
-        </Link>
-        <div className="flex items-center gap-1">
-          {session ? (
-            <>
-              <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
-                <AlertDialogTrigger asChild>
-                  <button
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-                    aria-label="Resetear mis intereses"
-                    title="Resetear mis intereses"
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Resetear tu perfil de gusto</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Útil si otra persona va a usar la app con tu cuenta. Elegí qué borrar:
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <div className="space-y-2 py-2">
-                    {(
-                      [
-                        { id: "all", label: "Todo", hint: "Me gusta, me encanta y ya las vi" },
-                        { id: "preferences", label: "Solo preferencias", hint: "Me gusta y me encanta" },
-                        { id: "seen", label: 'Solo "ya las vi"', hint: "Historial de descartes" },
-                      ] as const
-                    ).map((opt) => (
-                      <label
-                        key={opt.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
-                          scope === opt.id
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-muted-foreground/40"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="reset-scope"
-                          className="mt-1 accent-primary"
-                          checked={scope === opt.id}
-                          onChange={() => setScope(opt.id)}
-                        />
-                        <span>
-                          <span className="block text-sm font-medium text-foreground">{opt.label}</span>
-                          <span className="block text-xs text-muted-foreground">{opt.hint}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={resetting}>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleReset();
-                      }}
-                      disabled={resetting}
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-40 border-b border-border bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4 sm:px-8">
+          <Link
+            to="/"
+            onClick={() => window.dispatchEvent(new CustomEvent("que-veo:go-home"))}
+            className="inline-flex items-center gap-2"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground">
+              <Sparkles className="h-4 w-4 text-background" />
+            </div>
+            <span className="text-sm font-bold text-foreground">QueVeo</span>
+          </Link>
+
+          <div className="flex items-center gap-2">
+            {session ? (
+              <>
+                <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Resetear mis intereses"
+                      title="Resetear mis intereses"
                     >
-                      {resetting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Borrando…
-                        </>
-                      ) : (
-                        "Resetear"
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-              <button
-                onClick={handleLogout}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
-                aria-label="Cerrar sesión"
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Resetear tu perfil de gusto</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Útil si otra persona va a usar la app con tu cuenta. Elegí qué borrar:
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="space-y-2 py-2">
+                      {(
+                        [
+                          { id: "all", label: "Todo", hint: "Me gusta, me encanta y ya las vi" },
+                          { id: "preferences", label: "Solo preferencias", hint: "Me gusta y me encanta" },
+                          { id: "seen", label: 'Solo "ya las vi"', hint: "Historial de descartes" },
+                        ] as const
+                      ).map((opt) => (
+                        <label
+                          key={opt.id}
+                          className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                            scope === opt.id
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="reset-scope"
+                            className="mt-1 accent-primary"
+                            checked={scope === opt.id}
+                            onChange={() => setScope(opt.id)}
+                          />
+                          <span>
+                            <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                            <span className="block text-xs text-muted-foreground">{opt.hint}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={resetting}>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleReset();
+                        }}
+                        disabled={resetting}
+                      >
+                        {resetting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Borrando…
+                          </>
+                        ) : (
+                          "Resetear"
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  aria-label="Cerrar sesión"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-foreground px-4 text-xs font-semibold text-background transition-colors hover:bg-foreground/85"
               >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </>
-          ) : (
-            <Link
-              to="/login"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
-            >
-              <LogIn className="h-3.5 w-3.5" />
-              Iniciar sesión
-            </Link>
-          )}
+                <LogIn className="h-3.5 w-3.5" />
+                Iniciar sesión
+              </Link>
+            )}
+          </div>
         </div>
       </header>
       <Outlet />

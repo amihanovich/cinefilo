@@ -100,10 +100,10 @@ export function MicButton({
       aria-label={listening ? "Detener grabación" : "Dictar por voz"}
       title={listening ? "Detener" : "Hablar"}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-full border transition-smooth",
+        "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
         listening
-          ? "animate-pulse border-destructive bg-destructive/15 text-destructive"
-          : "border-border bg-background text-muted-foreground hover:text-primary",
+          ? "animate-pulse text-destructive"
+          : "text-muted-foreground hover:text-foreground",
         className,
       )}
     >

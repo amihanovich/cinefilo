@@ -366,6 +366,126 @@ Tu tarea:
     }
   });
 
+/* ---------- recommendConversational (multi-turn chat) ---------- */
+
+const conversationalInputSchema = z.object({
+  messages: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
+    .min(1)
+    .max(20),
+  platforms: z.array(z.string().min(1)).min(1).max(10),
+  contextHint: z.string().min(1).max(400),
+  seasonHint: z.string().max(80).optional().nullable(),
+  weatherHint: z.string().max(120).optional().nullable(),
+  excludeTitles: z.array(z.string().min(1).max(200)).max(60).optional().default([]),
+  profileSeed: z
+    .object({
+      ageBracket: z.string().min(1).max(20).optional(),
+      lovedTitles: z.array(z.string().min(1).max(120)).max(8).optional(),
+    })
+    .optional()
+    .nullable(),
+});
+
+export const recommendConversational = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => conversationalInputSchema.parse(data))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+
+    const provider = createAiProvider(apiKey);
+    const model = provider("claude-haiku-4-5-20251001");
+
+    const envParts: string[] = [];
+    if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
+    if (data.weatherHint) envParts.push(`Clima: ${data.weatherHint}`);
+    const envLine = envParts.length ? `\nContexto ambiental: ${envParts.join(" · ")}` : "";
+
+    const user = await getOptionalUser();
+    const taste = user ? await getTasteSnapshot(user.supabase, user.userId) : null;
+    const tasteLine = buildTasteLine(taste);
+
+    let effectiveSeed = data.profileSeed ?? null;
+    if (user && !effectiveSeed) {
+      const { data: prof } = await user.supabase
+        .from("profiles")
+        .select("age_bracket, seed_loved")
+        .eq("id", user.userId)
+        .maybeSingle();
+      if (prof?.age_bracket || (prof?.seed_loved && prof.seed_loved.length > 0)) {
+        effectiveSeed = {
+          ageBracket: prof.age_bracket ?? undefined,
+          lovedTitles: (prof.seed_loved ?? []) as string[],
+        };
+      }
+    }
+    const seedLine = buildProfileSeedLine(effectiveSeed);
+
+    const exclSet = new Set<string>([
+      ...(data.excludeTitles ?? []),
+      ...(taste?.seen ?? []),
+      ...(taste?.loved ?? []),
+      ...(taste?.liked ?? []),
+      ...(taste?.disliked ?? []),
+      ...(effectiveSeed?.lovedTitles ?? []),
+    ]);
+    const excluded = [...exclSet];
+    const excludeLine =
+      excluded.length > 0
+        ? `\n\nTítulos a excluir (ya vistos o recomendados antes — NO los repitas):\n- ${excluded.join("\n- ")}`
+        : "";
+
+    // Build conversation history lines (all messages except the last user message)
+    const prior = data.messages.slice(0, -1);
+    const historyLines =
+      prior.length > 0
+        ? `\nHistorial de la conversación:\n${prior
+            .map((m) =>
+              m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`,
+            )
+            .join("\n")}\n`
+        : "";
+
+    const lastMsg = data.messages[data.messages.length - 1].content;
+
+    const prompt = `${SYSTEM_BASE}
+
+Contexto temporal: ${data.contextHint}${envLine}
+
+Plataformas disponibles: ${data.platforms.join(", ")}${historyLines}
+Pedido actual del usuario:
+"""
+${lastMsg}
+"""
+${tasteLine}${seedLine}${excludeLine}
+
+${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"algo más viejo\", \"sin violencia\", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados." : ""}
+"platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
+
+    try {
+      const { text } = await generateText({ model, prompt });
+      const result = parseAiJson(text, resultSchema);
+      if (user) {
+        await logHistory(user.supabase, user.userId, {
+          source: "text",
+          prompt_text: lastMsg,
+          time: result.filters.time,
+          company: result.filters.company,
+          mood: result.filters.mood,
+          type: result.filters.type,
+          attention: result.filters.attention ?? null,
+          novelty: result.filters.novelty ?? null,
+          season: data.seasonHint ?? null,
+          weather: data.weatherHint ?? null,
+          platforms: data.platforms,
+        });
+      }
+      return result;
+    } catch (err) {
+      throw mapErr(err);
+    }
+  });
+
 /* ---------- inferMomentFilters (text → filter values) ---------- */
 
 const inferInputSchema = z.object({
