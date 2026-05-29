@@ -758,10 +758,7 @@ function AssistantBubble({
               return (
                 <div
                   key={alt.title}
-                  className={cn(
-                    "flex-none w-[124px] overflow-hidden rounded-xl bg-white shadow-card",
-                    i >= 2 && "hidden sm:flex sm:flex-col",
-                  )}
+                  className="flex-none w-[124px] overflow-hidden rounded-xl bg-white shadow-card"
                 >
                   <div className="h-[78px] overflow-hidden" style={!altPoster ? { background: `${colorForPlatform(alt.platform)}10` } : undefined}>
                     {altPoster ? (

@@ -2,7 +2,8 @@
 // iTunes Search API supports CORS, so this avoids server IP throttling.
 
 function upscale(url: string): string {
-  return url.replace(/\/\d+x\d+(bb)?\.(jpg|png|webp)$/i, "/600x600bb.jpg");
+  // Replace any size suffix like /100x100bb.jpg or /500x750bb.jpg with /600x900bb.jpg
+  return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x900bb.$1");
 }
 
 function normalizeTitle(title: string): string {
@@ -23,17 +24,43 @@ function isSeries(type: string): boolean {
   return t.includes("serie") || t.includes("capítulo") || t.includes("capitulo");
 }
 
+function titleScore(result: string, expected: string): number {
+  const r = result.toLowerCase().trim();
+  const e = expected.toLowerCase().trim();
+  if (r === e) return 3;
+  if (r.startsWith(e) || e.startsWith(r)) return 2;
+  if (r.includes(e) || e.includes(r)) return 1;
+  return 0;
+}
+
 async function searchOne(
   title: string,
-  entity: "movie" | "tvShow",
+  media: "movie" | "tvShow",
   country: string,
 ): Promise<string | null> {
   try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&entity=${entity}&limit=3&country=${country}&lang=es_ar`;
+    const entity = media === "movie" ? "movie" : "tvSeason";
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${entity}&limit=5&country=${country}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) return null;
     const data = await res.json();
-    const art = data.results?.[0]?.artworkUrl100;
+    const results: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> =
+      data.results ?? [];
+    if (results.length === 0) return null;
+
+    // Pick the result that best matches the title
+    let best = results[0];
+    let bestScore = -1;
+    for (const r of results) {
+      const name = r.trackName ?? r.collectionName ?? "";
+      const score = titleScore(name, title);
+      if (score > bestScore) {
+        bestScore = score;
+        best = r;
+      }
+    }
+
+    const art = best.artworkUrl100;
     if (!art) return null;
     return upscale(art);
   } catch {
@@ -44,40 +71,35 @@ async function searchOne(
 export async function fetchPosterClient(title: string, type: string): Promise<string | null> {
   const clean = normalizeTitle(title);
   const noArticle = stripArticle(clean);
-  const entity: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
-  const alt: "movie" | "tvShow" = entity === "movie" ? "tvShow" : "movie";
+  const media: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
+  const altMedia: "movie" | "tvShow" = media === "movie" ? "tvShow" : "movie";
 
-  const [usMain, arMain, usAlt, arAlt] = await Promise.all([
-    searchOne(clean, entity, "us"),
-    searchOne(clean, entity, "ar"),
-    searchOne(clean, alt, "us"),
-    searchOne(clean, alt, "ar"),
+  // First round: primary media type, US + AR
+  const [usMain, arMain] = await Promise.all([
+    searchOne(clean, media, "us"),
+    searchOne(clean, media, "ar"),
+  ]);
+  if (usMain ?? arMain) return usMain ?? arMain;
+
+  // Second round: alternate media type + strip article
+  const [usAlt, arAlt, usNo, arNo] = await Promise.all([
+    searchOne(clean, altMedia, "us"),
+    searchOne(clean, altMedia, "ar"),
+    noArticle !== clean ? searchOne(noArticle, media, "us") : Promise.resolve(null),
+    noArticle !== clean ? searchOne(noArticle, media, "ar") : Promise.resolve(null),
   ]);
 
-  const round1 = usMain ?? arMain ?? usAlt ?? arAlt;
-  if (round1) return round1;
-
-  if (noArticle !== clean) {
-    const [usNo, arNo] = await Promise.all([
-      searchOne(noArticle, entity, "us"),
-      searchOne(noArticle, entity, "ar"),
-    ]);
-    return usNo ?? arNo ?? null;
-  }
-
-  return null;
+  return usAlt ?? arAlt ?? usNo ?? arNo ?? null;
 }
 
 export async function fetchPostersClient(
   items: { title: string; type: string }[],
 ): Promise<Record<string, string | null>> {
-  const entries = await Promise.all(
-    items.map(async (it) => {
-      const poster = await fetchPosterClient(it.title, it.type);
-      return [it.title, poster] as const;
-    }),
-  );
+  // Sequential with small delay to avoid iTunes rate-limiting
   const result: Record<string, string | null> = {};
-  for (const [t, p] of entries) result[t] = p;
+  for (const it of items) {
+    result[it.title] = await fetchPosterClient(it.title, it.type);
+    await new Promise<void>((r) => setTimeout(r, 120));
+  }
   return result;
 }
