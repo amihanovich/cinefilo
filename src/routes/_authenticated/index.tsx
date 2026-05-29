@@ -26,6 +26,7 @@ import { recommendConversational } from "@/lib/recommendations.functions";
 import { recordTitleFeedback } from "@/lib/feedback.functions";
 import { getProfile, setDefaultPlatforms } from "@/lib/profile.functions";
 import { VoiceOrb } from "@/components/VoiceOrb";
+import { PosterMarquee } from "@/components/PosterMarquee";
 import { fetchPostersClient } from "@/lib/itunes";
 import {
   readGuestSeed,
@@ -392,7 +393,7 @@ function HomeScreen({
 
         {/* Headline */}
         <h1 className="mt-8 font-serif text-4xl font-bold leading-tight text-foreground sm:text-5xl">
-          ¿Qué querés ver esta noche?
+          Tu sommelier de streaming
         </h1>
 
         {/* Platform ticker — always visible, scrolling */}
@@ -417,7 +418,7 @@ function HomeScreen({
               Buscando en todas tus plataformas…
             </span>
           ) : (
-            "Hablame o escribime lo que querés ver"
+            "Contame qué te pinta y te recomiendo algo perfecto"
           )}
         </p>
 
@@ -433,7 +434,7 @@ function HomeScreen({
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
-              placeholder="o escribí acá…"
+              placeholder="una de acción, algo para llorar, comedia italiana…"
               disabled={isLoading}
               className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none disabled:opacity-50"
             />
@@ -517,6 +518,11 @@ function HomeScreen({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Poster marquee — content mood board at the bottom */}
+      <div className="absolute bottom-0 left-0 right-0 z-0 opacity-60">
+        <PosterMarquee />
       </div>
     </section>
   );
@@ -617,7 +623,7 @@ function ChatScreen({
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
           }}
           rows={1}
-          placeholder="Seguí pidiendo… algo más oscuro, solo Netflix…"
+          placeholder="Seguí afinando… algo más rápido, sin gore, solo Prime…"
           className="w-full resize-none bg-transparent px-5 pb-2 pt-4 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
           style={{ maxHeight: "100px" }}
         />
