@@ -50,20 +50,6 @@ function LoginPage() {
     }
   };
 
-  const handleGoogle = async () => {
-    setError(null);
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) {
-      setError(error.message ?? "No pudimos iniciar sesión con Google.");
-      setLoading(false);
-    }
-    // Supabase redirects the browser automatically
-  };
-
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-10 animate-fade-in">
       <div className="w-full max-w-sm">
@@ -104,21 +90,6 @@ function LoginPage() {
             </li>
           </ul>
         )}
-
-        <button
-          onClick={handleGoogle}
-          disabled={loading}
-          className="mb-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-border bg-card px-6 text-sm font-semibold text-foreground transition-smooth hover:bg-card/70 disabled:opacity-50"
-        >
-          <GoogleIcon />
-          Continuar con Google
-        </button>
-
-        <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-          <div className="h-px flex-1 bg-border" />
-          o con email
-          <div className="h-px flex-1 bg-border" />
-        </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
@@ -193,13 +164,3 @@ function LoginPage() {
   );
 }
 
-function GoogleIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.5c-.24 1.4-1.65 4.1-5.5 4.1-3.3 0-6-2.74-6-6.2s2.7-6.2 6-6.2c1.88 0 3.14.8 3.86 1.48l2.63-2.54C16.85 3.18 14.7 2.2 12 2.2 6.95 2.2 2.9 6.25 2.9 12s4.05 9.8 9.1 9.8c5.26 0 8.74-3.7 8.74-8.9 0-.6-.06-1.05-.15-1.5H12z"
-      />
-    </svg>
-  );
-}
