@@ -120,3 +120,12 @@
   0%, 100% { opacity: 0.9; transform: scale(1.04); }
   50%       { opacity: 1;   transform: scale(1.10); }
 }
+
+@keyframes platform-ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@layer utilities {
+  .animate-platform-ticker { animation: platform-ticker 24s linear infinite; }
+}

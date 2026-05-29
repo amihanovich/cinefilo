@@ -334,7 +334,6 @@ function HomeScreen({
   onDismissLoginNudge: () => void;
 }) {
   const [text, setText] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
@@ -395,11 +394,27 @@ function HomeScreen({
         <h1 className="mt-8 font-serif text-4xl font-bold leading-tight text-foreground sm:text-5xl">
           ¿Qué querés ver esta noche?
         </h1>
-        <p className="mt-3 text-sm text-muted-foreground sm:text-base">
+
+        {/* Platform ticker — always visible, scrolling */}
+        <div className="mt-4 w-full overflow-hidden" aria-hidden="true">
+          <div className="flex animate-platform-ticker gap-6 w-max">
+            {[...(PLATFORM_OPTIONS as Platform[]), ...(PLATFORM_OPTIONS as Platform[])].map((p, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground/50"
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <p className="mt-3 text-sm text-muted-foreground">
           {isLoading ? (
             <span className="inline-flex items-center gap-1.5 text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Buscando algo perfecto…
+              Buscando en todas tus plataformas…
             </span>
           ) : (
             "Hablame o escribime lo que querés ver"
@@ -407,7 +422,7 @@ function HomeScreen({
         </p>
 
         {/* Text input bar */}
-        <div className="mt-8 w-full">
+        <div className="mt-6 w-full">
           <div className={cn(
             "flex items-center gap-2 rounded-2xl border border-border bg-white/80 px-4 py-3 backdrop-blur-sm transition-all",
             "focus-within:border-primary/50 focus-within:bg-white/90",
@@ -447,77 +462,61 @@ function HomeScreen({
           </div>
         </div>
 
-        {/* Settings toggle */}
-        <button
-          onClick={() => setShowSettings((v) => !v)}
-          className="mt-4 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-        >
-          {showSettings ? "Ocultar ajustes ↑" : "Ajustes de plataformas y ubicación ↓"}
-        </button>
+        {/* Platform filter chips — always visible */}
+        <div className="mt-4 w-full">
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+              Filtrar
+            </span>
+            <div className="flex flex-1 flex-wrap gap-1.5">
+              {(PLATFORM_OPTIONS as Platform[]).map((p) => {
+                const active = selectedPlatforms.includes(p);
+                return (
+                  <button
+                    key={p}
+                    onClick={() => togglePlatform(p)}
+                    style={active ? { borderColor: colorForPlatform(p), background: `${colorForPlatform(p)}18` } : undefined}
+                    className={cn(
+                      "inline-flex min-h-[26px] items-center gap-1 rounded-full border px-2 text-[11px] font-medium transition-smooth",
+                      active
+                        ? "text-foreground"
+                        : "border-border/60 text-muted-foreground/50 hover:border-border hover:text-muted-foreground",
+                    )}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
+                    {p}
+                  </button>
+                );
+              })}
+              {selectedPlatforms.length > 0 &&
+                JSON.stringify([...selectedPlatforms].sort()) !== JSON.stringify([...defaultPlatforms].sort()) && (
+                  <button
+                    onClick={() => onSaveDefaultPlatforms(selectedPlatforms)}
+                    className="text-[11px] text-primary hover:underline"
+                  >
+                    Guardar
+                  </button>
+                )}
+            </div>
 
-        {showSettings && (
-          <div className="mt-4 w-full space-y-3 animate-fade-in">
-            {/* Platform chips */}
-            <div className="rounded-2xl border border-border bg-white/70 p-3 backdrop-blur-sm">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Plataformas
-                </span>
-                {selectedPlatforms.length > 0 &&
-                  JSON.stringify([...selectedPlatforms].sort()) !== JSON.stringify([...defaultPlatforms].sort()) && (
-                    <button onClick={() => onSaveDefaultPlatforms(selectedPlatforms)} className="text-[11px] text-primary hover:underline">
-                      Guardar
-                    </button>
-                  )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {(PLATFORM_OPTIONS as Platform[]).map((p) => {
-                  const active = selectedPlatforms.includes(p);
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => togglePlatform(p)}
-                      style={active ? { borderColor: colorForPlatform(p), background: `${colorForPlatform(p)}22` } : undefined}
-                      className={cn(
-                        "inline-flex min-h-[28px] items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-smooth",
-                        active ? "text-foreground" : "border-border text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
-                      {p}
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedPlatforms.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-muted-foreground/60">Todas las plataformas.</p>
+            {/* Location icon toggle */}
+            <button
+              type="button"
+              title={useLocation ? (weather ? weatherHintShort(weather) : "Usando ubicación") : "Activar ubicación"}
+              onClick={() => onToggleLocation(!useLocation)}
+              className={cn(
+                "shrink-0 rounded-full p-1.5 transition-colors",
+                useLocation ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground",
               )}
-            </div>
-
-            {/* Location toggle */}
-            <div className="flex items-center justify-between rounded-2xl border border-border bg-white/70 px-3 py-2.5 backdrop-blur-sm">
-              <div>
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  <MapPin className="h-3 w-3 text-primary" />
-                  Usar ubicación
-                </div>
-                {useLocation && weatherLoading && <p className="mt-0.5 text-[11px] text-muted-foreground">Leyendo clima…</p>}
-                {useLocation && !weatherLoading && weather && <p className="mt-0.5 text-[11px] text-primary">{weatherHintShort(weather)}</p>}
-                {useLocation && !weatherLoading && !weather && <p className="mt-0.5 text-[11px] text-destructive">Sin acceso al clima.</p>}
-                {!useLocation && <p className="mt-0.5 text-[11px] text-muted-foreground/60">Suma el clima al contexto.</p>}
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={useLocation}
-                onClick={() => onToggleLocation(!useLocation)}
-                className={cn("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors", useLocation ? "bg-primary" : "bg-border")}
-              >
-                <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform", useLocation ? "translate-x-4" : "translate-x-0.5")} />
-              </button>
-            </div>
+            >
+              {weatherLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <MapPin className="h-3.5 w-3.5" />
+              )}
+            </button>
           </div>
-        )}
+        </div>
       </div>
     </section>
   );
