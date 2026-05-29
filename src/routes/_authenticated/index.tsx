@@ -405,7 +405,7 @@ function HomeScreen({
 
         {/* Headline */}
         <h1 className="mt-10 font-serif text-[2.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl">
-          Tu sommelier<br />de streaming
+          ¿Qué querés<br />ver hoy?
         </h1>
 
         {/* Platform ticker */}
@@ -427,7 +427,7 @@ function HomeScreen({
               Buscando en todas tus plataformas…
             </span>
           ) : (
-            "Contame qué te pinta y te recomiendo algo perfecto"
+            "Describilo con tus palabras. Te encontramos lo perfecto en todas tus plataformas."
           )}
         </p>
 
