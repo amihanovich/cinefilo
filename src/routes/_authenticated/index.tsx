@@ -340,19 +340,19 @@ function HomeScreen({
       {/* Background gradients */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <div
-          className="absolute left-1/2 top-0 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{ background: "radial-gradient(circle, oklch(0.25 0.12 280 / 0.18) 0%, transparent 70%)" }}
+          className="absolute left-1/2 top-0 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/3 rounded-full"
+          style={{ background: "radial-gradient(circle, oklch(0.51 0.22 277 / 0.06) 0%, transparent 70%)" }}
         />
         <div
-          className="absolute bottom-0 left-1/3 h-[400px] w-[400px] rounded-full"
-          style={{ background: "radial-gradient(circle, oklch(0.50 0.15 290 / 0.08) 0%, transparent 70%)" }}
+          className="absolute bottom-0 right-1/4 h-[400px] w-[400px] rounded-full"
+          style={{ background: "radial-gradient(circle, oklch(0.60 0.18 290 / 0.04) 0%, transparent 70%)" }}
         />
       </div>
 
       {/* Login nudge */}
       {showLoginNudge && (
         <div className="absolute top-4 left-1/2 z-20 w-full max-w-sm -translate-x-1/2 px-4 animate-fade-in">
-          <div className="rounded-2xl border border-primary/25 bg-card/80 p-4 backdrop-blur-sm">
+          <div className="rounded-2xl border border-primary/25 bg-white/90 p-4 backdrop-blur-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">Guardá tu perfil</p>
@@ -398,8 +398,8 @@ function HomeScreen({
         {/* Text input bar */}
         <div className="mt-8 w-full">
           <div className={cn(
-            "flex items-center gap-2 rounded-2xl border border-border bg-card/60 px-4 py-3 backdrop-blur-sm transition-all",
-            "focus-within:border-primary/50 focus-within:bg-card/80",
+            "flex items-center gap-2 rounded-2xl border border-border bg-white/80 px-4 py-3 backdrop-blur-sm transition-all",
+            "focus-within:border-primary/50 focus-within:bg-white/90",
           )}>
             <input
               ref={inputRef}
@@ -447,7 +447,7 @@ function HomeScreen({
         {showSettings && (
           <div className="mt-4 w-full space-y-3 animate-fade-in">
             {/* Platform chips */}
-            <div className="rounded-2xl border border-border bg-card/50 p-3 backdrop-blur-sm">
+            <div className="rounded-2xl border border-border bg-white/70 p-3 backdrop-blur-sm">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Plataformas
@@ -484,7 +484,7 @@ function HomeScreen({
             </div>
 
             {/* Location toggle */}
-            <div className="flex items-center justify-between rounded-2xl border border-border bg-card/50 px-3 py-2.5 backdrop-blur-sm">
+            <div className="flex items-center justify-between rounded-2xl border border-border bg-white/70 px-3 py-2.5 backdrop-blur-sm">
               <div>
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <MapPin className="h-3 w-3 text-primary" />
@@ -651,8 +651,8 @@ function ChatScreen({
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-primary/20 border border-primary/20 px-4 py-3">
-        <p className="text-sm leading-relaxed text-foreground">{text}</p>
+      <div className="max-w-[80%] rounded-2xl rounded-tr-sm bg-foreground px-4 py-3">
+        <p className="text-sm leading-relaxed text-background">{text}</p>
       </div>
     </div>
   );
@@ -675,7 +675,7 @@ function AssistantBubble({
   return (
     <div className="flex flex-col gap-3">
       {/* Main recommendation */}
-      <div className="max-w-[88%] rounded-2xl rounded-tl-sm border border-border bg-card/40 px-4 py-4">
+      <div className="max-w-[88%] rounded-2xl rounded-tl-sm border border-border bg-white px-4 py-4">
         <p className="text-sm leading-relaxed text-foreground">
           Te recomiendo{" "}
           <strong className="font-bold text-foreground">{main.title}</strong>{" "}
@@ -715,7 +715,7 @@ function AssistantBubble({
       {alternatives.map((alt) => {
         const altFeedback = msg.feedbackGiven?.[alt.title] ?? null;
         return (
-          <div key={alt.title} className="max-w-[82%] rounded-xl border border-border/60 bg-card/20 px-4 py-3">
+          <div key={alt.title} className="max-w-[82%] rounded-xl border border-border/60 bg-muted/60 px-4 py-3">
             <p className="text-xs leading-relaxed text-foreground/80">
               O también:{" "}
               <strong className="font-semibold">{alt.title}</strong> en{" "}
