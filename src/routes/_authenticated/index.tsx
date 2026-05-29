@@ -775,13 +775,16 @@ function AssistantBubble({
         <div className="max-w-[90%]">
           <p className="mb-2 text-[11px] text-muted-foreground">También podría ser…</p>
           <div className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-            {alternatives.map((alt) => {
+            {alternatives.map((alt, i) => {
               const altPoster = posters[alt.title];
               const altFeedback = msg.feedbackGiven?.[alt.title] ?? null;
               return (
                 <div
                   key={alt.title}
-                  className="flex-none w-[130px] overflow-hidden rounded-xl border border-border bg-white shadow-sm"
+                  className={cn(
+                    "flex-none w-[130px] overflow-hidden rounded-xl border border-border bg-white shadow-sm",
+                    i >= 2 && "hidden sm:flex sm:flex-col",
+                  )}
                 >
                   {/* Mini poster or platform color block */}
                   <div

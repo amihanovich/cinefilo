@@ -25,7 +25,7 @@ const filtersOutSchema = z.object({
 const resultSchema = z.object({
   filters: filtersOutSchema,
   main: recSchema,
-  alternatives: z.array(recSchema).length(2),
+  alternatives: z.array(recSchema).min(2).max(4),
   clarification_needed: z.string().nullable().optional(),
 });
 
@@ -38,7 +38,7 @@ Reglas estrictas:
 - Sé específico — evita blockbusters genéricos si hay algo más a medida.
 - "type" debe ser "Película" o "Serie".
 - "reason" entre 25 y 45 palabras, en español, sin emojis. DEBE referenciar explícitamente 2 o 3 de las variables del contexto que más pesaron en la elección (ej: "Para un martes a las 23h, con clima nublado y eligiendo 'de fondo'…"). Sé concreto, no abstracto.
-- Devuelve 1 recomendación principal + 2 alternativas distintas entre sí (idealmente de plataformas distintas si es posible). Cada alternativa también debe justificar por qué encaja, idealmente atacando un ángulo distinto del contexto que la principal.
+- Devuelve 1 recomendación principal + 4 alternativas distintas entre sí (idealmente de plataformas distintas si es posible). Cada alternativa también debe justificar por qué encaja, idealmente atacando un ángulo distinto del contexto que la principal.
 - Tomá en cuenta la estación del año y el clima si están en el contexto — un domingo lluvioso de otoño pide algo distinto a un sábado soleado.
 - Si "atención" es "De fondo", priorizá contenido episódico, ligero, fácil de pausar; si es "Inmersivo", priorizá calidad cinematográfica; si es "Comfort watch", algo conocido o reconfortante.
 - Si "novedad" es "Algo conocido" o "Ya visto", priorizá clásicos/franquicias reconocibles; si es "Algo nuevo", priorizá estrenos recientes o títulos poco mainstream.
@@ -49,7 +49,7 @@ Reglas estrictas:
 - Priorizá títulos ampliamente conocidos con presencia estable en la plataforma indicada. Evitá estrenos de los últimos 6 meses salvo que tengas alta certeza de disponibilidad. Si el título es de nicho o distribución limitada, preferí una alternativa más segura. El objetivo es que el usuario encuentre el contenido cuando lo busca.
 
 FORMATO DE SALIDA: Devuelve ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:
-{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""}],"clarification_needed":null}`;
+{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""}],"clarification_needed":null}`;
 
 function parseAiJson<T>(text: string, schema: z.ZodType<T>): T {
   const cleaned = text
