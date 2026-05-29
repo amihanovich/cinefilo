@@ -1,8 +1,14 @@
-# QueVeo - Project Documentation
+# Cinéfilo - Project Documentation
+
+## Git Workflow
+
+**Default branch for all development: `dev`**
+- Always commit and push to `dev` unless explicitly told otherwise
+- `git push -u origin dev`
 
 ## Project Overview
 
-QueVeo is a fullstack web application built with modern TypeScript and React technologies.
+Cinéfilo (formerly QueVeo) is a fullstack web application built with modern TypeScript and React technologies.
 
 ### Tech Stack
 
