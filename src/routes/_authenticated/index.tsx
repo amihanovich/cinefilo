@@ -470,6 +470,7 @@ function HomeScreen({
               className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none disabled:opacity-50"
             />
             <MicButton
+              size="sm"
               onTranscript={(t, isFinal) => {
                 if (!t || !isFinal) return;
                 setText((prev) => (prev ? `${prev.trim()} ${t}` : t));
@@ -713,8 +714,9 @@ function ChatScreen({
           className="w-full resize-none bg-transparent px-5 pb-2 pt-4 text-[13px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
           style={{ maxHeight: "100px" }}
         />
-        <div className="flex items-center justify-between px-4 py-2.5">
+        <div className="flex items-center gap-3 px-3 py-2.5">
           <MicButton
+            size="md"
             onTranscript={(t, isFinal) => {
               if (!t) return;
               if (isFinal) {
@@ -725,22 +727,23 @@ function ChatScreen({
                 onInputChange(t);
               }
             }}
-            className="text-muted-foreground/40 hover:text-muted-foreground"
           />
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={inputText.trim().length < 2 || isLoading}
-            className={cn(
-              "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
-              inputText.trim().length >= 2 && !isLoading
-                ? "bg-foreground text-background hover:opacity-75"
-                : "bg-muted text-muted-foreground/25 cursor-not-allowed",
-            )}
-            aria-label="Enviar"
-          >
-            <ArrowUp className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex flex-1 items-center justify-end">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={inputText.trim().length < 2 || isLoading}
+              className={cn(
+                "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
+                inputText.trim().length >= 2 && !isLoading
+                  ? "bg-foreground text-background hover:opacity-75"
+                  : "bg-muted text-muted-foreground/25 cursor-not-allowed",
+              )}
+              aria-label="Enviar"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
 

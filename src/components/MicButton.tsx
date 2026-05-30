@@ -24,10 +24,13 @@ export function MicButton({
   onTranscript,
   lang = "es-AR",
   className,
+  size = "md",
 }: {
   onTranscript: (text: string, isFinal: boolean) => void;
   lang?: string;
   className?: string;
+  /** "sm" = original compact, "md" = prominent orb (default for refinement bar) */
+  size?: "sm" | "md";
 }) {
   const [supported, setSupported] = useState(true);
   const [listening, setListening] = useState(false);
@@ -80,7 +83,7 @@ export function MicButton({
     try {
       rec.start();
       setListening(true);
-    } catch (e: any) {
+    } catch {
       setListening(false);
       toast.error("No se pudo iniciar el micrófono. ¿Está permitido en este navegador?");
     }
@@ -93,6 +96,27 @@ export function MicButton({
 
   if (!supported) return null;
 
+  if (size === "sm") {
+    return (
+      <button
+        type="button"
+        onClick={listening ? stop : start}
+        aria-label={listening ? "Detener grabación" : "Dictar por voz"}
+        title={listening ? "Detener" : "Hablar"}
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
+          listening
+            ? "animate-pulse text-destructive"
+            : "text-muted-foreground hover:text-foreground",
+          className,
+        )}
+      >
+        {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+      </button>
+    );
+  }
+
+  // md: prominent orb for the refinement input bar
   return (
     <button
       type="button"
@@ -100,14 +124,31 @@ export function MicButton({
       aria-label={listening ? "Detener grabación" : "Dictar por voz"}
       title={listening ? "Detener" : "Hablar"}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
+        "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200",
         listening
-          ? "animate-pulse text-destructive"
-          : "text-muted-foreground hover:text-foreground",
+          ? [
+              "bg-destructive text-white",
+              "shadow-[0_0_0_4px_oklch(0.55_0.22_25_/_0.18),0_0_18px_4px_oklch(0.55_0.22_25_/_0.30)]",
+              "scale-95",
+            ]
+          : [
+              "bg-gradient-primary text-primary-foreground",
+              "shadow-[0_2px_12px_oklch(0.55_0.22_280_/_0.35),0_0_0_0_transparent]",
+              "hover:shadow-[0_4px_20px_oklch(0.55_0.22_280_/_0.55),0_0_0_4px_oklch(0.55_0.22_280_/_0.12)]",
+              "hover:scale-105 active:scale-95",
+            ],
         className,
       )}
     >
-      {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+      {listening ? (
+        <>
+          <MicOff className="h-5 w-5" />
+          {/* pulsing ring */}
+          <span className="pointer-events-none absolute inset-0 rounded-full animate-ping bg-destructive/30" />
+        </>
+      ) : (
+        <Mic className="h-5 w-5" />
+      )}
     </button>
   );
 }
