@@ -28,7 +28,7 @@ import { recordTitleFeedback } from "@/lib/feedback.functions";
 import { getProfile, setDefaultPlatforms } from "@/lib/profile.functions";
 import { VoiceOrb } from "@/components/VoiceOrb";
 import { PosterMarquee } from "@/components/PosterMarquee";
-import { PlatformLogo } from "@/components/PlatformLogo";
+import { PlatformOrbit } from "@/components/PlatformOrbit";
 import { fetchPostersClient } from "@/lib/itunes";
 import {
   readGuestSeed,
@@ -422,25 +422,21 @@ function HomeScreen({
 
       {/* Center content */}
       <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
-        {/* Orb */}
-        <VoiceOrb
-          onFinalTranscript={(t) => onSubmit(t)}
-          disabled={isLoading}
-        />
-
-        {/* Headline */}
-        <h1 className="mt-10 font-serif text-[2.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl">
-          ¿Qué querés<br />ver hoy?
-        </h1>
-
-        {/* Platform ticker */}
-        <div className="mt-6 w-full overflow-hidden" aria-hidden="true">
-          <div className="flex animate-platform-ticker items-center gap-10 w-max">
-            {[...(PLATFORM_OPTIONS as Platform[]), ...(PLATFORM_OPTIONS as Platform[])].map((p, i) => (
-              <PlatformLogo key={i} platform={p} style={{ opacity: 0.28 }} />
-            ))}
+        {/* Orb + orbiting platform logos */}
+        <div className="relative flex h-[300px] w-full items-center justify-center">
+          <PlatformOrbit />
+          <div className="relative z-10">
+            <VoiceOrb
+              onFinalTranscript={(t) => onSubmit(t)}
+              disabled={isLoading}
+            />
           </div>
         </div>
+
+        {/* Headline */}
+        <h1 className="mt-2 font-serif text-[2.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl">
+          ¿Qué querés<br />ver hoy?
+        </h1>
 
         <p className="mt-4 text-[13px] text-muted-foreground">
           {isLoading ? (

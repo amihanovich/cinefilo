@@ -132,6 +132,14 @@
   to   { transform: translateX(-50%); }
 }
 
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbit-spin-rev {
+  to { transform: rotate(-360deg); }
+}
+
 @layer utilities {
   .animate-platform-ticker { animation: platform-ticker 28s linear infinite; }
 }
