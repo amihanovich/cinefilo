@@ -16,12 +16,11 @@ type Props = {
   onSwipe: (item: SwipeItem, direction: "like" | "skip") => void;
   onWatchlist: (item: SwipeItem) => void;
   onViewAsList: () => void;
-  onRefine: () => void;
 };
 
 const SWIPE_THRESHOLD = 80;
 
-export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsList, onRefine }: Props) {
+export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsList }: Props) {
   const [stack, setStack] = useState<SwipeItem[]>(items);
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -98,12 +97,9 @@ export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsLi
             Pasaste todos — ¿buscamos algo diferente?
           </p>
         )}
-        <button
-          onClick={onRefine}
-          className="mt-2 rounded-full bg-foreground px-5 py-2 text-[12px] font-semibold text-background transition-opacity hover:opacity-80"
-        >
-          Refinar búsqueda
-        </button>
+        <p className="mt-2 text-[11px] text-muted-foreground/40">
+          Hablá para buscar algo diferente
+        </p>
       </div>
     );
   }

@@ -329,9 +329,7 @@ function HomePage() {
           messages={messages}
           isLoading={isLoading}
           isGuest={isGuest}
-          inputText={inputText}
           posters={posters}
-          onInputChange={setInputText}
           onSubmit={submit}
           onFeedback={handleFeedback}
           onNewSearch={() => {
@@ -634,9 +632,7 @@ function ChatScreen({
   messages,
   isLoading,
   isGuest,
-  inputText,
   posters,
-  onInputChange,
   onSubmit,
   onFeedback,
   onNewSearch,
@@ -644,16 +640,14 @@ function ChatScreen({
   messages: ChatMessage[];
   isLoading: boolean;
   isGuest: boolean;
-  inputText: string;
   posters: Record<string, string | null>;
-  onInputChange: (v: string) => void;
   onSubmit: (text: string) => void;
   onFeedback: (msgId: string, title: string, platform: string, sentiment: FeedbackSentiment) => void;
   onNewSearch: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [deckMode, setDeckMode] = useState(true);
+  const [liveTranscript, setLiveTranscript] = useState("");
 
   const lastAsstMsgId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
@@ -661,15 +655,11 @@ function ChatScreen({
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  const handleSubmit = () => {
-    if (inputText.trim().length >= 2) onSubmit(inputText.trim());
-  };
-
   return (
     <section className="mx-auto flex max-w-2xl flex-col px-4 pb-8 pt-6 sm:px-6 animate-fade-in">
       {/* Chat window */}
       <div className="overflow-hidden rounded-3xl bg-white shadow-float">
-        {/* Header — minimal, no macOS dots */}
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-black/[0.05] px-6 py-4">
           <span className="text-[13px] font-semibold tracking-tight text-foreground">Cinéfilo</span>
           <button
@@ -696,10 +686,8 @@ function ChatScreen({
                   isLatest={msg.id === lastAsstMsgId}
                   deckMode={deckMode}
                   onViewAsList={() => setDeckMode(false)}
-                  onRefine={() => inputRef.current?.focus()}
                   onFeedback={(title, platform, sentiment) =>
-                    onFeedback(msg.id, title, platform, sentiment)
-                  }
+                    onFeedback(msg.id, title, platform, sentiment)}
                 />
               ),
             )}
@@ -718,51 +706,27 @@ function ChatScreen({
         </div>
       </div>
 
-      {/* Input bar — Apple Messages style */}
-      <div className="mt-3 overflow-hidden rounded-2xl bg-white shadow-card">
-        <textarea
-          ref={inputRef}
-          value={inputText}
-          onChange={(e) => onInputChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
+      {/* Voice-only refinement */}
+      <div className="mt-6 flex flex-col items-center gap-2">
+        {liveTranscript ? (
+          <p className="text-center text-[13px] italic text-foreground/70 animate-fade-in">{liveTranscript}</p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/40">
+            {isLoading ? "Buscando…" : "Hablá para refinar tu búsqueda"}
+          </p>
+        )}
+        <MicButton
+          size="md"
+          onTranscript={(t, isFinal) => {
+            if (!t) { setLiveTranscript(""); return; }
+            if (isFinal) {
+              setLiveTranscript("");
+              onSubmit(t.trim());
+            } else {
+              setLiveTranscript(t);
+            }
           }}
-          rows={1}
-          placeholder="Seguí afinando… algo más rápido, sin gore, solo Prime…"
-          className="w-full resize-none bg-transparent px-5 pb-2 pt-4 text-[13px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
-          style={{ maxHeight: "100px" }}
         />
-        <div className="flex items-center gap-3 px-3 py-2.5">
-          <MicButton
-            size="md"
-            onTranscript={(t, isFinal) => {
-              if (!t) return;
-              if (isFinal) {
-                const combined = inputText ? `${inputText.trim()} ${t}` : t;
-                onInputChange("");
-                onSubmit(combined.trim());
-              } else {
-                onInputChange(t);
-              }
-            }}
-          />
-          <div className="flex flex-1 items-center justify-end">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={inputText.trim().length < 2 || isLoading}
-              className={cn(
-                "inline-flex h-7 w-7 items-center justify-center rounded-full transition-all",
-                inputText.trim().length >= 2 && !isLoading
-                  ? "bg-foreground text-background hover:opacity-75"
-                  : "bg-muted text-muted-foreground/25 cursor-not-allowed",
-              )}
-              aria-label="Enviar"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
       </div>
 
       {isGuest && (
@@ -796,7 +760,6 @@ function AssistantBubble({
   isLatest,
   deckMode,
   onViewAsList,
-  onRefine,
   onFeedback,
 }: {
   msg: ChatMessage;
@@ -805,7 +768,6 @@ function AssistantBubble({
   isLatest: boolean;
   deckMode: boolean;
   onViewAsList: () => void;
-  onRefine: () => void;
   onFeedback: (title: string, platform: string, sentiment: FeedbackSentiment) => void;
 }) {
   const { data } = msg;
@@ -842,7 +804,6 @@ function AssistantBubble({
         }
         onWatchlist={(item) => onFeedback(item.rec.title, item.rec.platform, "watchlist")}
         onViewAsList={onViewAsList}
-        onRefine={onRefine}
       />
     );
   }
