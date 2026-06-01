@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createAiProvider } from "./ai-gateway";
 import { getOptionalUser } from "@/lib/auth-optional";
 import { getTasteSnapshot, type TasteSnapshot } from "./feedback.functions";
+import { buildViewerPersonality } from "./personality";
 
 const recSchema = z.object({
   title: z.string(),
@@ -128,6 +129,7 @@ const filtersInputSchema = z.object({
   source: z.enum(["filters", "moment"]).default("filters"),
   extraText: z.string().max(500).optional().nullable(),
   excludeTitles: z.array(z.string().min(1).max(200)).max(40).optional().default([]),
+  currentQueryLength: z.number().int().min(0).optional().nullable(),
   profileSeed: z
     .object({
       ageBracket: z.string().min(1).max(20).optional(),
@@ -202,6 +204,10 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
       }
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
+    const personalityLine = user
+      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? undefined }))
+      : null;
+    const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
     // Combinamos excluded explícitos + títulos ya vistos en el historial de feedback
     // + los lovedTitles del seed (para no re-recomendarlos).
@@ -230,7 +236,7 @@ Pedido del usuario (filtros):
 - Tipo: ${fmt(data.type)}
 - Atención: ${fmt(data.attention ?? null)}
 - Novedad: ${fmt(data.novelty ?? null)}
-- Plataformas disponibles: ${data.platforms.join(", ")}${extra}${tasteLine}${seedLine}${excludeLine}
+- Plataformas disponibles: ${data.platforms.join(", ")}${extra}${tasteLine}${seedLine}${personalitySection}${excludeLine}
 
 
 Recuerda: "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
@@ -268,6 +274,7 @@ const textInputSchema = z.object({
   seasonHint: z.string().max(80).optional().nullable(),
   weatherHint: z.string().max(120).optional().nullable(),
   excludeTitles: z.array(z.string().min(1).max(200)).max(40).optional().default([]),
+  currentQueryLength: z.number().int().min(0).optional().nullable(),
   profileSeed: z
     .object({
       ageBracket: z.string().min(1).max(20).optional(),
@@ -310,6 +317,10 @@ export const recommendFromText = createServerFn({ method: "POST" })
       }
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
+    const personalityLine = user
+      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? data.text.length }))
+      : null;
+    const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
     const exclSet = new Set<string>([
       ...(data.excludeTitles ?? []),
@@ -334,7 +345,7 @@ Plataformas disponibles del usuario: ${data.platforms.join(", ")}
 El usuario describió libremente lo que quiere ver:
 """
 ${data.text}
-"""${tasteLine}${seedLine}${excludeLine}
+"""${tasteLine}${seedLine}${personalitySection}${excludeLine}
 
 Tu tarea:
 1. Inferir del texto: tiempo aproximado, compañía, mood, tipo, nivel de atención y novedad. Si algo no está claro, deducí lo más razonable según el contexto.
@@ -378,6 +389,7 @@ const conversationalInputSchema = z.object({
   seasonHint: z.string().max(80).optional().nullable(),
   weatherHint: z.string().max(120).optional().nullable(),
   excludeTitles: z.array(z.string().min(1).max(200)).max(60).optional().default([]),
+  currentQueryLength: z.number().int().min(0).optional().nullable(),
   profileSeed: z
     .object({
       ageBracket: z.string().min(1).max(20).optional(),
@@ -420,6 +432,11 @@ export const recommendConversational = createServerFn({ method: "POST" })
       }
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
+    const lastMsg = data.messages[data.messages.length - 1].content;
+    const personalityLine = user
+      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? lastMsg.length }))
+      : null;
+    const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
     const exclSet = new Set<string>([
       ...(data.excludeTitles ?? []),
@@ -446,8 +463,6 @@ export const recommendConversational = createServerFn({ method: "POST" })
             .join("\n")}\n`
         : "";
 
-    const lastMsg = data.messages[data.messages.length - 1].content;
-
     const prompt = `${SYSTEM_BASE}
 
 Contexto temporal: ${data.contextHint}${envLine}
@@ -457,7 +472,7 @@ Pedido actual del usuario:
 """
 ${lastMsg}
 """
-${tasteLine}${seedLine}${excludeLine}
+${tasteLine}${seedLine}${personalitySection}${excludeLine}
 
 ${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"algo más viejo\", \"sin violencia\", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados." : ""}
 "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
