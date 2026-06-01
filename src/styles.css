@@ -140,6 +140,21 @@
   to { transform: rotate(-360deg); }
 }
 
+@keyframes match-slide-left {
+  from { transform: translateX(-60px); opacity: 0; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+@keyframes match-slide-right {
+  from { transform: translateX(60px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes match-scale-in {
+  from { transform: scale(0.7); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
 @layer utilities {
   .animate-platform-ticker { animation: platform-ticker 28s linear infinite; }
 }

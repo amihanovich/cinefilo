@@ -14,6 +14,8 @@ import {
   MapPin,
   RotateCcw,
 } from "lucide-react";
+import { SwipeCardDeck } from "@/components/SwipeCardDeck";
+import type { SwipeItem } from "@/components/SwipeCardDeck";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -62,7 +64,17 @@ type ChatMessage = {
   text: string;
   data?: RecommendationsResult;
   feedbackGiven?: Record<string, FeedbackSentiment>;
+  deckItems?: SwipeItem[];
 };
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 const WATCHLIST_KEY = "cinefilo:watchlist";
 function addToWatchlist(title: string) {
@@ -220,7 +232,11 @@ function HomePage() {
         },
       });
 
-      const aiMsg: ChatMessage = { id: uid(), role: "assistant", text: "", data, feedbackGiven: {} };
+      const deckItems: SwipeItem[] = shuffle([
+        { rec: data.main, isMain: true },
+        ...data.alternatives.map((r) => ({ rec: r, isMain: false })),
+      ]);
+      const aiMsg: ChatMessage = { id: uid(), role: "assistant", text: "", data, feedbackGiven: {}, deckItems };
 
       if (isFirstMessage) {
         // Transition to chat only after result is ready
@@ -637,6 +653,9 @@ function ChatScreen({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [deckMode, setDeckMode] = useState(true);
+
+  const lastAsstMsgId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -674,6 +693,10 @@ function ChatScreen({
                   msg={msg}
                   isGuest={isGuest}
                   posters={posters}
+                  isLatest={msg.id === lastAsstMsgId}
+                  deckMode={deckMode}
+                  onViewAsList={() => setDeckMode(false)}
+                  onRefine={() => inputRef.current?.focus()}
                   onFeedback={(title, platform, sentiment) =>
                     onFeedback(msg.id, title, platform, sentiment)
                   }
@@ -770,25 +793,69 @@ function AssistantBubble({
   msg,
   isGuest,
   posters,
+  isLatest,
+  deckMode,
+  onViewAsList,
+  onRefine,
   onFeedback,
 }: {
   msg: ChatMessage;
   isGuest: boolean;
   posters: Record<string, string | null>;
+  isLatest: boolean;
+  deckMode: boolean;
+  onViewAsList: () => void;
+  onRefine: () => void;
   onFeedback: (title: string, platform: string, sentiment: FeedbackSentiment) => void;
 }) {
   const { data } = msg;
   if (!data) return null;
   const { main, alternatives } = data;
+
+  // Compact pastilla for previous turns
+  if (!isLatest) {
+    const likedTitles = Object.entries(msg.feedbackGiven ?? {})
+      .filter(([, s]) => s === "love" || s === "like")
+      .map(([title]) => title);
+    const total = 1 + alternatives.length;
+    return (
+      <div className="flex items-center gap-2 rounded-2xl rounded-tl-[4px] bg-white/60 px-3 py-2 text-[11px] text-muted-foreground/70 shadow-xs max-w-[92%]">
+        <span>Viste {total} {total === 1 ? "título" : "títulos"}</span>
+        {likedTitles.length > 0 && (
+          <>
+            <span>·</span>
+            <span className="text-pink-500">❤️ {likedTitles.join(", ")}</span>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // Swipe deck for latest response
+  if (deckMode && msg.deckItems) {
+    return (
+      <SwipeCardDeck
+        items={msg.deckItems}
+        posters={posters}
+        onSwipe={(item, direction) =>
+          onFeedback(item.rec.title, item.rec.platform, direction === "like" ? "like" : "dislike")
+        }
+        onWatchlist={(item) => onFeedback(item.rec.title, item.rec.platform, "watchlist")}
+        onViewAsList={onViewAsList}
+        onRefine={onRefine}
+      />
+    );
+  }
+
+  // List mode (fallback / "Ver como lista")
   const mainFeedback = msg.feedbackGiven?.[main.title] ?? null;
   const mainPoster = posters[main.title];
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Main recommendation card — Apple-style, shadow only */}
+      {/* Main recommendation card */}
       <div className="max-w-[92%] overflow-hidden rounded-2xl rounded-tl-[4px] bg-white shadow-card">
         <div className="flex">
-          {/* Poster */}
           <div
             className="relative h-[172px] w-[115px] shrink-0 overflow-hidden"
             style={!mainPoster ? { background: `${colorForPlatform(main.platform)}12` } : undefined}
@@ -804,7 +871,6 @@ function AssistantBubble({
             )}
           </div>
 
-          {/* Content */}
           <div className="flex flex-1 flex-col justify-between p-4">
             <div>
               <div className="mb-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5" style={{ background: `${colorForPlatform(main.platform)}14` }}>
@@ -844,19 +910,15 @@ function AssistantBubble({
         )}
       </div>
 
-      {/* Alternatives carousel */}
       {alternatives.length > 0 && (
         <div className="max-w-[92%]">
           <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">También podría ser</p>
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-            {alternatives.map((alt, i) => {
+            {alternatives.map((alt) => {
               const altPoster = posters[alt.title];
               const altFeedback = msg.feedbackGiven?.[alt.title] ?? null;
               return (
-                <div
-                  key={alt.title}
-                  className="flex-none w-[124px] overflow-hidden rounded-xl bg-white shadow-card"
-                >
+                <div key={alt.title} className="flex-none w-[124px] overflow-hidden rounded-xl bg-white shadow-card">
                   <div className="h-[78px] overflow-hidden" style={!altPoster ? { background: `${colorForPlatform(alt.platform)}10` } : undefined}>
                     {altPoster ? (
                       <img src={altPoster} alt={alt.title} className="h-full w-full object-cover" />
@@ -868,7 +930,6 @@ function AssistantBubble({
                       </div>
                     )}
                   </div>
-
                   <div className="p-2">
                     <p className="line-clamp-2 text-[11px] font-semibold leading-tight tracking-tight text-foreground">{alt.title}</p>
                     <div className="mt-1 flex items-center gap-1">
