@@ -3,6 +3,10 @@ import { Mic, MicOff } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// How long to wait after the last speech activity before auto-submitting.
+// 2.8s gives enough room for a slow, thoughtful speaker to pause mid-sentence.
+const SILENCE_MS = 2800;
+
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
@@ -22,54 +26,94 @@ function getCtor(): (new () => SpeechRecognitionLike) | null {
 
 export function VoiceOrb({
   onFinalTranscript,
+  onTranscriptChange,
   disabled = false,
   lang = "es-AR",
 }: {
   onFinalTranscript: (text: string) => void;
+  onTranscriptChange?: (text: string) => void;
   disabled?: boolean;
   lang?: string;
 }) {
   const [supported, setSupported] = useState(true);
   const [listening, setListening] = useState(false);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
+  const accRef = useRef(""); // accumulated final text across utterances
+  const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSupported(!!getCtor());
     return () => {
+      if (silenceTimer.current) clearTimeout(silenceTimer.current);
       try { recRef.current?.stop(); } catch { /* noop */ }
     };
   }, []);
+
+  const resetSilenceTimer = () => {
+    if (silenceTimer.current) clearTimeout(silenceTimer.current);
+    silenceTimer.current = setTimeout(() => {
+      // Silence detected — stop the recognition; onend will fire and submit.
+      try { recRef.current?.stop(); } catch { /* noop */ }
+    }, SILENCE_MS);
+  };
 
   const start = () => {
     const Ctor = getCtor();
     if (!Ctor) { setSupported(false); return; }
     const rec = new Ctor();
     rec.lang = lang;
-    rec.continuous = false;
-    rec.interimResults = false;
+    rec.continuous = true;       // keep listening through natural pauses
+    rec.interimResults = true;   // surface partial words immediately
+
+    accRef.current = "";
+
     rec.onresult = (e: any) => {
-      let final = "";
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        const r = e.results[i];
+        if (r.isFinal) {
+          accRef.current += (accRef.current ? " " : "") + r[0].transcript.trim();
+        } else {
+          interim += r[0].transcript;
+        }
       }
-      if (final.trim()) onFinalTranscript(final.trim());
+      const displayed = accRef.current + (interim ? " " + interim : "");
+      onTranscriptChange?.(displayed);
+      // Reset the silence countdown on every speech event.
+      resetSilenceTimer();
     };
+
     rec.onerror = (e: any) => {
+      if (silenceTimer.current) clearTimeout(silenceTimer.current);
       setListening(false);
+      onTranscriptChange?.("");
       if (e?.error === "not-allowed") toast.error("Permití el micrófono en el navegador.");
       else if (e?.error !== "aborted") toast.error("No se pudo escuchar. Intentá de nuevo.");
     };
-    rec.onend = () => setListening(false);
+
+    rec.onend = () => {
+      if (silenceTimer.current) clearTimeout(silenceTimer.current);
+      setListening(false);
+      onTranscriptChange?.("");
+      const final = accRef.current.trim();
+      accRef.current = "";
+      if (final) onFinalTranscript(final);
+    };
+
     recRef.current = rec;
-    try { rec.start(); setListening(true); } catch {
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
       setListening(false);
       toast.error("No se pudo iniciar el micrófono.");
     }
   };
 
   const stop = () => {
+    if (silenceTimer.current) clearTimeout(silenceTimer.current);
     try { recRef.current?.stop(); } catch { /* noop */ }
-    setListening(false);
+    // onend will fire and handle transcript submission
   };
 
   const toggle = () => {
@@ -121,7 +165,7 @@ export function VoiceOrb({
         }}
       />
 
-      {/* Ring mask (hides inner part of the gradient ring) */}
+      {/* Ring mask */}
       <span
         aria-hidden="true"
         className="absolute inset-[6px] rounded-full"

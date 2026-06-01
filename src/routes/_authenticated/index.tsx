@@ -208,8 +208,7 @@ function HomePage() {
     }));
 
     try {
-      // First message: minimum 1.5s on home so the orb stays visible while thinking
-      const apiPromise = recommendConversational({
+      const data = await recommendConversational({
         data: {
           messages: aiHistory,
           platforms: effectivePlatforms,
@@ -220,10 +219,6 @@ function HomePage() {
           profileSeed: isGuest ? seedForServer(readGuestSeed()) : undefined,
         },
       });
-      const delayPromise = isFirstMessage
-        ? new Promise<void>((r) => setTimeout(r, 1500))
-        : Promise.resolve();
-      const [data] = await Promise.all([apiPromise, delayPromise]);
 
       const aiMsg: ChatMessage = { id: uid(), role: "assistant", text: "", data, feedbackGiven: {} };
 
@@ -368,6 +363,7 @@ function HomeScreen({
   onDismissLoginNudge: () => void;
 }) {
   const [text, setText] = useState("");
+  const [liveTranscript, setLiveTranscript] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sugerencias contextuales (momento + clima) y recientes desde localStorage.
@@ -427,7 +423,8 @@ function HomeScreen({
           <PlatformOrbit />
           <div className="relative z-10">
             <VoiceOrb
-              onFinalTranscript={(t) => onSubmit(t)}
+              onFinalTranscript={(t) => { setLiveTranscript(""); onSubmit(t); }}
+              onTranscriptChange={setLiveTranscript}
               disabled={isLoading}
             />
           </div>
@@ -438,8 +435,10 @@ function HomeScreen({
           ¿Qué querés<br />ver hoy?
         </h1>
 
-        <p className="mt-4 text-[13px] text-muted-foreground">
-          {isLoading ? (
+        <p className="mt-4 min-h-[2.5rem] text-[13px] text-muted-foreground">
+          {liveTranscript ? (
+            <span className="italic text-foreground/80">{liveTranscript}</span>
+          ) : isLoading ? (
             <span className="inline-flex items-center gap-1.5 text-primary">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Buscando en todas tus plataformas…
