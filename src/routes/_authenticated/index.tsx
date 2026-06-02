@@ -403,26 +403,14 @@ function HomeScreen({
     onSelectedPlatformsChange(has ? selectedPlatforms.filter((x) => x !== p) : [...selectedPlatforms, p]);
   };
 
-  const MOOD_CHIPS = [
-    { label: "😌 Noche tranquila", query: "algo tranquilo para ver solo esta noche" },
-    { label: "💑 Para dos",        query: "algo para ver en pareja" },
-    { label: "👥 Con amigos",      query: "algo para ver con amigos, entretenido" },
-    { label: "🎭 Drama",           query: "drama intenso que te atrape" },
-    { label: "⚡ Acción",          query: "película de acción o thriller" },
-    { label: "😂 Reírme",          query: "comedia para reírme" },
-  ];
-
   return (
-    <section className="relative flex min-h-[calc(100vh-49px)] flex-col overflow-hidden animate-fade-in">
-
-      {/* Poster backdrop — fills bottom half, fades to bg at top */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-0 h-[55%]" aria-hidden>
-        <div className="absolute inset-0 z-10" style={{
-          background: "linear-gradient(to bottom, var(--background) 0%, oklch(from var(--background) l c h / 0.6) 40%, transparent 100%)"
-        }} />
-        <div className="opacity-50">
-          <PosterMarquee />
-        </div>
+    <section className="relative flex min-h-[calc(100vh-49px)] flex-col items-center justify-center overflow-hidden px-6 pb-40 pt-12 animate-fade-in">
+      {/* Subtle ambient gradient — barely perceptible */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div
+          className="absolute left-1/2 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/4 rounded-full"
+          style={{ background: "radial-gradient(circle, oklch(0.50 0.22 277 / 0.04) 0%, transparent 70%)" }}
+        />
       </div>
 
       {/* Login nudge */}
@@ -448,65 +436,43 @@ function HomeScreen({
         </div>
       )}
 
-      {/* Main content */}
-      <div className="relative z-10 flex flex-1 flex-col items-center px-6 pt-14 pb-10">
-
-        {/* Hero text */}
-        <div className="w-full max-w-md text-center">
-          <h1 className="font-serif text-[2.8rem] font-bold leading-[1.08] tracking-[-0.03em] sm:text-5xl">
-            <span className="text-foreground">Encontrá tu peli.</span>
-            <br />
-            <span style={{
-              background: "linear-gradient(90deg, oklch(0.52 0.22 277), oklch(0.58 0.22 330))",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}>
-              Encontrá tu match.
-            </span>
-          </h1>
-
-          <p className="mt-4 text-[13px] text-muted-foreground/70">
-            {isLoading ? (
-              <span className="inline-flex items-center gap-1.5 text-primary">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Buscando…
-              </span>
-            ) : liveTranscript ? (
-              <span className="italic text-foreground/80">{liveTranscript}</span>
-            ) : (
-              "Alguien cerca está eligiendo lo mismo."
-            )}
-          </p>
-        </div>
-
-        {/* Mood chips — primary CTAs */}
-        <div className="mt-10 w-full max-w-md">
-          <div className="grid grid-cols-3 gap-2">
-            {MOOD_CHIPS.map((chip) => (
-              <button
-                key={chip.label}
-                onClick={() => onSubmit(chip.query)}
-                disabled={isLoading}
-                className="rounded-2xl border border-black/[0.06] bg-white/90 px-3 py-3 text-[12px] font-medium text-foreground/80 shadow-xs backdrop-blur-sm transition-all hover:bg-white hover:shadow-card hover:text-foreground active:scale-[0.97] disabled:opacity-50"
-              >
-                {chip.label}
-              </button>
-            ))}
+      {/* Center content */}
+      <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
+        {/* Orb + orbiting platform logos */}
+        <div className="relative flex h-[300px] w-full items-center justify-center">
+          <PlatformOrbit />
+          <div className="relative z-10">
+            <VoiceOrb
+              onFinalTranscript={(t) => { setLiveTranscript(""); onSubmit(t); }}
+              onTranscriptChange={setLiveTranscript}
+              disabled={isLoading}
+            />
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="mt-8 flex w-full max-w-md items-center gap-3">
-          <div className="h-px flex-1 bg-black/[0.06]" />
-          <span className="text-[11px] text-muted-foreground/40">o buscá algo específico</span>
-          <div className="h-px flex-1 bg-black/[0.06]" />
-        </div>
+        {/* Headline */}
+        <h1 className="mt-2 font-serif text-[2.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl">
+          ¿Qué querés<br />ver hoy?
+        </h1>
 
-        {/* Search input */}
-        <div className="mt-4 w-full max-w-md">
+        <p className="mt-4 min-h-[2.5rem] text-[13px] text-muted-foreground">
+          {liveTranscript ? (
+            <span className="italic text-foreground/80">{liveTranscript}</span>
+          ) : isLoading ? (
+            <span className="inline-flex items-center gap-1.5 text-primary">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Buscando en todas tus plataformas…
+            </span>
+          ) : (
+            "Describilo con tus palabras. Te encontramos lo perfecto en todas tus plataformas."
+          )}
+        </p>
+
+        {/* Input — Apple search bar style */}
+        <div className="mt-7 w-full">
           <div className={cn(
-            "flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-card transition-all duration-200 focus-within:shadow-float",
+            "flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-card transition-all duration-200",
+            "focus-within:shadow-float",
           )}>
             <input
               ref={inputRef}
@@ -544,8 +510,8 @@ function HomeScreen({
           </div>
         </div>
 
-        {/* Platform filter */}
-        <div className="mt-3 w-full max-w-md">
+        {/* Platform filter — minimal chips */}
+        <div className="mt-4 w-full">
           <div className="flex items-center gap-2">
             <div className="flex flex-1 flex-wrap gap-1.5">
               {(PLATFORM_OPTIONS as Platform[]).map((p) => {
@@ -557,7 +523,9 @@ function HomeScreen({
                     style={active ? { color: colorForPlatform(p) } : undefined}
                     className={cn(
                       "inline-flex min-h-[24px] items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-all",
-                      active ? "bg-white shadow-xs" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+                      active
+                        ? "bg-white shadow-xs"
+                        : "text-muted-foreground/40 hover:text-muted-foreground/70",
                     )}
                   >
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
@@ -583,17 +551,46 @@ function HomeScreen({
           </div>
         </div>
 
-        {/* Recent searches */}
+        {/* Sugerencias contextuales — tarjetas tap-to-search */}
+        {suggestions.length > 0 && (
+          <div className="mt-7 w-full">
+            <div className="flex flex-wrap justify-center gap-2">
+              {suggestions.map((s) => (
+                <button
+                  key={s.label}
+                  onClick={() => onSubmit(s.query)}
+                  disabled={isLoading}
+                  className="rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[12px] font-medium text-foreground/75 shadow-xs transition-all hover:text-foreground hover:shadow-card disabled:opacity-50"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tus últimas búsquedas — reclickeables */}
         {recent.length > 0 && (
-          <div className="mt-6 w-full max-w-md text-left">
+          <div className="mt-6 w-full text-left">
             <div className="mb-2 flex items-center justify-between px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Recientes</span>
-              <button onClick={() => { clearRecentSearches(); setRecent([]); }} className="text-[10px] text-muted-foreground/40 hover:text-foreground">Limpiar</button>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                Tus últimas búsquedas
+              </span>
+              <button
+                onClick={() => { clearRecentSearches(); setRecent([]); }}
+                className="text-[10px] text-muted-foreground/40 transition-colors hover:text-foreground"
+              >
+                Limpiar
+              </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {recent.map((q) => (
-                <button key={q} onClick={() => onSubmit(q)} disabled={isLoading}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50">
+                <button
+                  key={q}
+                  onClick={() => onSubmit(q)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50"
+                >
                   <RotateCcw className="h-3 w-3 opacity-50" />
                   <span className="max-w-[160px] truncate">{q}</span>
                 </button>
@@ -602,16 +599,22 @@ function HomeScreen({
           </div>
         )}
 
-        {/* Watchlist */}
+        {/* Tu lista para ver — watchlist guardada */}
         {watchlist.length > 0 && (
-          <div className="mt-5 w-full max-w-md text-left">
+          <div className="mt-5 w-full text-left">
             <div className="mb-2 px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Tu lista</span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
+                Tu lista para ver
+              </span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {watchlist.slice(0, 8).map((title) => (
-                <button key={title} onClick={() => onSubmit(`contame más sobre ${title} y algo parecido`)} disabled={isLoading}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50">
+                <button
+                  key={title}
+                  onClick={() => onSubmit(`contame más sobre ${title} y algo parecido`)}
+                  disabled={isLoading}
+                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50"
+                >
                   <Bookmark className="h-3 w-3 opacity-50" />
                   <span className="max-w-[160px] truncate">{title}</span>
                 </button>
@@ -619,6 +622,11 @@ function HomeScreen({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Poster marquee — mood board at bottom, very subtle */}
+      <div className="absolute bottom-0 left-0 right-0 z-0 opacity-40">
+        <PosterMarquee />
       </div>
     </section>
   );
