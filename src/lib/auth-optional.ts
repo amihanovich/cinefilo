@@ -30,3 +30,11 @@ export async function getOptionalUser(): Promise<
     return null;
   }
 }
+
+export async function requireAuth(): Promise<
+  { userId: string; supabase: ReturnType<typeof createClient<Database>> }
+> {
+  const user = await getOptionalUser();
+  if (!user) throw new Error("Se requiere autenticación.");
+  return user;
+}

@@ -104,27 +104,90 @@ export type Database = {
       profiles: {
         Row: {
           age_bracket: string | null
+          avatar_color: string
           created_at: string
           default_platforms: string[]
+          display_name: string | null
           id: string
           seed_loved: string[]
           updated_at: string
         }
         Insert: {
           age_bracket?: string | null
+          avatar_color?: string
           created_at?: string
           default_platforms?: string[]
+          display_name?: string | null
           id: string
           seed_loved?: string[]
           updated_at?: string
         }
         Update: {
           age_bracket?: string | null
+          avatar_color?: string
           created_at?: string
           default_platforms?: string[]
+          display_name?: string | null
           id?: string
           seed_loved?: string[]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      social_matches: {
+        Row: {
+          id: string
+          matched_at: string
+          platform: string
+          title: string
+          user_a: string
+          user_b: string
+        }
+        Insert: {
+          id?: string
+          matched_at?: string
+          platform: string
+          title: string
+          user_a: string
+          user_b: string
+        }
+        Update: {
+          id?: string
+          matched_at?: string
+          platform?: string
+          title?: string
+          user_a?: string
+          user_b?: string
+        }
+        Relationships: []
+      }
+      user_presence: {
+        Row: {
+          avatar_color: string
+          display_name: string
+          is_visible: boolean
+          last_seen: string
+          lat: number
+          lng: number
+          user_id: string
+        }
+        Insert: {
+          avatar_color?: string
+          display_name: string
+          is_visible?: boolean
+          last_seen?: string
+          lat: number
+          lng: number
+          user_id: string
+        }
+        Update: {
+          avatar_color?: string
+          display_name?: string
+          is_visible?: boolean
+          last_seen?: string
+          lat?: number
+          lng?: number
+          user_id?: string
         }
         Relationships: []
       }

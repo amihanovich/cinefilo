@@ -16,6 +16,10 @@ import {
 } from "lucide-react";
 import { SwipeCardDeck } from "@/components/SwipeCardDeck";
 import type { SwipeItem } from "@/components/SwipeCardDeck";
+import { SocialModeToggle } from "@/components/SocialModeToggle";
+import { SocialMatchOverlay } from "@/components/SocialMatchOverlay";
+import { findNearbyMatch } from "@/lib/social.functions";
+import type { SocialMatchRow } from "@/lib/social.functions";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -329,6 +333,7 @@ function HomePage() {
           messages={messages}
           isLoading={isLoading}
           isGuest={isGuest}
+          session={session}
           posters={posters}
           onSubmit={submit}
           onFeedback={handleFeedback}
@@ -632,6 +637,7 @@ function ChatScreen({
   messages,
   isLoading,
   isGuest,
+  session,
   posters,
   onSubmit,
   onFeedback,
@@ -640,6 +646,7 @@ function ChatScreen({
   messages: ChatMessage[];
   isLoading: boolean;
   isGuest: boolean;
+  session: Session | null;
   posters: Record<string, string | null>;
   onSubmit: (text: string) => void;
   onFeedback: (msgId: string, title: string, platform: string, sentiment: FeedbackSentiment) => void;
@@ -648,15 +655,77 @@ function ChatScreen({
   const endRef = useRef<HTMLDivElement>(null);
   const [deckMode, setDeckMode] = useState(true);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [socialMode, setSocialMode] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [socialMatch, setSocialMatch] = useState<SocialMatchRow | null>(null);
 
   const lastAsstMsgId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
+
+  // Supabase Realtime: listen for incoming social matches where I'm user_b
+  useEffect(() => {
+    if (!socialMode || !session) return;
+    const channel = supabase
+      .channel("social_matches_incoming")
+      .on(
+        "postgres_changes" as Parameters<ReturnType<typeof supabase.channel>["on"]>[0],
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "social_matches",
+          filter: `user_b=eq.${session.user.id}`,
+        },
+        async (payload: { new: Record<string, unknown> }) => {
+          const row = payload.new;
+          // Fetch the other person's presence info
+          const { data: presence } = await supabase
+            .from("user_presence")
+            .select("display_name, avatar_color")
+            .eq("user_id", row.user_a as string)
+            .single();
+          setSocialMatch({
+            ...(row as unknown as SocialMatchRow),
+            other_display_name: presence?.display_name ?? "Alguien",
+            other_avatar_color: presence?.avatar_color ?? "#6366f1",
+          });
+        },
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [socialMode, session]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Wrap onFeedback to trigger social match check on likes
+  const handleFeedbackWithSocial = async (
+    msgId: string,
+    title: string,
+    platform: string,
+    sentiment: FeedbackSentiment,
+  ) => {
+    onFeedback(msgId, title, platform, sentiment);
+    if (sentiment === "like" && socialMode && userLocation) {
+      try {
+        const match = await findNearbyMatch({
+          data: { title, platform, lat: userLocation.lat, lng: userLocation.lng },
+        });
+        if (match) setSocialMatch(match);
+      } catch { /* noop — social is best-effort */ }
+    }
+  };
+
   return (
     <section className="mx-auto flex max-w-2xl flex-col px-4 pb-8 pt-6 sm:px-6 animate-fade-in">
+      {/* Social match overlay */}
+      {socialMatch && (
+        <SocialMatchOverlay
+          match={socialMatch}
+          poster={posters[socialMatch.title] ?? null}
+          onClose={() => setSocialMatch(null)}
+        />
+      )}
+
       {/* Chat window */}
       <div className="overflow-hidden rounded-3xl bg-white shadow-float">
         {/* Header */}
@@ -687,7 +756,7 @@ function ChatScreen({
                   deckMode={deckMode}
                   onViewAsList={() => setDeckMode(false)}
                   onFeedback={(title, platform, sentiment) =>
-                    onFeedback(msg.id, title, platform, sentiment)}
+                    handleFeedbackWithSocial(msg.id, title, platform, sentiment)}
                 />
               ),
             )}
@@ -728,6 +797,17 @@ function ChatScreen({
           }}
         />
       </div>
+
+      {/* Social mode toggle — only for logged-in users */}
+      {!isGuest && (
+        <div className="mt-3 flex justify-center">
+          <SocialModeToggle
+            active={socialMode}
+            onActivate={(loc) => { setSocialMode(true); setUserLocation(loc); }}
+            onDeactivate={() => { setSocialMode(false); setUserLocation(null); }}
+          />
+        </div>
+      )}
 
       {isGuest && (
         <p className="mt-4 text-center text-[11px] text-muted-foreground/60">
