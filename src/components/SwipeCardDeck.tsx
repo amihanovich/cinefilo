@@ -111,13 +111,22 @@ export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsLi
 
   let topStyle: React.CSSProperties;
   if (swipingOut === "right") {
-    topStyle = { transform: "translateX(130%) rotate(25deg)", transition: "transform 0.35s ease", zIndex: 10 };
+    topStyle = {
+      transform: "translateX(130%) rotate(20deg)",
+      transition: "transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+      zIndex: 10,
+    };
   } else if (swipingOut === "left") {
-    topStyle = { transform: "translateX(-130%) rotate(-25deg)", transition: "transform 0.35s ease", zIndex: 10 };
+    topStyle = {
+      opacity: 0,
+      transform: "scale(0.82)",
+      transition: "opacity 0.28s ease, transform 0.28s ease",
+      zIndex: 10,
+    };
   } else {
     topStyle = {
       transform: `translateX(${dragX}px) rotate(${rotation}deg)`,
-      transition: isDragging ? "none" : "transform 0.3s ease",
+      transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
       zIndex: 10,
       cursor: isDragging ? "grabbing" : "grab",
     };
@@ -150,6 +159,30 @@ export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsLi
 
         {/* Card stack container */}
         <div className="relative h-[460px] w-full select-none">
+          {/* Liked pile — builds up in top-right corner */}
+          {likedItems.length > 0 && (
+            <div className="pointer-events-none absolute right-1 top-1 z-20 flex flex-col items-center gap-1.5">
+              <div className="relative h-14 w-10">
+                {likedItems.slice(-4).map((item, i, arr) => (
+                  <div
+                    key={`pile-${item.rec.title}`}
+                    className="absolute inset-0 rounded-xl"
+                    style={{
+                      background: colorForPlatform(item.rec.platform as never),
+                      transform: `rotate(${(i - (arr.length - 1) / 2) * 9}deg)`,
+                      zIndex: i,
+                      opacity: 0.45 + i * 0.18,
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                    }}
+                  />
+                ))}
+              </div>
+              <span className="rounded-full bg-pink-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-md">
+                ♥ {likedItems.length}
+              </span>
+            </div>
+          )}
+
           {/* Background cards */}
           {stack.slice(1, 3).map((item, idx) => (
             <div
@@ -175,7 +208,11 @@ export function SwipeCardDeck({ items, posters, onSwipe, onWatchlist, onViewAsLi
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
-              onTransitionEnd={() => { if (swipingOut) popStack(); }}
+              onTransitionEnd={(e) => {
+                if (!swipingOut) return;
+                if (swipingOut === "left" && e.propertyName === "opacity") popStack();
+                if (swipingOut === "right" && e.propertyName === "transform") popStack();
+              }}
             >
               {/* Direction badges */}
               {showLike && (
