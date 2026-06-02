@@ -170,7 +170,7 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-haiku-4-5-20251001");
+    const model = provider("claude-sonnet-4-5");
 
     const fmt = (v: string | null) => (v ?? "Elegí por mí (decide tú)");
 
@@ -291,7 +291,7 @@ export const recommendFromText = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-haiku-4-5-20251001");
+    const model = provider("claude-sonnet-4-5");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -406,7 +406,7 @@ export const recommendConversational = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-haiku-4-5-20251001");
+    const model = provider("claude-sonnet-4-5");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -513,7 +513,7 @@ export const inferMomentFilters = createServerFn({ method: "POST" })
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-haiku-4-5-20251001");
+    const model = provider("claude-sonnet-4-5");
 
     const prompt = `Eres un asistente que traduce la descripción de una situación recurrente de ver streaming a filtros estructurados.
 
