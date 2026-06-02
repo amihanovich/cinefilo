@@ -18,8 +18,8 @@ import { SwipeCardDeck } from "@/components/SwipeCardDeck";
 import type { SwipeItem } from "@/components/SwipeCardDeck";
 import { SocialModeToggle } from "@/components/SocialModeToggle";
 import { SocialMatchOverlay } from "@/components/SocialMatchOverlay";
-import { findNearbyMatch } from "@/lib/social.functions";
-import type { SocialMatchRow } from "@/lib/social.functions";
+import { findNearbyMatch, updatePresenceMood } from "@/lib/social.functions";
+import type { SocialMatchRow, MoodFilters } from "@/lib/social.functions";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -658,6 +658,48 @@ function ChatScreen({
   const [socialMode, setSocialMode] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [socialMatch, setSocialMatch] = useState<SocialMatchRow | null>(null);
+  const [moodBannerDismissed, setMoodBannerDismissed] = useState(false);
+  const [socialPromptOpen, setSocialPromptOpen] = useState(false);
+  const prevMoodKeyRef = useRef<string>("");
+
+  // Extract mood filters from the latest assistant message
+  const activeMoodFilters = useMemo((): MoodFilters | null => {
+    const last = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!last?.data?.filters) return null;
+    const f = last.data.filters;
+    if (!f.mood && !f.company && !f.attention && !f.type) return null;
+    return { mood: f.mood ?? null, company: f.company ?? null, attention: f.attention ?? null, type: f.type ?? null };
+  }, [messages]);
+
+  // Reset banner when mood changes (new search)
+  useEffect(() => {
+    const key = `${activeMoodFilters?.mood}|${activeMoodFilters?.company}`;
+    if (key !== prevMoodKeyRef.current) {
+      prevMoodKeyRef.current = key;
+      setMoodBannerDismissed(false);
+    }
+  }, [activeMoodFilters]);
+
+  // When social mode is active and mood changes, re-upsert presence with updated mood
+  const prevMoodRef = useRef<MoodFilters | null>(null);
+  useEffect(() => {
+    if (!socialMode || !userLocation || !activeMoodFilters) return;
+    const prev = prevMoodRef.current;
+    const changed = !prev ||
+      prev.mood !== activeMoodFilters.mood ||
+      prev.company !== activeMoodFilters.company ||
+      prev.attention !== activeMoodFilters.attention;
+    if (!changed) return;
+    prevMoodRef.current = activeMoodFilters;
+    void updatePresenceMood({
+      data: {
+        moodFilter: activeMoodFilters.mood,
+        companyFilter: activeMoodFilters.company,
+        attentionFilter: activeMoodFilters.attention,
+        typeFilter: activeMoodFilters.type,
+      },
+    }).catch(() => {});
+  }, [socialMode, userLocation, activeMoodFilters]);
 
   const lastAsstMsgId = [...messages].reverse().find((m) => m.role === "assistant")?.id;
 
@@ -708,7 +750,7 @@ function ChatScreen({
     if (sentiment === "like" && socialMode && userLocation) {
       try {
         const match = await findNearbyMatch({
-          data: { title, platform, lat: userLocation.lat, lng: userLocation.lng },
+          data: { title, platform, lat: userLocation.lat, lng: userLocation.lng, moodFilters: activeMoodFilters ?? undefined },
         });
         if (match) setSocialMatch(match);
       } catch { /* noop — social is best-effort */ }
@@ -798,13 +840,25 @@ function ChatScreen({
         />
       </div>
 
+      {/* Mood match banner — show when there's a specific mood detected and social is off */}
+      {!isGuest && !socialMode && !moodBannerDismissed && activeMoodFilters && (
+        <MoodMatchBanner
+          moodFilters={activeMoodFilters}
+          onActivate={() => { setMoodBannerDismissed(true); setSocialPromptOpen(true); }}
+          onDismiss={() => setMoodBannerDismissed(true)}
+        />
+      )}
+
       {/* Social mode toggle — only for logged-in users */}
       {!isGuest && (
         <div className="mt-3 flex justify-center">
           <SocialModeToggle
             active={socialMode}
+            moodFilters={activeMoodFilters}
+            forcePrompt={socialPromptOpen}
+            onPromptShown={() => setSocialPromptOpen(false)}
             onActivate={(loc) => { setSocialMode(true); setUserLocation(loc); }}
-            onDeactivate={() => { setSocialMode(false); setUserLocation(null); }}
+            onDeactivate={() => { setSocialMode(false); setUserLocation(null); prevMoodRef.current = null; }}
           />
         </div>
       )}
@@ -1072,6 +1126,61 @@ function CompactFeedback({ feedback, onWatchlist, onSeen, onDislike }: {
       <button onClick={onDislike} title="No me gusta" className="rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive">
         <ThumbsDown className="h-3 w-3" />
       </button>
+    </div>
+  );
+}
+
+/* ===================== MOOD MATCH BANNER ===================== */
+
+function moodLabel(f: MoodFilters): string {
+  const parts: string[] = [];
+  if (f.company === "Solo") parts.push("noche en solitario");
+  else if (f.company === "En pareja") parts.push("plan para dos");
+  else if (f.company === "Familia con niños") parts.push("noche en familia");
+  else if (f.company === "Con amigos") parts.push("plan con amigos");
+  if (f.mood === "Algo liviano" || f.mood === "Comedia") parts.push("algo liviano");
+  else if (f.mood === "Épico para relajar") parts.push("modo relajado");
+  else if (f.mood === "Drama") parts.push("drama");
+  else if (f.mood === "Suspenso") parts.push("suspenso");
+  if (f.attention === "De fondo" || f.attention === "Comfort watch") parts.push("de fondo");
+  return parts.length > 0 ? parts.join(" · ") : "mood específico";
+}
+
+function MoodMatchBanner({
+  moodFilters,
+  onActivate,
+  onDismiss,
+}: {
+  moodFilters: MoodFilters;
+  onActivate: () => void;
+  onDismiss: () => void;
+}) {
+  const label = moodLabel(moodFilters);
+  return (
+    <div className="mt-4 w-full max-w-sm mx-auto animate-fade-in">
+      <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+        <span className="mt-0.5 text-base">💜</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[12px] font-semibold text-foreground leading-snug">
+            ¿Alguien cerca está en el mismo plan?
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground capitalize">{label}</p>
+        </div>
+        <div className="flex flex-col gap-1 shrink-0">
+          <button
+            onClick={onActivate}
+            className="rounded-xl bg-foreground px-3 py-1 text-[11px] font-semibold text-background"
+          >
+            Activar
+          </button>
+          <button
+            onClick={onDismiss}
+            className="text-center text-[10px] text-muted-foreground/60 hover:text-muted-foreground"
+          >
+            No, gracias
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

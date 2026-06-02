@@ -163,30 +163,42 @@ export type Database = {
       }
       user_presence: {
         Row: {
+          attention_filter: string | null
           avatar_color: string
+          company_filter: string | null
           display_name: string
           is_visible: boolean
           last_seen: string
           lat: number
           lng: number
+          mood_filter: string | null
+          type_filter: string | null
           user_id: string
         }
         Insert: {
+          attention_filter?: string | null
           avatar_color?: string
+          company_filter?: string | null
           display_name: string
           is_visible?: boolean
           last_seen?: string
           lat: number
           lng: number
+          mood_filter?: string | null
+          type_filter?: string | null
           user_id: string
         }
         Update: {
+          attention_filter?: string | null
           avatar_color?: string
+          company_filter?: string | null
           display_name?: string
           is_visible?: boolean
           last_seen?: string
           lat?: number
           lng?: number
+          mood_filter?: string | null
+          type_filter?: string | null
           user_id?: string
         }
         Relationships: []

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Users, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { upsertPresence, removePresence, saveDisplayName } from "@/lib/social.functions";
+import type { MoodFilters } from "@/lib/social.functions";
 import { toast } from "sonner";
 
 const AVATAR_COLORS = [
@@ -10,13 +11,23 @@ const AVATAR_COLORS = [
 
 type Props = {
   active: boolean;
+  moodFilters?: MoodFilters | null;
+  forcePrompt?: boolean;
+  onPromptShown?: () => void;
   onActivate: (location: { lat: number; lng: number }) => void;
   onDeactivate: () => void;
 };
 
-export function SocialModeToggle({ active, onActivate, onDeactivate }: Props) {
+export function SocialModeToggle({ active, moodFilters, forcePrompt, onPromptShown, onActivate, onDeactivate }: Props) {
   const [loading, setLoading] = useState(false);
   const [showNamePrompt, setShowNamePrompt] = useState(false);
+
+  useEffect(() => {
+    if (forcePrompt && !active) {
+      setShowNamePrompt(true);
+      onPromptShown?.();
+    }
+  }, [forcePrompt, active, onPromptShown]);
   const [displayName, setDisplayName] = useState("");
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0]);
 
@@ -40,7 +51,18 @@ export function SocialModeToggle({ active, onActivate, onDeactivate }: Props) {
       const lat = parseFloat(coords.latitude.toFixed(2));
       const lng = parseFloat(coords.longitude.toFixed(2));
       await saveDisplayName({ data: { displayName: displayName.trim(), avatarColor } });
-      await upsertPresence({ data: { lat, lng, displayName: displayName.trim(), avatarColor } });
+      await upsertPresence({
+        data: {
+          lat,
+          lng,
+          displayName: displayName.trim(),
+          avatarColor,
+          moodFilter: moodFilters?.mood ?? null,
+          companyFilter: moodFilters?.company ?? null,
+          attentionFilter: moodFilters?.attention ?? null,
+          typeFilter: moodFilters?.type ?? null,
+        },
+      });
       setShowNamePrompt(false);
       onActivate({ lat, lng });
       toast.success("Modo Social activado — buscando matches cerca tuyo");
