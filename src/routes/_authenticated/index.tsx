@@ -18,6 +18,7 @@ import { SwipeCardDeck } from "@/components/SwipeCardDeck";
 import type { SwipeItem } from "@/components/SwipeCardDeck";
 import { SocialModeToggle } from "@/components/SocialModeToggle";
 import { SocialMatchOverlay } from "@/components/SocialMatchOverlay";
+import { NearbyUsersStrip } from "@/components/NearbyUsersStrip";
 import { findNearbyMatch, updatePresenceMood } from "@/lib/social.functions";
 import type { SocialMatchRow, MoodFilters } from "@/lib/social.functions";
 import type { Session } from "@supabase/supabase-js";
@@ -861,6 +862,14 @@ function ChatScreen({
             onDeactivate={() => { setSocialMode(false); setUserLocation(null); prevMoodRef.current = null; }}
           />
         </div>
+      )}
+
+      {/* Nearby users strip — visible when social mode is active */}
+      {socialMode && userLocation && (
+        <NearbyUsersStrip
+          location={userLocation}
+          activeMoodFilters={activeMoodFilters}
+        />
       )}
 
       {isGuest && (

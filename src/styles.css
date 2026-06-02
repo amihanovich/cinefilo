@@ -155,6 +155,13 @@
   to   { transform: scale(1);   opacity: 1; }
 }
 
+@keyframes slide-up-fade {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
 @layer utilities {
   .animate-platform-ticker { animation: platform-ticker 28s linear infinite; }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }

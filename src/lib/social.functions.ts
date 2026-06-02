@@ -13,6 +13,15 @@ export type SocialMatchRow = {
   other_avatar_color: string;
 };
 
+export type NearbyUser = {
+  user_id: string;
+  display_name: string;
+  avatar_color: string;
+  mood_filter: string | null;
+  company_filter: string | null;
+  attention_filter: string | null;
+};
+
 export type MoodFilters = {
   mood: string | null;
   company: string | null;
@@ -149,6 +158,32 @@ export const findNearbyMatch = createServerFn({ method: "POST" })
       other_display_name: matchedPresence.display_name,
       other_avatar_color: matchedPresence.avatar_color,
     };
+  });
+
+/* ── getNearbyUsers ─────────────────────────────────────────────────────── */
+// Returns up to 10 nearby visible users for the "who's around" strip.
+
+export const getNearbyUsers = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z.object({ lat: z.number(), lng: z.number() }).parse(data),
+  )
+  .handler(async ({ data }): Promise<NearbyUser[]> => {
+    const { supabase, userId } = await requireAuth();
+
+    const { data: rows } = await supabase
+      .from("user_presence")
+      .select("user_id, display_name, avatar_color, lat, lng, mood_filter, company_filter, attention_filter")
+      .neq("user_id", userId)
+      .eq("is_visible", true);
+
+    if (!rows) return [];
+
+    return rows
+      .filter((r) => Math.abs(r.lat - data.lat) < 0.09 && Math.abs(r.lng - data.lng) < 0.09)
+      .slice(0, 10)
+      .map(({ user_id, display_name, avatar_color, mood_filter, company_filter, attention_filter }) => ({
+        user_id, display_name, avatar_color, mood_filter, company_filter, attention_filter,
+      }));
   });
 
 /* ── findNearbyMoodCount ────────────────────────────────────────────────── */
