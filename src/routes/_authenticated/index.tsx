@@ -431,15 +431,15 @@ function HomeScreen({
         </div>
       )}
 
-      {/* Center content */}
-      <div className="relative z-10 w-full max-w-lg">
+      {/* Center content — frosted glass panel */}
+      <div className="relative z-10 w-full max-w-lg rounded-3xl bg-background/80 px-8 py-8 shadow-float backdrop-blur-md ring-1 ring-black/[0.05]">
 
         {/* Wordmark + tagline */}
         <div className="mb-6 text-center">
-          <span className="inline-flex items-center gap-2 text-[21px] font-bold tracking-tight text-foreground/70">
+          <span className="inline-flex items-center gap-2 text-[21px] font-bold tracking-tight text-foreground">
             Cinéfilo
           </span>
-          <p className="mt-1.5 text-[13px] text-muted-foreground/60">
+          <p className="mt-1.5 text-[13px] text-muted-foreground/75">
             Describí lo que querés ver y te recomendamos qué mirar hoy.
           </p>
         </div>
@@ -541,7 +541,7 @@ function HomeScreen({
                   style={active ? { color: colorForPlatform(p) } : undefined}
                   className={cn(
                     "inline-flex min-h-[24px] items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-all",
-                    active ? "bg-white shadow-xs" : "text-muted-foreground/35 hover:text-muted-foreground/70",
+                    active ? "bg-white shadow-xs" : "text-muted-foreground/55 hover:text-muted-foreground/80",
                   )}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
