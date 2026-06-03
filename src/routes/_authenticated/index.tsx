@@ -13,6 +13,7 @@ import {
   ExternalLink,
   MapPin,
   RotateCcw,
+  X,
 } from "lucide-react";
 import { SwipeCardDeck } from "@/components/SwipeCardDeck";
 import type { SwipeItem } from "@/components/SwipeCardDeck";
@@ -1298,48 +1299,152 @@ function FloatingLikedPile({
   items: SwipeItem[];
   posters: Record<string, string | null>;
 }) {
-  const last4 = items.slice(-4);
+  const [detailItem, setDetailItem] = useState<SwipeItem | null>(null);
+
   return (
-    <div className="flex flex-col items-center gap-2">
-      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-        Guardadas
-      </p>
-      {/* Fanned stack */}
-      <div className="relative" style={{ width: 68, height: 92 }}>
-        {last4.map((item, i, arr) => {
-          const poster = posters[item.rec.title] ?? null;
-          const color = colorForPlatform(item.rec.platform as never);
-          const isTop = i === arr.length - 1;
-          return (
-            <div
-              key={item.rec.title}
-              className="absolute inset-0 overflow-hidden rounded-xl shadow-md"
-              style={{
-                transform: `rotate(${(i - (arr.length - 1) / 2) * 9}deg)`,
-                zIndex: i,
-                animation: isTop ? "pile-card-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both" : undefined,
-              }}
-            >
-              {poster ? (
-                <img src={poster} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="h-full w-full" style={{ background: color }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* Count badge */}
-      <span className="rounded-full bg-pink-500 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
-        ♥ {items.length}
-      </span>
-      {/* Last two titles */}
-      <div className="flex max-w-[84px] flex-col items-center gap-0.5">
-        {items.slice(-2).reverse().map((item) => (
-          <p key={item.rec.title} className="max-w-full truncate text-[9px] text-muted-foreground/50">
-            {item.rec.title}
+    <>
+      <div className="flex w-[108px] flex-col gap-2">
+        <div className="flex items-center justify-between px-0.5">
+          <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+            Guardadas
           </p>
-        ))}
+          <span className="rounded-full bg-pink-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
+            ♥ {items.length}
+          </span>
+        </div>
+        <div className="flex max-h-[58vh] flex-col gap-2 overflow-y-auto scrollbar-none">
+          {items.map((item, i) => (
+            <LikedThumbnail
+              key={item.rec.title}
+              item={item}
+              poster={posters[item.rec.title] ?? null}
+              isNew={i === items.length - 1}
+              onDetail={() => setDetailItem(item)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {detailItem && (
+        <LikedDetailModal
+          item={detailItem}
+          poster={posters[detailItem.rec.title] ?? null}
+          onClose={() => setDetailItem(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function LikedThumbnail({
+  item,
+  poster,
+  isNew,
+  onDetail,
+}: {
+  item: SwipeItem;
+  poster: string | null;
+  isNew: boolean;
+  onDetail: () => void;
+}) {
+  const { rec } = item;
+  const color = colorForPlatform(rec.platform as never);
+  return (
+    <button
+      onClick={onDetail}
+      className="group relative h-[142px] w-full overflow-hidden rounded-xl shadow-card transition-transform hover:scale-[1.03] active:scale-[0.98]"
+      style={isNew ? { animation: "pile-card-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
+    >
+      {poster ? (
+        <img src={poster} alt={rec.title} className="h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center" style={{ background: `${color}18` }}>
+          <span className="text-3xl font-black" style={{ color, opacity: 0.18 }}>{rec.title.charAt(0)}</span>
+        </div>
+      )}
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+      {/* Eye icon on hover */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="rounded-full bg-black/40 p-1.5 backdrop-blur-sm">
+          <Eye className="h-4 w-4 text-white" />
+        </div>
+      </div>
+      {/* Title + platform at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 px-2 pb-2">
+        <p className="line-clamp-2 text-[9px] font-semibold leading-tight text-white">{rec.title}</p>
+        <div className="mt-0.5 flex items-center gap-0.5">
+          <span className="h-1 w-1 rounded-full" style={{ background: color }} />
+          <span className="text-[8px] text-white/70">{rec.platform}</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function LikedDetailModal({
+  item,
+  poster,
+  onClose,
+}: {
+  item: SwipeItem;
+  poster: string | null;
+  onClose: () => void;
+}) {
+  const { rec } = item;
+  const color = colorForPlatform(rec.platform as never);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
+      <div
+        className="relative z-10 w-full max-w-[320px] overflow-hidden rounded-3xl bg-white shadow-float animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Poster */}
+        <div className="relative h-[260px]">
+          {poster ? (
+            <img src={poster} alt={rec.title} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center" style={{ background: `${color}14` }}>
+              <span className="text-7xl font-black" style={{ color, opacity: 0.12 }}>{rec.title.charAt(0)}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          {/* Platform badge */}
+          <div className="absolute bottom-3 left-3">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+              <span className="text-[11px] font-semibold text-white">{rec.platform}</span>
+            </div>
+          </div>
+        </div>
+        {/* Content */}
+        <div className="p-5">
+          <h3 className="text-[18px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
+          <p className="mt-1 text-[12px] text-muted-foreground/60">{rec.duration} · {rec.type}</p>
+          <p className="mt-3 text-[13px] leading-relaxed text-foreground/70">{rec.reason}</p>
+          <a
+            href={deepLinkFor(rec.platform, rec.title)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-85"
+            style={{ background: color }}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Ver en {rec.platform}
+          </a>
+        </div>
       </div>
     </div>
   );
