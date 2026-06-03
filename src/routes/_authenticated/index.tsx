@@ -1107,61 +1107,6 @@ function CompactFeedback({ feedback, onWatchlist, onSeen, onDislike }: {
   );
 }
 
-/* ===================== FLOATING LIKED PILE ===================== */
-
-function FloatingLikedPile({
-  items,
-  posters,
-}: {
-  items: SwipeItem[];
-  posters: Record<string, string | null>;
-}) {
-  const last4 = items.slice(-4);
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-        Guardadas
-      </p>
-      {/* Fanned stack */}
-      <div className="relative" style={{ width: 64, height: 88 }}>
-        {last4.map((item, i, arr) => {
-          const poster = posters[item.rec.title] ?? null;
-          const color = colorForPlatform(item.rec.platform as never);
-          return (
-            <div
-              key={item.rec.title}
-              className="absolute inset-0 overflow-hidden rounded-xl shadow-md"
-              style={{
-                transform: `rotate(${(i - (arr.length - 1) / 2) * 9}deg)`,
-                zIndex: i,
-                animation: i === arr.length - 1 ? "pile-card-in 0.3s cubic-bezier(0.34,1.56,0.64,1) both" : undefined,
-              }}
-            >
-              {poster ? (
-                <img src={poster} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <div className="h-full w-full" style={{ background: color }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* Count badge */}
-      <span className="rounded-full bg-pink-500 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
-        ♥ {items.length}
-      </span>
-      {/* Titles of last 2 */}
-      <div className="flex flex-col items-center gap-0.5 max-w-[80px]">
-        {items.slice(-2).reverse().map((item) => (
-          <p key={item.rec.title} className="truncate text-[9px] text-muted-foreground/50 max-w-full">
-            {item.rec.title}
-          </p>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ===================== MOOD MATCH BANNER ===================== */
 
 function moodLabel(f: MoodFilters): string {
