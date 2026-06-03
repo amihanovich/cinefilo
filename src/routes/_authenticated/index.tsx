@@ -435,8 +435,8 @@ function HomeScreen({
       <div className="relative z-10 w-full max-w-lg">
 
         {/* Wordmark */}
-        <div className="mb-8 text-center">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40">
+        <div className="mb-6 text-center">
+          <span className="inline-flex items-center gap-2 text-[21px] font-bold tracking-tight text-foreground/70">
             Cinéfilo
           </span>
         </div>
