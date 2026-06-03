@@ -598,6 +598,21 @@ function ChatScreen({
   const [moodBannerDismissed, setMoodBannerDismissed] = useState(false);
   const [socialPromptOpen, setSocialPromptOpen] = useState(false);
   const prevMoodKeyRef = useRef<string>("");
+  const [swipeLiked, setSwipeLiked] = useState<SwipeItem[]>([]);
+
+  const handleSwipeLike = (item: SwipeItem) => {
+    setSwipeLiked((prev) => [...prev, item]);
+  };
+
+  const handleAskToChoose = (liked: SwipeItem[]) => {
+    const titles = liked.map((i) => i.rec.title).join(", ");
+    onSubmit(`Guardé estas opciones: ${titles}. Ayudame a elegir cuál ver hoy — haceme las preguntas que necesites para afinar.`);
+  };
+
+  const handleNewSearch = () => {
+    setSwipeLiked([]);
+    onNewSearch();
+  };
 
   // Extract mood filters from the latest assistant message
   const activeMoodFilters = useMemo((): MoodFilters | null => {
@@ -695,7 +710,7 @@ function ChatScreen({
   };
 
   return (
-    <section className="mx-auto flex max-w-2xl flex-col px-4 pb-8 pt-6 sm:px-6 animate-fade-in">
+    <section className="relative mx-auto flex max-w-2xl flex-col px-4 pb-8 pt-6 sm:px-6 animate-fade-in">
       {/* Social match overlay */}
       {socialMatch && (
         <SocialMatchOverlay
@@ -711,7 +726,7 @@ function ChatScreen({
         <div className="flex items-center justify-between border-b border-black/[0.05] px-6 py-4">
           <span className="text-[21px] font-semibold tracking-tight text-foreground">Cinéfilo</span>
           <button
-            onClick={onNewSearch}
+            onClick={handleNewSearch}
             className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-muted-foreground/60 transition-all hover:text-foreground"
           >
             <RefreshCw className="h-3 w-3" />
@@ -736,6 +751,8 @@ function ChatScreen({
                   onViewAsList={() => setDeckMode(false)}
                   onFeedback={(title, platform, sentiment) =>
                     handleFeedbackWithSocial(msg.id, title, platform, sentiment)}
+                  onLike={handleSwipeLike}
+                  onAskForHelp={handleAskToChoose}
                 />
               ),
             )}
@@ -753,6 +770,16 @@ function ChatScreen({
           <div ref={endRef} />
         </div>
       </div>
+
+      {/* Liked pile — floats to the right of the chat window on lg screens */}
+      {swipeLiked.length > 0 && (
+        <div
+          className="pointer-events-none absolute right-0 top-1/3 hidden translate-x-[calc(100%+16px)] lg:block"
+          style={{ animation: "slide-up-fade 0.35s cubic-bezier(0.34,1.56,0.64,1) both" }}
+        >
+          <FloatingLikedPile items={swipeLiked} posters={posters} />
+        </div>
+      )}
 
       {/* Voice-only refinement */}
       <div className="mt-6 flex flex-col items-center gap-2">
@@ -840,6 +867,8 @@ function AssistantBubble({
   deckMode,
   onViewAsList,
   onFeedback,
+  onLike,
+  onAskForHelp,
 }: {
   msg: ChatMessage;
   isGuest: boolean;
@@ -848,6 +877,8 @@ function AssistantBubble({
   deckMode: boolean;
   onViewAsList: () => void;
   onFeedback: (title: string, platform: string, sentiment: FeedbackSentiment) => void;
+  onLike?: (item: SwipeItem) => void;
+  onAskForHelp?: (liked: SwipeItem[]) => void;
 }) {
   const { data } = msg;
   if (!data) return null;
@@ -882,6 +913,8 @@ function AssistantBubble({
           onFeedback(item.rec.title, item.rec.platform, direction === "like" ? "like" : "dislike")
         }
         onViewAsList={onViewAsList}
+        onLike={onLike}
+        onAskForHelp={onAskForHelp}
       />
     );
   }
@@ -1074,6 +1107,61 @@ function CompactFeedback({ feedback, onWatchlist, onSeen, onDislike }: {
   );
 }
 
+/* ===================== FLOATING LIKED PILE ===================== */
+
+function FloatingLikedPile({
+  items,
+  posters,
+}: {
+  items: SwipeItem[];
+  posters: Record<string, string | null>;
+}) {
+  const last4 = items.slice(-4);
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+        Guardadas
+      </p>
+      {/* Fanned stack */}
+      <div className="relative" style={{ width: 64, height: 88 }}>
+        {last4.map((item, i, arr) => {
+          const poster = posters[item.rec.title] ?? null;
+          const color = colorForPlatform(item.rec.platform as never);
+          return (
+            <div
+              key={item.rec.title}
+              className="absolute inset-0 overflow-hidden rounded-xl shadow-md"
+              style={{
+                transform: `rotate(${(i - (arr.length - 1) / 2) * 9}deg)`,
+                zIndex: i,
+                animation: i === arr.length - 1 ? "pile-card-in 0.3s cubic-bezier(0.34,1.56,0.64,1) both" : undefined,
+              }}
+            >
+              {poster ? (
+                <img src={poster} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full" style={{ background: color }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Count badge */}
+      <span className="rounded-full bg-pink-500 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+        ♥ {items.length}
+      </span>
+      {/* Titles of last 2 */}
+      <div className="flex flex-col items-center gap-0.5 max-w-[80px]">
+        {items.slice(-2).reverse().map((item) => (
+          <p key={item.rec.title} className="truncate text-[9px] text-muted-foreground/50 max-w-full">
+            {item.rec.title}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ===================== MOOD MATCH BANNER ===================== */
 
 function moodLabel(f: MoodFilters): string {
@@ -1124,6 +1212,62 @@ function MoodMatchBanner({
             No, gracias
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── FloatingLikedPile ─────────────────────────────────────────────────────── */
+
+function FloatingLikedPile({
+  items,
+  posters,
+}: {
+  items: SwipeItem[];
+  posters: Record<string, string | null>;
+}) {
+  const last4 = items.slice(-4);
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+        Guardadas
+      </p>
+      {/* Fanned stack */}
+      <div className="relative" style={{ width: 68, height: 92 }}>
+        {last4.map((item, i, arr) => {
+          const poster = posters[item.rec.title] ?? null;
+          const color = colorForPlatform(item.rec.platform as never);
+          const isTop = i === arr.length - 1;
+          return (
+            <div
+              key={item.rec.title}
+              className="absolute inset-0 overflow-hidden rounded-xl shadow-md"
+              style={{
+                transform: `rotate(${(i - (arr.length - 1) / 2) * 9}deg)`,
+                zIndex: i,
+                animation: isTop ? "pile-card-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both" : undefined,
+              }}
+            >
+              {poster ? (
+                <img src={poster} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full" style={{ background: color }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/* Count badge */}
+      <span className="rounded-full bg-pink-500 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+        ♥ {items.length}
+      </span>
+      {/* Last two titles */}
+      <div className="flex max-w-[84px] flex-col items-center gap-0.5">
+        {items.slice(-2).reverse().map((item) => (
+          <p key={item.rec.title} className="max-w-full truncate text-[9px] text-muted-foreground/50">
+            {item.rec.title}
+          </p>
+        ))}
       </div>
     </div>
   );
