@@ -556,14 +556,40 @@ function HomeScreen({
                 <button onClick={() => onSaveDefaultPlatforms(selectedPlatforms)} className="text-[11px] text-primary/70 hover:text-primary">Guardar</button>
               )}
           </div>
-          <button
-            type="button"
-            title={useLocation ? (weather ? weatherHintShort(weather) : "Usando ubicación") : "Activar ubicación"}
-            onClick={() => onToggleLocation(!useLocation)}
-            className={cn("shrink-0 p-1 transition-all", useLocation ? "text-primary" : "text-muted-foreground/25 hover:text-muted-foreground/60")}
-          >
-            {weatherLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
-          </button>
+          {/* Location toggle row */}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onToggleLocation(!useLocation)}
+              className={cn(
+                "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none",
+                useLocation ? "bg-primary" : "bg-muted-foreground/20",
+              )}
+              role="switch"
+              aria-checked={useLocation}
+            >
+              <span
+                className={cn(
+                  "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-xs transition-transform duration-200",
+                  useLocation ? "translate-x-4" : "translate-x-0",
+                )}
+              />
+            </button>
+            <span className="text-[12px] text-muted-foreground/70">
+              {useLocation
+                ? (weatherLoading ? "Obteniendo clima…" : weather ? weatherHintShort(weather) : "Ubicación activa")
+                : "Activar ubicación"}
+            </span>
+            <span
+              className="group relative cursor-default text-[11px] text-muted-foreground/35 hover:text-muted-foreground/60"
+              title="Usamos tu ubicación solo para mejorar las recomendaciones con el clima y la hora local. No la guardamos."
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-current text-[9px] font-bold leading-none">?</span>
+              <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-56 -translate-x-1/2 rounded-xl bg-foreground px-3 py-2 text-[11px] leading-snug text-background shadow-float group-hover:block">
+                Usamos tu ubicación solo para mejorar las recomendaciones con el clima y la hora local. No la guardamos ni la compartimos.
+              </span>
+            </span>
+          </div>
           </div>
         </div>
       </div>
