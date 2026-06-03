@@ -383,20 +383,23 @@ function HomeScreen({
   onDismissLoginNudge: () => void;
 }) {
   const [text, setText] = useState("");
-  const [liveTranscript, setLiveTranscript] = useState("");
+  const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Sugerencias contextuales (momento + clima) y recientes desde localStorage.
   const suggestions = useMemo(
-    () => getContextualSuggestions(inferContext(), weather, 4),
+    () => getContextualSuggestions(inferContext(), weather, 5),
     [weather],
   );
   const [recent, setRecent] = useState<string[]>(() => readRecentSearches());
-  const [watchlist] = useState<string[]>(() => readWatchlist());
+
+  const showDropdown = focused && (recent.length > 0 || suggestions.length > 0) && !text;
 
   const handleSubmit = () => {
-    if (text.trim().length >= 2) onSubmit(text.trim());
+    if (text.trim().length >= 2) { setFocused(false); onSubmit(text.trim()); }
   };
+
+  const pick = (q: string) => { setFocused(false); onSubmit(q); };
 
   const togglePlatform = (p: Platform) => {
     const has = selectedPlatforms.includes(p);
@@ -404,13 +407,15 @@ function HomeScreen({
   };
 
   return (
-    <section className="relative flex min-h-[calc(100vh-49px)] flex-col items-center justify-center overflow-hidden px-6 pb-40 pt-12 animate-fade-in">
-      {/* Subtle ambient gradient — barely perceptible */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <div
-          className="absolute left-1/2 top-0 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/4 rounded-full"
-          style={{ background: "radial-gradient(circle, oklch(0.50 0.22 277 / 0.04) 0%, transparent 70%)" }}
-        />
+    <section className="relative flex min-h-[calc(100vh-49px)] flex-col items-center justify-center overflow-hidden px-5 animate-fade-in">
+
+      {/* Platform strip — decorative background, faded */}
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center gap-6 pb-6 opacity-[0.12]" aria-hidden>
+        {(PLATFORM_OPTIONS as Platform[]).map((p) => (
+          <span key={p} className="text-[11px] font-semibold tracking-wide" style={{ color: colorForPlatform(p) }}>
+            {p}
+          </span>
+        ))}
       </div>
 
       {/* Login nudge */}
@@ -420,59 +425,35 @@ function HomeScreen({
             <div className="flex items-start justify-between gap-3 p-4">
               <div>
                 <p className="text-[13px] font-semibold text-foreground">Guardá tu perfil</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Creá tu cuenta para guardar plataformas y preferencias.
-                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Creá tu cuenta para guardar plataformas y preferencias.</p>
                 <div className="mt-3 flex gap-2">
-                  <Link to="/login" className="inline-flex rounded-full bg-foreground px-3 py-1.5 text-[11px] font-semibold text-background transition-opacity hover:opacity-80">
-                    Crear cuenta
-                  </Link>
+                  <Link to="/login" className="inline-flex rounded-full bg-foreground px-3 py-1.5 text-[11px] font-semibold text-background transition-opacity hover:opacity-80">Crear cuenta</Link>
                   <button onClick={onDismissLoginNudge} className="text-[11px] text-muted-foreground hover:text-foreground">Ahora no</button>
                 </div>
               </div>
-              <button onClick={onDismissLoginNudge} className="text-muted-foreground/50 transition-colors hover:text-foreground">✕</button>
+              <button onClick={onDismissLoginNudge} className="text-muted-foreground/50 hover:text-foreground">✕</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Center content */}
-      <div className="relative z-10 flex w-full max-w-md flex-col items-center text-center">
-        {/* Orb + orbiting platform logos */}
-        <div className="relative flex h-[300px] w-full items-center justify-center">
-          <PlatformOrbit />
-          <div className="relative z-10">
-            <VoiceOrb
-              onFinalTranscript={(t) => { setLiveTranscript(""); onSubmit(t); }}
-              onTranscriptChange={setLiveTranscript}
-              disabled={isLoading}
-            />
-          </div>
+      <div className="relative z-10 w-full max-w-lg">
+
+        {/* Wordmark */}
+        <div className="mb-8 text-center">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40">
+            Cinéfilo
+          </span>
         </div>
 
-        {/* Headline */}
-        <h1 className="mt-2 font-serif text-[2.6rem] font-bold leading-[1.1] tracking-[-0.03em] text-foreground sm:text-5xl">
-          ¿Qué querés<br />ver hoy?
-        </h1>
-
-        <p className="mt-4 min-h-[2.5rem] text-[13px] text-muted-foreground">
-          {liveTranscript ? (
-            <span className="italic text-foreground/80">{liveTranscript}</span>
-          ) : isLoading ? (
-            <span className="inline-flex items-center gap-1.5 text-primary">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Buscando en todas tus plataformas…
-            </span>
-          ) : (
-            "Describilo con tus palabras. Te encontramos lo perfecto en todas tus plataformas."
-          )}
-        </p>
-
-        {/* Input — Apple search bar style */}
-        <div className="mt-7 w-full">
+        {/* Search bar + dropdown wrapper */}
+        <div className="relative">
+          {/* Main search bar */}
           <div className={cn(
-            "flex items-center gap-2 rounded-2xl bg-white px-4 py-3 shadow-card transition-all duration-200",
-            "focus-within:shadow-float",
+            "flex items-center gap-3 rounded-2xl bg-white px-5 shadow-card transition-all duration-200",
+            focused ? "shadow-float" : "",
+            isLoading && "opacity-70 pointer-events-none",
           )}>
             <input
               ref={inputRef}
@@ -480,153 +461,111 @@ function HomeScreen({
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setTimeout(() => setFocused(false), 150)}
               placeholder="una de acción, algo para llorar, comedia italiana…"
               disabled={isLoading}
-              className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none disabled:opacity-50"
+              className="min-h-[58px] min-w-0 flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none"
             />
-            <MicButton
-              size="sm"
-              onTranscript={(t, isFinal) => {
-                if (!t || !isFinal) return;
-                setText((prev) => (prev ? `${prev.trim()} ${t}` : t));
-                inputRef.current?.focus();
-              }}
-              className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground"
-            />
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={text.trim().length < 2 || isLoading}
-              className={cn(
-                "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all",
-                text.trim().length >= 2 && !isLoading
-                  ? "bg-foreground text-background hover:opacity-80"
-                  : "bg-muted text-muted-foreground/30 cursor-not-allowed",
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground/40" />
+            ) : (
+              <>
+                <MicButton
+                  size="sm"
+                  onTranscript={(t, isFinal) => {
+                    if (!t) return;
+                    if (isFinal) { setFocused(false); onSubmit(t.trim()); }
+                    else setText(t);
+                  }}
+                  className="shrink-0 text-muted-foreground/40 hover:text-primary"
+                />
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={text.trim().length < 2}
+                  className={cn(
+                    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all",
+                    text.trim().length >= 2
+                      ? "bg-foreground text-background hover:opacity-80"
+                      : "bg-muted text-muted-foreground/20",
+                  )}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Dropdown — recientes + sugerencias */}
+          {showDropdown && (
+            <div
+              ref={dropdownRef}
+              className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-2xl bg-white shadow-float animate-fade-in"
+            >
+              {recent.length > 0 && (
+                <div className="px-4 pt-3 pb-1">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Recientes</span>
+                    <button onClick={() => { clearRecentSearches(); setRecent([]); }} className="text-[10px] text-muted-foreground/30 hover:text-foreground">Limpiar</button>
+                  </div>
+                  {recent.slice(0, 4).map((q) => (
+                    <button key={q} onMouseDown={() => pick(q)}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-black/[0.03]">
+                      <RotateCcw className="h-3 w-3 shrink-0 text-muted-foreground/30" />
+                      <span className="truncate">{q}</span>
+                    </button>
+                  ))}
+                </div>
               )}
-              aria-label="Buscar"
-            >
-              <ArrowUp className="h-3.5 w-3.5" />
-            </button>
-          </div>
+              {suggestions.length > 0 && (
+                <div className={cn("px-4 pb-3", recent.length > 0 && "pt-1 border-t border-black/[0.04]")}>
+                  {recent.length === 0 && <div className="mb-1.5 pt-3"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Sugerencias</span></div>}
+                  {suggestions.map((s) => (
+                    <button key={s.label} onMouseDown={() => pick(s.query)}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-black/[0.03]">
+                      <span className="text-base leading-none">{s.label.split(" ")[0]}</span>
+                      <span className="truncate">{s.label.split(" ").slice(1).join(" ")}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Platform filter — minimal chips */}
-        <div className="mt-4 w-full">
-          <div className="flex items-center gap-2">
-            <div className="flex flex-1 flex-wrap gap-1.5">
-              {(PLATFORM_OPTIONS as Platform[]).map((p) => {
-                const active = selectedPlatforms.includes(p);
-                return (
-                  <button
-                    key={p}
-                    onClick={() => togglePlatform(p)}
-                    style={active ? { color: colorForPlatform(p) } : undefined}
-                    className={cn(
-                      "inline-flex min-h-[24px] items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-all",
-                      active
-                        ? "bg-white shadow-xs"
-                        : "text-muted-foreground/40 hover:text-muted-foreground/70",
-                    )}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
-                    {p}
-                  </button>
-                );
-              })}
-              {selectedPlatforms.length > 0 &&
-                JSON.stringify([...selectedPlatforms].sort()) !== JSON.stringify([...defaultPlatforms].sort()) && (
-                  <button onClick={() => onSaveDefaultPlatforms(selectedPlatforms)} className="text-[11px] text-primary/70 hover:text-primary">
-                    Guardar
-                  </button>
-                )}
-            </div>
-            <button
-              type="button"
-              title={useLocation ? (weather ? weatherHintShort(weather) : "Usando ubicación") : "Activar ubicación"}
-              onClick={() => onToggleLocation(!useLocation)}
-              className={cn("shrink-0 p-1 transition-all", useLocation ? "text-primary" : "text-muted-foreground/30 hover:text-muted-foreground/60")}
-            >
-              {weatherLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
-            </button>
+        {/* Platform filter + location */}
+        <div className="mt-4 flex items-center gap-2 px-1">
+          <div className="flex flex-1 flex-wrap gap-1.5">
+            {(PLATFORM_OPTIONS as Platform[]).map((p) => {
+              const active = selectedPlatforms.includes(p);
+              return (
+                <button key={p} onClick={() => togglePlatform(p)}
+                  style={active ? { color: colorForPlatform(p) } : undefined}
+                  className={cn(
+                    "inline-flex min-h-[24px] items-center gap-1 rounded-full px-2 text-[11px] font-medium transition-all",
+                    active ? "bg-white shadow-xs" : "text-muted-foreground/35 hover:text-muted-foreground/70",
+                  )}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: colorForPlatform(p) }} />
+                  {p}
+                </button>
+              );
+            })}
+            {selectedPlatforms.length > 0 &&
+              JSON.stringify([...selectedPlatforms].sort()) !== JSON.stringify([...defaultPlatforms].sort()) && (
+                <button onClick={() => onSaveDefaultPlatforms(selectedPlatforms)} className="text-[11px] text-primary/70 hover:text-primary">Guardar</button>
+              )}
           </div>
+          <button
+            type="button"
+            title={useLocation ? (weather ? weatherHintShort(weather) : "Usando ubicación") : "Activar ubicación"}
+            onClick={() => onToggleLocation(!useLocation)}
+            className={cn("shrink-0 p-1 transition-all", useLocation ? "text-primary" : "text-muted-foreground/25 hover:text-muted-foreground/60")}
+          >
+            {weatherLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
+          </button>
         </div>
-
-        {/* Sugerencias contextuales — tarjetas tap-to-search */}
-        {suggestions.length > 0 && (
-          <div className="mt-7 w-full">
-            <div className="flex flex-wrap justify-center gap-2">
-              {suggestions.map((s) => (
-                <button
-                  key={s.label}
-                  onClick={() => onSubmit(s.query)}
-                  disabled={isLoading}
-                  className="rounded-full border border-black/[0.06] bg-white px-3 py-1.5 text-[12px] font-medium text-foreground/75 shadow-xs transition-all hover:text-foreground hover:shadow-card disabled:opacity-50"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tus últimas búsquedas — reclickeables */}
-        {recent.length > 0 && (
-          <div className="mt-6 w-full text-left">
-            <div className="mb-2 flex items-center justify-between px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
-                Tus últimas búsquedas
-              </span>
-              <button
-                onClick={() => { clearRecentSearches(); setRecent([]); }}
-                className="text-[10px] text-muted-foreground/40 transition-colors hover:text-foreground"
-              >
-                Limpiar
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {recent.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => onSubmit(q)}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50"
-                >
-                  <RotateCcw className="h-3 w-3 opacity-50" />
-                  <span className="max-w-[160px] truncate">{q}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Tu lista para ver — watchlist guardada */}
-        {watchlist.length > 0 && (
-          <div className="mt-5 w-full text-left">
-            <div className="mb-2 px-1">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
-                Tu lista para ver
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {watchlist.slice(0, 8).map((title) => (
-                <button
-                  key={title}
-                  onClick={() => onSubmit(`contame más sobre ${title} y algo parecido`)}
-                  disabled={isLoading}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/[0.03] px-2.5 py-1 text-[11px] text-muted-foreground/80 transition-colors hover:bg-black/[0.06] hover:text-foreground disabled:opacity-50"
-                >
-                  <Bookmark className="h-3 w-3 opacity-50" />
-                  <span className="max-w-[160px] truncate">{title}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Poster marquee — mood board at bottom, very subtle */}
-      <div className="absolute bottom-0 left-0 right-0 z-0 opacity-40">
-        <PosterMarquee />
       </div>
     </section>
   );
