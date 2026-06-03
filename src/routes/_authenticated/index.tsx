@@ -594,7 +594,7 @@ function ChatScreen({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   const [deckMode, setDeckMode] = useState(true);
-  const [liveTranscript, setLiveTranscript] = useState("");
+  const [chatInput, setChatInput] = useState("");
   const [socialMode, setSocialMode] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [socialMatch, setSocialMatch] = useState<SocialMatchRow | null>(null);
@@ -784,27 +784,49 @@ function ChatScreen({
         </div>
       )}
 
-      {/* Voice-only refinement */}
-      <div className="mt-6 flex flex-col items-center gap-2">
-        {liveTranscript ? (
-          <p className="text-center text-[13px] italic text-foreground/70 animate-fade-in">{liveTranscript}</p>
-        ) : (
-          <p className="text-[11px] text-muted-foreground/40">
-            {isLoading ? "Buscando…" : "Hablá para refinar tu búsqueda"}
-          </p>
-        )}
-        <MicButton
-          size="md"
-          onTranscript={(t, isFinal) => {
-            if (!t) { setLiveTranscript(""); return; }
-            if (isFinal) {
-              setLiveTranscript("");
-              onSubmit(t.trim());
-            } else {
-              setLiveTranscript(t);
-            }
-          }}
-        />
+      {/* Chat input bar */}
+      <div className="mt-4">
+        <div className={cn(
+          "flex items-center gap-3 rounded-2xl bg-white px-4 shadow-card transition-all duration-200",
+          isLoading && "opacity-60 pointer-events-none",
+        )}>
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && chatInput.trim().length >= 2) {
+                onSubmit(chatInput.trim());
+                setChatInput("");
+              }
+            }}
+            placeholder={isLoading ? "Buscando…" : "Refiná o hacé una nueva búsqueda…"}
+            disabled={isLoading}
+            className="min-h-[52px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none"
+          />
+          <MicButton
+            size="sm"
+            onTranscript={(t, isFinal) => {
+              if (!t) { setChatInput(""); return; }
+              if (isFinal) { onSubmit(t.trim()); setChatInput(""); }
+              else setChatInput(t);
+            }}
+            className="shrink-0 text-muted-foreground/40 hover:text-primary"
+          />
+          <button
+            type="button"
+            onClick={() => { if (chatInput.trim().length >= 2) { onSubmit(chatInput.trim()); setChatInput(""); } }}
+            disabled={chatInput.trim().length < 2 || isLoading}
+            className={cn(
+              "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all",
+              chatInput.trim().length >= 2
+                ? "bg-foreground text-background hover:opacity-80"
+                : "bg-muted text-muted-foreground/20",
+            )}
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Mood match banner — show when there's a specific mood detected and social is off */}
