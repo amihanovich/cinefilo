@@ -409,14 +409,8 @@ function HomeScreen({
   return (
     <section className="relative flex min-h-[calc(100vh-49px)] flex-col items-center justify-center overflow-hidden px-5 animate-fade-in">
 
-      {/* Platform strip — decorative background, faded */}
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center gap-6 pb-6 opacity-[0.12]" aria-hidden>
-        {(PLATFORM_OPTIONS as Platform[]).map((p) => (
-          <span key={p} className="text-[11px] font-semibold tracking-wide" style={{ color: colorForPlatform(p) }}>
-            {p}
-          </span>
-        ))}
-      </div>
+      {/* Cinematic poster strip — decorative scrolling background */}
+      <PosterMarquee background />
 
       {/* Login nudge */}
       {showLoginNudge && (
