@@ -67,9 +67,7 @@ export function PosterMarquee({ className = "", background = false }: Props) {
     return () => { alive = false; };
   }, []);
 
-  if (posters.length === 0) return null;
-
-  const [topRow, bottomRow] = splitRows(posters);
+  const [topRow, bottomRow] = posters.length > 0 ? splitRows(posters) : [[], []];
   const topLoop = [...topRow, ...topRow];
   const bottomLoop = [...bottomRow, ...bottomRow];
 
@@ -79,24 +77,26 @@ export function PosterMarquee({ className = "", background = false }: Props) {
         className="pointer-events-none absolute inset-0 overflow-hidden"
         aria-hidden="true"
       >
-        {/* Perspective tilt — cinematic feel */}
-        <div
-          className="absolute inset-0 flex flex-col justify-center gap-3 opacity-[0.18]"
-          style={{ transform: "perspective(700px) rotateX(12deg) scale(1.08)", transformOrigin: "center 45%" }}
-        >
-          <div className="flex w-max animate-marquee gap-3">
-            {topLoop.map((src, i) => (
-              <img key={`t-${i}`} src={src} alt="" loading="lazy"
-                className="h-28 w-[74px] shrink-0 rounded-lg object-cover sm:h-32 sm:w-20" />
-            ))}
+        {posters.length > 0 && (
+          /* Perspective tilt — cinematic feel */
+          <div
+            className="absolute inset-0 flex flex-col justify-center gap-3 opacity-[0.18]"
+            style={{ transform: "perspective(700px) rotateX(12deg) scale(1.08)", transformOrigin: "center 45%" }}
+          >
+            <div className="flex w-max animate-marquee gap-3">
+              {topLoop.map((src, i) => (
+                <img key={`t-${i}`} src={src} alt="" loading="lazy"
+                  className="h-28 w-[74px] shrink-0 rounded-lg object-cover sm:h-32 sm:w-20" />
+              ))}
+            </div>
+            <div className="flex w-max animate-marquee-reverse gap-3">
+              {bottomLoop.map((src, i) => (
+                <img key={`b-${i}`} src={src} alt="" loading="lazy"
+                  className="h-28 w-[74px] shrink-0 rounded-lg object-cover sm:h-32 sm:w-20" />
+              ))}
+            </div>
           </div>
-          <div className="flex w-max animate-marquee-reverse gap-3">
-            {bottomLoop.map((src, i) => (
-              <img key={`b-${i}`} src={src} alt="" loading="lazy"
-                className="h-28 w-[74px] shrink-0 rounded-lg object-cover sm:h-32 sm:w-20" />
-            ))}
-          </div>
-        </div>
+        )}
         {/* Top + bottom gradient fade */}
         <div className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-background to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-background to-transparent" />
@@ -106,6 +106,8 @@ export function PosterMarquee({ className = "", background = false }: Props) {
       </div>
     );
   }
+
+  if (posters.length === 0) return null;
 
   return (
     <div
