@@ -170,7 +170,7 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-3-5-haiku-20241022");
+    const model = provider("claude-sonnet-4-5");
 
     const fmt = (v: string | null) => (v ?? "Elegí por mí (decide tú)");
 
@@ -242,7 +242,7 @@ Pedido del usuario (filtros):
 Recuerda: "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 520 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -291,7 +291,7 @@ export const recommendFromText = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-3-5-haiku-20241022");
+    const model = provider("claude-sonnet-4-5");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -354,7 +354,7 @@ Tu tarea:
 4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 520 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -406,7 +406,7 @@ export const recommendConversational = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-3-5-haiku-20241022");
+    const model = provider("claude-sonnet-4-5");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -478,7 +478,7 @@ ${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"
 "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 520 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -513,7 +513,7 @@ export const inferMomentFilters = createServerFn({ method: "POST" })
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-3-5-haiku-20241022");
+    const model = provider("claude-sonnet-4-5");
 
     const prompt = `Eres un asistente que traduce la descripción de una situación recurrente de ver streaming a filtros estructurados.
 
@@ -535,7 +535,7 @@ Reglas:
 - Si un campo no se infiere razonablemente, usa null (no inventes).`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 520 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
       const result = parseAiJson(text, filtersOutSchema);
       return result;
     } catch (err) {
