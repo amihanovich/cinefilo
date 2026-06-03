@@ -434,12 +434,9 @@ function HomeScreen({
       {/* Center content — frosted glass panel */}
       <div className="relative z-10 w-full max-w-lg rounded-3xl bg-background/80 px-8 py-8 shadow-float backdrop-blur-md ring-1 ring-black/[0.05]">
 
-        {/* Wordmark + tagline */}
+        {/* Tagline */}
         <div className="mb-6 text-center">
-          <span className="inline-flex items-center gap-2 text-[21px] font-bold tracking-tight text-foreground">
-            Cinéfilo
-          </span>
-          <p className="mt-1.5 text-[13px] text-muted-foreground/75">
+          <p className="text-[21px] font-bold tracking-tight text-foreground">
             Describí lo que querés ver y te recomendamos qué mirar hoy.
           </p>
         </div>

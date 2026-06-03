@@ -44,8 +44,8 @@ function AuthLayout() {
             onClick={() => window.dispatchEvent(new CustomEvent("que-veo:go-home"))}
             className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-70"
           >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[15px] font-semibold tracking-tight text-foreground">
+            <Sparkles className="h-7 w-7 text-primary" />
+            <span className="text-[30px] font-semibold tracking-tight text-foreground">
               Cinéfilo
             </span>
           </Link>
@@ -58,8 +58,8 @@ function AuthLayout() {
                     className="inline-flex items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80"
                     aria-label="Mi cuenta"
                   >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-foreground text-[12px] font-semibold text-background">
+                    <Avatar className="h-14 w-14">
+                      <AvatarFallback className="bg-foreground text-[22px] font-semibold text-background">
                         {initial}
                       </AvatarFallback>
                     </Avatar>
