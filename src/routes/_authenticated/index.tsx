@@ -30,7 +30,7 @@ import {
   type Platform,
   type RecommendationsResult,
 } from "@/lib/recommendations";
-import { recommendConversational } from "@/lib/recommendations.functions";
+import { recommendConversational, chooseFromLiked } from "@/lib/recommendations.functions";
 import { recordTitleFeedback } from "@/lib/feedback.functions";
 import { getProfile, setDefaultPlatforms } from "@/lib/profile.functions";
 import { VoiceOrb } from "@/components/VoiceOrb";
@@ -70,6 +70,7 @@ type ChatMessage = {
   data?: RecommendationsResult;
   feedbackGiven?: Record<string, FeedbackSentiment>;
   deckItems?: SwipeItem[];
+  isChooseMode?: boolean;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -125,6 +126,9 @@ function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
   const [excluded, setExcluded] = useState<string[]>([]);
+  const [isChooseMode, setIsChooseMode] = useState(false);
+  const [chooseLikedTitles, setChooseLikedTitles] = useState<string[]>([]);
+  const [chooseHistory, setChooseHistory] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
 
   const [session, setSession] = useState<Session | null>(null);
@@ -192,12 +196,80 @@ function HomePage() {
       setInputText("");
       setExcluded([]);
       setPosters({});
+      setIsChooseMode(false);
+      setChooseLikedTitles([]);
+      setChooseHistory([]);
     };
     window.addEventListener("que-veo:go-home", handler);
     return () => window.removeEventListener("que-veo:go-home", handler);
   }, []);
 
+  const submitChooseMode = async (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length < 2) return;
+
+    const userMsg: ChatMessage = { id: uid(), role: "user", text: trimmed, isChooseMode: true };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    const newHistory = [...chooseHistory, { role: "user" as const, content: trimmed }];
+
+    try {
+      const result = await chooseFromLiked({
+        data: { likedTitles: chooseLikedTitles, messages: newHistory },
+      });
+      const aiMsg: ChatMessage = {
+        id: uid(),
+        role: "assistant",
+        text: result.text,
+        isChooseMode: true,
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+      setChooseHistory([...newHistory, { role: "assistant", content: result.text }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Algo salió mal.";
+      toast.error(msg, { duration: 6000 });
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAskForHelp = async (liked: SwipeItem[]) => {
+    const titles = liked.map((i) => i.rec.title);
+    setIsChooseMode(true);
+    setChooseLikedTitles(titles);
+
+    const userText = `Elegí estas opciones: ${titles.join(", ")}. Ayudame a decidir cuál ver hoy.`;
+    const userMsg: ChatMessage = { id: uid(), role: "user", text: userText, isChooseMode: true };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsLoading(true);
+
+    const initHistory = [{ role: "user" as const, content: userText }];
+
+    try {
+      const result = await chooseFromLiked({
+        data: { likedTitles: titles, messages: initHistory },
+      });
+      const aiMsg: ChatMessage = {
+        id: uid(),
+        role: "assistant",
+        text: result.text,
+        isChooseMode: true,
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+      setChooseHistory([...initHistory, { role: "assistant", content: result.text }]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Algo salió mal.";
+      toast.error(msg, { duration: 6000 });
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const submit = async (text: string) => {
+    if (isChooseMode) { await submitChooseMode(text); return; }
     const trimmed = text.trim();
     if (trimmed.length < 2) return;
 
@@ -338,12 +410,16 @@ function HomePage() {
           posters={posters}
           onSubmit={submit}
           onFeedback={handleFeedback}
+          onAskForHelp={handleAskForHelp}
           onNewSearch={() => {
             setStep("home");
             setMessages([]);
             setInputText("");
             setExcluded([]);
             setPosters({});
+            setIsChooseMode(false);
+            setChooseLikedTitles([]);
+            setChooseHistory([]);
           }}
         />
       )}
@@ -598,6 +674,7 @@ function ChatScreen({
   posters,
   onSubmit,
   onFeedback,
+  onAskForHelp,
   onNewSearch,
 }: {
   messages: ChatMessage[];
@@ -607,6 +684,7 @@ function ChatScreen({
   posters: Record<string, string | null>;
   onSubmit: (text: string) => void;
   onFeedback: (msgId: string, title: string, platform: string, sentiment: FeedbackSentiment) => void;
+  onAskForHelp: (liked: SwipeItem[]) => void;
   onNewSearch: () => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -622,11 +700,6 @@ function ChatScreen({
 
   const handleSwipeLike = (item: SwipeItem) => {
     setSwipeLiked((prev) => [...prev, item]);
-  };
-
-  const handleAskToChoose = (liked: SwipeItem[]) => {
-    const titles = liked.map((i) => i.rec.title).join(", ");
-    onSubmit(`Guardé estas opciones: ${titles}. Ayudame a elegir cuál ver hoy — haceme las preguntas que necesites para afinar.`);
   };
 
   const handleNewSearch = () => {
@@ -772,7 +845,7 @@ function ChatScreen({
                   onFeedback={(title, platform, sentiment) =>
                     handleFeedbackWithSocial(msg.id, title, platform, sentiment)}
                   onLike={handleSwipeLike}
-                  onAskForHelp={handleAskToChoose}
+                  onAskForHelp={onAskForHelp}
                 />
               ),
             )}
@@ -923,6 +996,18 @@ function AssistantBubble({
   onAskForHelp?: (liked: SwipeItem[]) => void;
 }) {
   const { data } = msg;
+
+  // Choose mode: text-only conversational bubble
+  if (!data && msg.text) {
+    return (
+      <div className="flex items-end gap-2 max-w-[85%]">
+        <div className="rounded-[20px] rounded-tl-[4px] bg-white px-4 py-3 shadow-xs">
+          <p className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!data) return null;
   const { main, alternatives } = data;
 

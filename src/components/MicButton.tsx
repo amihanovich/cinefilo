@@ -104,14 +104,21 @@ export function MicButton({
         aria-label={listening ? "Detener grabación" : "Dictar por voz"}
         title={listening ? "Detener" : "Hablar"}
         className={cn(
-          "inline-flex h-8 w-8 items-center justify-center rounded-full transition-smooth",
+          "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",
           listening
-            ? "animate-pulse text-destructive"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-destructive/10 text-destructive shadow-[0_0_0_3px_oklch(0.55_0.22_25_/_0.18)]"
+            : "text-muted-foreground/50 hover:text-primary hover:bg-primary/8",
           className,
         )}
       >
-        {listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        {listening ? (
+          <>
+            <MicOff className="h-4 w-4" />
+            <span className="pointer-events-none absolute inset-0 rounded-full animate-ping bg-destructive/20" />
+          </>
+        ) : (
+          <Mic className="h-4 w-4" />
+        )}
       </button>
     );
   }

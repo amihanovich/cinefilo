@@ -501,6 +501,55 @@ ${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"
     }
   });
 
+/* ---------- chooseFromLiked (socratic mode) ---------- */
+
+const chooseInputSchema = z.object({
+  likedTitles: z.array(z.string().min(1).max(200)).min(1).max(20),
+  messages: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() }))
+    .min(1)
+    .max(20),
+});
+
+const CHOOSE_SYSTEM = `Sos un asistente cinematográfico conversacional. El usuario preseleccionó estos títulos durante una sesión de swipe: {TITLES}
+
+Tu rol: ayudarle a elegir cuál ver hoy mediante preguntas breves y directas.
+
+Reglas estrictas:
+- Hacé UNA sola pregunta directa por turno. Sin preámbulo, sin introducción.
+- Las preguntas revelan: estado de ánimo actual, energía disponible, si está solo o acompañado, tiempo disponible.
+- Tras 3-4 intercambios (o antes si ya tenés suficiente info), cerrá con una recomendación: 1-2 títulos de la lista + 1 oración explicando por qué encajan ahora.
+- JAMÁS recomiendes títulos fuera de la lista preseleccionada.
+- Tono: cercano, directo, rioplatense. Sin formalidades ni emojis.
+- Máximo 2-3 oraciones por turno.`;
+
+export const chooseFromLiked = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => chooseInputSchema.parse(data))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+
+    const provider = createAiProvider(apiKey);
+    const model = provider("claude-sonnet-4-5");
+
+    const systemPrompt = CHOOSE_SYSTEM.replace("{TITLES}", data.likedTitles.join(", "));
+    const prior = data.messages.slice(0, -1);
+    const lastMsg = data.messages[data.messages.length - 1].content;
+    const historyLines =
+      prior.length > 0
+        ? `\n\nHistorial:\n${prior.map((m) => (m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`)).join("\n")}\n`
+        : "";
+
+    const prompt = `${systemPrompt}${historyLines}\nUsuario: ${lastMsg}`;
+
+    try {
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
+      return { text: text.trim() };
+    } catch (err) {
+      throw mapErr(err);
+    }
+  });
+
 /* ---------- inferMomentFilters (text → filter values) ---------- */
 
 const inferInputSchema = z.object({
