@@ -1,26 +1,26 @@
 import { useEffect, useState } from "react";
-import { fetchPosters } from "@/lib/posters.functions";
+import { fetchPosterClient } from "@/lib/itunes";
 import { getCachedIconic, setCachedIconic } from "@/lib/posterCache";
 
-const ICONIC: { title: string; type: "Película" | "Serie" }[] = [
-  { title: "The Godfather", type: "Película" },
-  { title: "Pulp Fiction", type: "Película" },
-  { title: "Inception", type: "Película" },
-  { title: "Interstellar", type: "Película" },
-  { title: "Parasite", type: "Película" },
-  { title: "Breaking Bad", type: "Serie" },
-  { title: "Stranger Things", type: "Serie" },
-  { title: "The Crown", type: "Serie" },
-  { title: "Succession", type: "Serie" },
-  { title: "Dark", type: "Serie" },
-  { title: "La La Land", type: "Película" },
-  { title: "Whiplash", type: "Película" },
-  { title: "The Dark Knight", type: "Película" },
-  { title: "Game of Thrones", type: "Serie" },
-  { title: "Friends", type: "Serie" },
-  { title: "Better Call Saul", type: "Serie" },
-  { title: "Oppenheimer", type: "Película" },
-  { title: "Dune", type: "Película" },
+const ICONIC: { title: string; type: string }[] = [
+  { title: "The Godfather", type: "movie" },
+  { title: "Pulp Fiction", type: "movie" },
+  { title: "Inception", type: "movie" },
+  { title: "Interstellar", type: "movie" },
+  { title: "Parasite", type: "movie" },
+  { title: "Breaking Bad", type: "serie" },
+  { title: "Stranger Things", type: "serie" },
+  { title: "The Crown", type: "serie" },
+  { title: "Succession", type: "serie" },
+  { title: "Dark", type: "serie" },
+  { title: "La La Land", type: "movie" },
+  { title: "Whiplash", type: "movie" },
+  { title: "The Dark Knight", type: "movie" },
+  { title: "Game of Thrones", type: "serie" },
+  { title: "Oppenheimer", type: "movie" },
+  { title: "Better Call Saul", type: "serie" },
+  { title: "Dune", type: "movie" },
+  { title: "Arrival", type: "movie" },
 ];
 
 function splitRows(urls: string[]): [string[], string[]] {
@@ -34,7 +34,6 @@ function splitRows(urls: string[]): [string[], string[]] {
 
 type Props = {
   className?: string;
-  /** Full-screen cinematic background mode */
   background?: boolean;
 };
 
@@ -43,26 +42,21 @@ export function PosterMarquee({ className = "", background = false }: Props) {
 
   useEffect(() => {
     let alive = true;
-    const collected: string[] = [];
+    const collected: string[] = [...getCachedIconic()];
 
-    Promise.all([
-      fetchPosters({ data: { items: ICONIC.slice(0, 6) } }),
-      fetchPosters({ data: { items: ICONIC.slice(6, 12) } }),
-      fetchPosters({ data: { items: ICONIC.slice(12, 18) } }),
-    ])
-      .then((batches) => {
-        if (!alive) return;
-        for (const b of batches) {
-          for (const u of Object.values(b.posters)) {
-            if (u) collected.push(u);
-          }
+    // Fire off all fetches in parallel (client-side → direct iTunes calls from browser)
+    const promises = ICONIC.map(({ title, type }) =>
+      fetchPosterClient(title, type).then((url) => {
+        if (alive && url && !collected.includes(url)) {
+          collected.push(url);
+          setPosters([...collected]);
         }
-        if (collected.length > 0) {
-          setPosters(collected);
-          setCachedIconic(collected);
-        }
-      })
-      .catch(() => {});
+      }).catch(() => {}),
+    );
+
+    Promise.all(promises).then(() => {
+      if (alive && collected.length > 0) setCachedIconic(collected);
+    });
 
     return () => { alive = false; };
   }, []);
@@ -73,14 +67,10 @@ export function PosterMarquee({ className = "", background = false }: Props) {
 
   if (background) {
     return (
-      <div
-        className="pointer-events-none absolute inset-0 overflow-hidden"
-        aria-hidden="true"
-      >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         {posters.length > 0 && (
-          /* Perspective tilt — cinematic feel */
           <div
-            className="absolute inset-0 flex flex-col justify-center gap-3 opacity-[0.18]"
+            className="absolute inset-0 flex flex-col justify-center gap-3 opacity-[0.20]"
             style={{ transform: "perspective(700px) rotateX(12deg) scale(1.08)", transformOrigin: "center 45%" }}
           >
             <div className="flex w-max animate-marquee gap-3">
@@ -97,10 +87,8 @@ export function PosterMarquee({ className = "", background = false }: Props) {
             </div>
           </div>
         )}
-        {/* Top + bottom gradient fade */}
         <div className="absolute inset-x-0 top-0 h-2/5 bg-gradient-to-b from-background to-transparent" />
         <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-t from-background to-transparent" />
-        {/* Side fades */}
         <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background to-transparent" />
         <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-background to-transparent" />
       </div>
@@ -115,32 +103,19 @@ export function PosterMarquee({ className = "", background = false }: Props) {
       aria-hidden="true"
     >
       <div className="flex flex-col gap-2 py-2">
-        {/* Fila superior — izquierda → derecha */}
         <div className="flex w-max animate-marquee gap-2 px-2">
           {topLoop.map((src, i) => (
-            <img
-              key={`t-${src}-${i}`}
-              src={src}
-              alt=""
-              loading="lazy"
-              className="h-28 w-[74px] shrink-0 rounded-md object-cover shadow-md sm:h-32 sm:w-[86px]"
-            />
+            <img key={`t-${src}-${i}`} src={src} alt="" loading="lazy"
+              className="h-28 w-[74px] shrink-0 rounded-md object-cover shadow-md sm:h-32 sm:w-[86px]" />
           ))}
         </div>
-        {/* Fila inferior — derecha → izquierda */}
         <div className="flex w-max animate-marquee-reverse gap-2 px-2">
           {bottomLoop.map((src, i) => (
-            <img
-              key={`b-${src}-${i}`}
-              src={src}
-              alt=""
-              loading="lazy"
-              className="h-28 w-[74px] shrink-0 rounded-md object-cover shadow-md sm:h-32 sm:w-[86px]"
-            />
+            <img key={`b-${src}-${i}`} src={src} alt="" loading="lazy"
+              className="h-28 w-[74px] shrink-0 rounded-md object-cover shadow-md sm:h-32 sm:w-[86px]" />
           ))}
         </div>
       </div>
-      {/* Fades laterales */}
       <div className="pointer-events-none absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-background to-transparent" />
       <div className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-background to-transparent" />
     </div>

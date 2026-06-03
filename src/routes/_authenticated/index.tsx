@@ -434,11 +434,14 @@ function HomeScreen({
       {/* Center content */}
       <div className="relative z-10 w-full max-w-lg">
 
-        {/* Wordmark */}
+        {/* Wordmark + tagline */}
         <div className="mb-6 text-center">
           <span className="inline-flex items-center gap-2 text-[21px] font-bold tracking-tight text-foreground/70">
             Cinéfilo
           </span>
+          <p className="mt-1.5 text-[13px] text-muted-foreground/60">
+            Describí lo que querés ver y te recomendamos qué mirar hoy.
+          </p>
         </div>
 
         {/* Search bar + dropdown wrapper */}
