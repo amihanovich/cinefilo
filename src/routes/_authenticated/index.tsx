@@ -881,7 +881,6 @@ function AssistantBubble({
         onSwipe={(item, direction) =>
           onFeedback(item.rec.title, item.rec.platform, direction === "like" ? "like" : "dislike")
         }
-        onWatchlist={(item) => onFeedback(item.rec.title, item.rec.platform, "watchlist")}
         onViewAsList={onViewAsList}
       />
     );
