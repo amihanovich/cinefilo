@@ -532,7 +532,9 @@ function HomeScreen({
         </div>
 
         {/* Platform filter + location */}
-        <div className="mt-4 flex items-center gap-2 px-1">
+        <div className="mt-4 px-1">
+          <p className="mb-2 text-[13px] text-muted-foreground/75">Elegí tus plataformas favoritas</p>
+          <div className="flex items-center gap-2">
           <div className="flex flex-1 flex-wrap gap-1.5">
             {(PLATFORM_OPTIONS as Platform[]).map((p) => {
               const active = selectedPlatforms.includes(p);
@@ -562,6 +564,7 @@ function HomeScreen({
           >
             {weatherLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MapPin className="h-3 w-3" />}
           </button>
+          </div>
         </div>
       </div>
     </section>
