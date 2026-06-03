@@ -712,7 +712,7 @@ function ChatScreen({
       <div className="overflow-hidden rounded-3xl bg-white shadow-float">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-black/[0.05] px-6 py-4">
-          <span className="text-[13px] font-semibold tracking-tight text-foreground">Cinéfilo</span>
+          <span className="text-[21px] font-semibold tracking-tight text-foreground">Cinéfilo</span>
           <button
             onClick={onNewSearch}
             className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-muted-foreground/60 transition-all hover:text-foreground"
