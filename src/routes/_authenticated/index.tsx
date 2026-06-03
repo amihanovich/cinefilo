@@ -577,13 +577,13 @@ function HomeScreen({
               {recent.length > 0 && (
                 <div className="px-4 pt-3 pb-1">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Recientes</span>
-                    <button onClick={() => { clearRecentSearches(); setRecent([]); }} className="text-[10px] text-muted-foreground/30 hover:text-foreground">Limpiar</button>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Recientes</span>
+                    <button onClick={() => { clearRecentSearches(); setRecent([]); }} className="text-[10px] text-muted-foreground/50 hover:text-foreground">Limpiar</button>
                   </div>
                   {recent.slice(0, 4).map((q) => (
                     <button key={q} onMouseDown={() => pick(q)}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-black/[0.03]">
-                      <RotateCcw className="h-3 w-3 shrink-0 text-muted-foreground/30" />
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-black/[0.04]">
+                      <RotateCcw className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                       <span className="truncate">{q}</span>
                     </button>
                   ))}
@@ -591,10 +591,10 @@ function HomeScreen({
               )}
               {suggestions.length > 0 && (
                 <div className={cn("px-4 pb-3", recent.length > 0 && "pt-1 border-t border-black/[0.04]")}>
-                  {recent.length === 0 && <div className="mb-1.5 pt-3"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">Sugerencias</span></div>}
+                  {recent.length === 0 && <div className="mb-1.5 pt-3"><span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Sugerencias</span></div>}
                   {suggestions.map((s) => (
                     <button key={s.label} onMouseDown={() => pick(s.query)}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-black/[0.03]">
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-black/[0.04]">
                       <span className="text-base leading-none">{s.label.split(" ")[0]}</span>
                       <span className="truncate">{s.label.split(" ").slice(1).join(" ")}</span>
                     </button>
