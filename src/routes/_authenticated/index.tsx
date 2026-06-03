@@ -14,6 +14,7 @@ import {
   MapPin,
   RotateCcw,
   X,
+  Youtube,
 } from "lucide-react";
 import { SwipeCardDeck } from "@/components/SwipeCardDeck";
 import type { SwipeItem } from "@/components/SwipeCardDeck";
@@ -72,6 +73,7 @@ type ChatMessage = {
   feedbackGiven?: Record<string, FeedbackSentiment>;
   deckItems?: SwipeItem[];
   isChooseMode?: boolean;
+  finalItem?: SwipeItem;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -128,7 +130,7 @@ function HomePage() {
   const [inputText, setInputText] = useState("");
   const [excluded, setExcluded] = useState<string[]>([]);
   const [isChooseMode, setIsChooseMode] = useState(false);
-  const [chooseLikedTitles, setChooseLikedTitles] = useState<string[]>([]);
+  const [chooseLikedItems, setChooseLikedItems] = useState<SwipeItem[]>([]);
   const [chooseHistory, setChooseHistory] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
 
@@ -198,7 +200,7 @@ function HomePage() {
       setExcluded([]);
       setPosters({});
       setIsChooseMode(false);
-      setChooseLikedTitles([]);
+      setChooseLikedItems([]);
       setChooseHistory([]);
     };
     window.addEventListener("que-veo:go-home", handler);
@@ -214,16 +216,21 @@ function HomePage() {
     setIsLoading(true);
 
     const newHistory = [...chooseHistory, { role: "user" as const, content: trimmed }];
+    const titles = chooseLikedItems.map((i) => i.rec.title);
 
     try {
       const result = await chooseFromLiked({
-        data: { likedTitles: chooseLikedTitles, messages: newHistory },
+        data: { likedTitles: titles, messages: newHistory },
       });
+      const finalItem = result.finalTitle
+        ? chooseLikedItems.find((i) => i.rec.title === result.finalTitle) ?? null
+        : null;
       const aiMsg: ChatMessage = {
         id: uid(),
         role: "assistant",
         text: result.text,
         isChooseMode: true,
+        ...(finalItem ? { finalItem } : {}),
       };
       setMessages((prev) => [...prev, aiMsg]);
       setChooseHistory([...newHistory, { role: "assistant", content: result.text }]);
@@ -239,7 +246,7 @@ function HomePage() {
   const handleAskForHelp = async (liked: SwipeItem[]) => {
     const titles = liked.map((i) => i.rec.title);
     setIsChooseMode(true);
-    setChooseLikedTitles(titles);
+    setChooseLikedItems(liked);
 
     const userText = `Elegí estas opciones: ${titles.join(", ")}. Ayudame a decidir cuál ver hoy.`;
     const userMsg: ChatMessage = { id: uid(), role: "user", text: userText, isChooseMode: true };
@@ -252,11 +259,15 @@ function HomePage() {
       const result = await chooseFromLiked({
         data: { likedTitles: titles, messages: initHistory },
       });
+      const finalItem = result.finalTitle
+        ? liked.find((i) => i.rec.title === result.finalTitle) ?? null
+        : null;
       const aiMsg: ChatMessage = {
         id: uid(),
         role: "assistant",
         text: result.text,
         isChooseMode: true,
+        ...(finalItem ? { finalItem } : {}),
       };
       setMessages((prev) => [...prev, aiMsg]);
       setChooseHistory([...initHistory, { role: "assistant", content: result.text }]);
@@ -419,7 +430,7 @@ function HomePage() {
             setExcluded([]);
             setPosters({});
             setIsChooseMode(false);
-            setChooseLikedTitles([]);
+            setChooseLikedItems([]);
             setChooseHistory([]);
           }}
         />
@@ -868,7 +879,7 @@ function ChatScreen({
       {/* Liked pile — floats to the right of the chat window on lg screens */}
       {swipeLiked.length > 0 && (
         <div
-          className="pointer-events-none absolute right-0 top-1/3 hidden translate-x-[calc(100%+16px)] lg:block"
+          className="absolute right-0 top-6 hidden translate-x-[calc(100%+20px)] lg:block"
           style={{ animation: "slide-up-fade 0.35s cubic-bezier(0.34,1.56,0.64,1) both" }}
         >
           <FloatingLikedPile items={swipeLiked} posters={posters} />
@@ -998,15 +1009,30 @@ function AssistantBubble({
 }) {
   const { data } = msg;
 
-  // Choose mode: text-only conversational bubble
-  if (!data && msg.text) {
-    return (
-      <div className="flex items-end gap-2 max-w-[85%]">
-        <div className="rounded-[20px] rounded-tl-[4px] bg-white px-4 py-3 shadow-xs">
-          <p className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
+  // Choose mode: final pick card or conversational text bubble
+  if (!data) {
+    if (msg.finalItem) {
+      return (
+        <div className="flex flex-col gap-3 max-w-[92%]">
+          {msg.text && (
+            <div className="rounded-[20px] rounded-tl-[4px] bg-white px-4 py-3 shadow-xs">
+              <p className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
+            </div>
+          )}
+          <FinalPickCard item={msg.finalItem} poster={posters[msg.finalItem.rec.title] ?? null} />
         </div>
-      </div>
-    );
+      );
+    }
+    if (msg.text) {
+      return (
+        <div className="flex items-end gap-2 max-w-[85%]">
+          <div className="rounded-[20px] rounded-tl-[4px] bg-white px-4 py-3 shadow-xs">
+            <p className="text-[13px] leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
+          </div>
+        </div>
+      );
+    }
+    return null;
   }
 
   if (!data) return null;
@@ -1303,7 +1329,7 @@ function FloatingLikedPile({
 
   return (
     <>
-      <div className="flex w-[108px] flex-col gap-2">
+      <div className="flex w-[232px] flex-col gap-2">
         <div className="flex items-center justify-between px-0.5">
           <p className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">
             Guardadas
@@ -1312,7 +1338,8 @@ function FloatingLikedPile({
             ♥ {items.length}
           </span>
         </div>
-        <div className="flex max-h-[58vh] flex-col gap-2 overflow-y-auto scrollbar-none">
+        {/* 2-column grid, cards wrap left→right */}
+        <div className="flex max-h-[70vh] flex-wrap gap-2 overflow-y-auto scrollbar-none">
           {items.map((item, i) => (
             <LikedThumbnail
               key={item.rec.title}
@@ -1326,7 +1353,7 @@ function FloatingLikedPile({
       </div>
 
       {detailItem && (
-        <LikedDetailModal
+        <MovieDetailModal
           item={detailItem}
           poster={posters[detailItem.rec.title] ?? null}
           onClose={() => setDetailItem(null)}
@@ -1352,7 +1379,7 @@ function LikedThumbnail({
   return (
     <button
       onClick={onDetail}
-      className="group relative h-[142px] w-full overflow-hidden rounded-xl shadow-card transition-transform hover:scale-[1.03] active:scale-[0.98]"
+      className="group relative h-[142px] w-[108px] overflow-hidden rounded-xl shadow-card transition-transform hover:scale-[1.03] active:scale-[0.98]"
       style={isNew ? { animation: "pile-card-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both" } : undefined}
     >
       {poster ? (
@@ -1362,15 +1389,12 @@ function LikedThumbnail({
           <span className="text-3xl font-black" style={{ color, opacity: 0.18 }}>{rec.title.charAt(0)}</span>
         </div>
       )}
-      {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
-      {/* Eye icon on hover */}
       <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
         <div className="rounded-full bg-black/40 p-1.5 backdrop-blur-sm">
           <Eye className="h-4 w-4 text-white" />
         </div>
       </div>
-      {/* Title + platform at bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-2 pb-2">
         <p className="line-clamp-2 text-[9px] font-semibold leading-tight text-white">{rec.title}</p>
         <div className="mt-0.5 flex items-center gap-0.5">
@@ -1382,7 +1406,9 @@ function LikedThumbnail({
   );
 }
 
-function LikedDetailModal({
+/* ── MovieDetailModal — shared by pile thumbnails ────────────────────────── */
+
+function MovieDetailModal({
   item,
   poster,
   onClose,
@@ -1393,18 +1419,15 @@ function LikedDetailModal({
 }) {
   const { rec } = item;
   const color = colorForPlatform(rec.platform as never);
+  const trailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title + " trailer")}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/45 backdrop-blur-sm" />
       <div
         className="relative z-10 w-full max-w-[320px] overflow-hidden rounded-3xl bg-white shadow-float animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Poster */}
         <div className="relative h-[260px]">
           {poster ? (
             <img src={poster} alt={rec.title} className="h-full w-full object-cover" />
@@ -1414,14 +1437,12 @@ function LikedDetailModal({
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
-          {/* Close */}
           <button
             onClick={onClose}
             className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur-sm transition-opacity hover:opacity-80"
           >
             <X className="h-4 w-4" />
           </button>
-          {/* Platform badge */}
           <div className="absolute bottom-3 left-3">
             <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 px-2.5 py-1 backdrop-blur-sm">
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
@@ -1429,23 +1450,103 @@ function LikedDetailModal({
             </div>
           </div>
         </div>
-        {/* Content */}
         <div className="p-5">
           <h3 className="text-[18px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
           <p className="mt-1 text-[12px] text-muted-foreground/60">{rec.duration} · {rec.type}</p>
           <p className="mt-3 text-[13px] leading-relaxed text-foreground/70">{rec.reason}</p>
-          <a
-            href={deepLinkFor(rec.platform, rec.title)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-85"
-            style={{ background: color }}
-          >
-            <ExternalLink className="h-4 w-4" />
-            Ver en {rec.platform}
-          </a>
+          <div className="mt-4 flex gap-2">
+            <a
+              href={deepLinkFor(rec.platform, rec.title)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-full py-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-85"
+              style={{ background: color }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Ver en {rec.platform}
+            </a>
+            <a
+              href={trailerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1.5 rounded-full border border-red-200 px-4 py-3 text-[13px] font-semibold text-red-500 transition-colors hover:bg-red-50"
+            >
+              <Youtube className="h-3.5 w-3.5" />
+              Tráiler
+            </a>
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── FinalPickCard — shown when choose mode AI makes its final pick ────────── */
+
+function FinalPickCard({ item, poster }: { item: SwipeItem; poster: string | null }) {
+  const [showDetail, setShowDetail] = useState(false);
+  const { rec } = item;
+  const color = colorForPlatform(rec.platform as never);
+  const trailerUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title + " trailer")}`;
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-2xl rounded-tl-[4px] bg-white shadow-card">
+        <div className="flex">
+          <div
+            className="relative h-[172px] w-[115px] shrink-0 cursor-pointer overflow-hidden"
+            style={!poster ? { background: `${color}12` } : undefined}
+            onClick={() => setShowDetail(true)}
+          >
+            {poster ? (
+              <img src={poster} alt={rec.title} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <span className="text-3xl font-black opacity-[0.12]" style={{ color }}>{rec.title.charAt(0)}</span>
+              </div>
+            )}
+            {/* Eye overlay */}
+            <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors hover:bg-black/20">
+              <Eye className="h-5 w-5 text-white opacity-0 transition-opacity hover:opacity-100" />
+            </div>
+          </div>
+          <div className="flex flex-1 flex-col justify-between p-4">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5" style={{ background: `${color}14` }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+                <span className="text-[10px] font-semibold" style={{ color }}>{rec.platform}</span>
+              </div>
+              <h3 className="text-[15px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/70">{rec.duration} · {rec.type}</p>
+              <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-foreground/60">{rec.reason}</p>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <a
+                href={deepLinkFor(rec.platform, rec.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[11px] font-semibold text-white transition-opacity hover:opacity-85"
+                style={{ background: color }}
+              >
+                <ExternalLink className="h-3 w-3" />
+                Ver ahora
+              </a>
+              <a
+                href={trailerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1 rounded-full border border-red-200 px-3 py-2 text-[11px] font-semibold text-red-500 transition-colors hover:bg-red-50"
+              >
+                <Youtube className="h-3 w-3" />
+                Tráiler
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {showDetail && (
+        <MovieDetailModal item={item} poster={poster} onClose={() => setShowDetail(false)} />
+      )}
+    </>
   );
 }

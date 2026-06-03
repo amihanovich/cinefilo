@@ -518,10 +518,11 @@ Tu rol: ayudarle a elegir cuál ver hoy mediante preguntas breves y directas.
 Reglas estrictas:
 - Hacé UNA sola pregunta directa por turno. Sin preámbulo, sin introducción.
 - Las preguntas revelan: estado de ánimo actual, energía disponible, si está solo o acompañado, tiempo disponible.
-- Tras 3-4 intercambios (o antes si ya tenés suficiente info), cerrá con una recomendación: 1-2 títulos de la lista + 1 oración explicando por qué encajan ahora.
+- Tras 3-4 intercambios (o antes si ya tenés suficiente info), cerrá con una recomendación breve + 1 oración explicando por qué encaja ahora.
 - JAMÁS recomiendes títulos fuera de la lista preseleccionada.
 - Tono: cercano, directo, rioplatense. Sin formalidades ni emojis.
-- Máximo 2-3 oraciones por turno.`;
+- Máximo 2-3 oraciones por turno.
+- Cuando hagas tu recomendación final, SIEMPRE terminá tu respuesta con esta línea exacta en una nueva línea separada: ELIGE: [título exacto de la lista tal como aparece arriba]`;
 
 export const chooseFromLiked = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => chooseInputSchema.parse(data))
@@ -544,7 +545,10 @@ export const chooseFromLiked = createServerFn({ method: "POST" })
 
     try {
       const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
-      return { text: text.trim() };
+      const pickMatch = text.match(/\nELIGE:\s*(.+)/);
+      const finalTitle = pickMatch ? pickMatch[1].trim() : undefined;
+      const displayText = text.replace(/\nELIGE:\s*.+$/, "").trim();
+      return { text: displayText, finalTitle };
     } catch (err) {
       throw mapErr(err);
     }
