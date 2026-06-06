@@ -29,6 +29,27 @@ export const recordTitleFeedback = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const getTitlesBySentimentSchema = z.object({
+  sentiment: z.enum(["love", "like", "dislike", "seen"]),
+});
+
+export const getTitlesBySentiment = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => getTitlesBySentimentSchema.parse(d))
+  .handler(async ({ data }) => {
+    const user = await getOptionalUser();
+    if (!user) return [] as { title: string; platform: string | null }[];
+    const { data: rows, error } = await user.supabase
+      .from("title_feedback")
+      .select("title, platform")
+      .eq("user_id", user.userId)
+      .eq("sentiment", data.sentiment)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error || !rows) return [] as { title: string; platform: string | null }[];
+    return rows as { title: string; platform: string | null }[];
+  });
+
+
 const resetSchema = z.object({
   scope: z.enum(["all", "preferences", "seen"]).default("all"),
 });

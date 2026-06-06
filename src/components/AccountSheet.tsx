@@ -12,6 +12,8 @@ import {
   Eye,
   Bookmark,
   Trash2,
+  ChevronLeft,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -21,8 +23,9 @@ import {
   getTasteCounts,
   deleteAccount,
 } from "@/lib/profile.functions";
-import { resetTitleFeedback } from "@/lib/feedback.functions";
-import { PLATFORM_OPTIONS, colorForPlatform, type Platform } from "@/lib/recommendations";
+import { resetTitleFeedback, getTitlesBySentiment } from "@/lib/feedback.functions";
+import { PLATFORM_OPTIONS, colorForPlatform, deepLinkFor, type Platform } from "@/lib/recommendations";
+import { fetchPostersClient } from "@/lib/itunes";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -324,6 +327,8 @@ function PlatformsSection({
 
 /* ---------- C · Mis gustos / actividad ---------- */
 
+type GalleryKey = "loved" | "liked" | "seen" | "disliked" | "watchlist";
+
 function ActivitySection({
   counts,
   onReset,
@@ -336,6 +341,7 @@ function ActivitySection({
   const [scope, setScope] = useState<"all" | "preferences" | "seen">("all");
   const [resetting, setResetting] = useState(false);
   const [watchlistCount, setWatchlistCount] = useState(0);
+  const [gallery, setGallery] = useState<GalleryKey | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -372,13 +378,23 @@ function ActivitySection({
     }
   };
 
-  const stats = [
-    { label: "Me encantó", value: counts.loved, Icon: Heart, color: "text-pink-500" },
-    { label: "Me gustó", value: counts.liked, Icon: ThumbsUp, color: "text-primary" },
-    { label: "Ver luego", value: watchlistCount, Icon: Bookmark, color: "text-amber-500" },
-    { label: "Ya las vi", value: counts.seen, Icon: Eye, color: "text-muted-foreground" },
-    { label: "No me gustó", value: counts.disliked, Icon: ThumbsDown, color: "text-destructive" },
+  const stats: { key: GalleryKey; label: string; value: number; Icon: React.ElementType; color: string }[] = [
+    { key: "loved",     label: "Me encantó",  value: counts.loved,    Icon: Heart,      color: "text-pink-500" },
+    { key: "liked",     label: "Me gustó",    value: counts.liked,    Icon: ThumbsUp,   color: "text-primary" },
+    { key: "watchlist", label: "Ver luego",   value: watchlistCount,  Icon: Bookmark,   color: "text-amber-500" },
+    { key: "seen",      label: "Ya las vi",   value: counts.seen,     Icon: Eye,        color: "text-muted-foreground" },
+    { key: "disliked",  label: "No me gustó", value: counts.disliked, Icon: ThumbsDown, color: "text-destructive" },
   ];
+
+  if (gallery) {
+    return (
+      <TasteGallery
+        galleryKey={gallery}
+        label={stats.find((s) => s.key === gallery)!.label}
+        onBack={() => setGallery(null)}
+      />
+    );
+  }
 
   return (
     <section>
@@ -386,15 +402,20 @@ function ActivitySection({
         Mis gustos
       </h3>
       <div className="grid grid-cols-3 gap-2">
-        {stats.map(({ label, value, Icon, color }) => (
-          <div
-            key={label}
-            className="flex flex-col items-center gap-1 rounded-xl bg-white px-2 py-3 shadow-card"
+        {stats.map(({ key, label, value, Icon, color }) => (
+          <button
+            key={key}
+            onClick={() => value > 0 && setGallery(key)}
+            disabled={value === 0}
+            className={cn(
+              "flex flex-col items-center gap-1 rounded-xl bg-white px-2 py-3 shadow-card transition-all",
+              value > 0 ? "hover:shadow-float hover:scale-[1.03] active:scale-[0.98] cursor-pointer" : "opacity-50 cursor-default",
+            )}
           >
             <Icon className={cn("h-4 w-4", color)} />
             <span className="text-lg font-bold tracking-tight text-foreground">{value}</span>
             <span className="text-[10px] text-muted-foreground/60">{label}</span>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -445,25 +466,142 @@ function ActivitySection({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={resetting}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault();
-                handleReset();
-              }}
+              onClick={(e) => { e.preventDefault(); handleReset(); }}
               disabled={resetting}
             >
-              {resetting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Borrando…
-                </>
-              ) : (
-                "Resetear"
-              )}
+              {resetting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Borrando…</> : "Resetear"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </section>
+  );
+}
+
+/* ---------- C1 · Galería de títulos por sentimiento ---------- */
+
+const SENTIMENT_MAP: Record<Exclude<GalleryKey, "watchlist">, "love" | "like" | "dislike" | "seen"> = {
+  loved: "love",
+  liked: "like",
+  disliked: "dislike",
+  seen: "seen",
+};
+
+function TasteGallery({
+  galleryKey,
+  label,
+  onBack,
+}: {
+  galleryKey: GalleryKey;
+  label: string;
+  onBack: () => void;
+}) {
+  const callGetTitles = useServerFn(getTitlesBySentiment);
+  const [items, setItems] = useState<{ title: string; platform: string | null }[]>([]);
+  const [posters, setPosters] = useState<Record<string, string | null>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (galleryKey === "watchlist") {
+      try {
+        const raw = window.localStorage.getItem(WATCHLIST_KEY);
+        const arr: string[] = raw ? JSON.parse(raw) : [];
+        const watchItems = arr.map((t) => ({ title: t, platform: null }));
+        setItems(watchItems);
+        if (watchItems.length > 0) {
+          fetchPostersClient(watchItems.map((i) => ({ title: i.title, type: "Película" }))).then(setPosters);
+        }
+      } catch { /* noop */ }
+      setLoading(false);
+      return;
+    }
+    callGetTitles({ data: { sentiment: SENTIMENT_MAP[galleryKey] } })
+      .then((rows) => {
+        setItems(rows);
+        if (rows.length > 0) {
+          fetchPostersClient(rows.map((r) => ({ title: r.title, type: "Película" }))).then(setPosters);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galleryKey]);
+
+  return (
+    <section className="animate-fade-in">
+      <button
+        onClick={onBack}
+        className="mb-4 inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Volver
+      </button>
+      <h3 className="mb-4 text-[14px] font-bold tracking-tight text-foreground">{label}</h3>
+
+      {loading && (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground/40" />
+        </div>
+      )}
+
+      {!loading && items.length === 0 && (
+        <p className="py-6 text-center text-[13px] text-muted-foreground/60">Nada por acá todavía.</p>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          {items.map((item) => (
+            <GalleryCard key={item.title} title={item.title} platform={item.platform} poster={posters[item.title] ?? null} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function GalleryCard({
+  title,
+  platform,
+  poster,
+}: {
+  title: string;
+  platform: string | null;
+  poster: string | null;
+}) {
+  const color = platform ? colorForPlatform(platform as never) : "#6366f1";
+  return (
+    <div className="overflow-hidden rounded-xl bg-white shadow-card">
+      <div className="relative h-[120px] w-full" style={!poster ? { background: `${color}10` } : undefined}>
+        {poster ? (
+          <img src={poster} alt={title} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="text-3xl font-black opacity-[0.08]" style={{ color }}>{title.charAt(0)}</span>
+          </div>
+        )}
+      </div>
+      <div className="p-2.5">
+        <p className="line-clamp-2 text-[11px] font-semibold leading-tight text-foreground">{title}</p>
+        {platform && (
+          <div className="mt-1 flex items-center gap-1">
+            <span className="h-1 w-1 rounded-full" style={{ background: color }} />
+            <span className="text-[9px] text-muted-foreground/60">{platform}</span>
+          </div>
+        )}
+        {platform && (
+          <a
+            href={deepLinkFor(platform, title)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 flex items-center gap-1 text-[10px] font-semibold transition-opacity hover:opacity-70"
+            style={{ color }}
+          >
+            <ExternalLink className="h-2.5 w-2.5" />
+            Ver en {platform}
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
