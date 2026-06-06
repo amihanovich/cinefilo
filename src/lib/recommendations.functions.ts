@@ -11,6 +11,8 @@ const recSchema = z.object({
   platform: z.string(),
   duration: z.string(),
   type: z.string(),
+  year: z.string().optional(),
+  ageRating: z.string().optional(),
   reason: z.string(),
 });
 
@@ -48,9 +50,11 @@ Reglas estrictas:
 - Si el contexto incluye "Títulos a excluir", JAMÁS los recomiendes (ni en main ni en alternatives). Ya las vio o las descartó. Buscá alternativas frescas que mantengan el espíritu del pedido pero sean distintas.
 - Si el contexto incluye "Le encantó" y/o "Le gustó", usalo como SEÑAL FUERTE del gusto del usuario: tono, géneros, directores, ritmo, sensibilidad. NUNCA recomiendes esos mismos títulos otra vez, pero sí buscá títulos en esa misma línea (mismo director, mismo género/era/sensibilidad). Cuando esa preferencia influya la elección, mencionalo brevemente en "reason" (ej: "Como te encantó X, te puede atrapar…").
 - Priorizá títulos ampliamente conocidos con presencia estable en la plataforma indicada. Evitá estrenos de los últimos 6 meses salvo que tengas alta certeza de disponibilidad. Si el título es de nicho o distribución limitada, preferí una alternativa más segura. El objetivo es que el usuario encuentre el contenido cuando lo busca.
+- CLASIFICACIÓN: Incluí siempre "year" (año de estreno, ej: "2019") y "ageRating" en cada recomendación. Para "ageRating" usá: "ATP" (apto para todo público, equivalente a G), "PG" (mayores de 6 con guía parental), "+13" (mayores de 13), "+16" (mayores de 16), "+18" (adultos). Si no estás seguro, usá el valor más conservador.
+- FAMILIA CON NIÑOS / CONTENIDO INFANTIL: Si compañía es "Familia con niños", o el pedido menciona palabras como niños, hijos, chicos, kids, infantil, familiar, "con los chicos", "con mis hijos", o pide una película para ver con menores de edad → es OBLIGATORIO que main Y TODAS las alternatives sean únicamente contenido ATP o PG como máximo. JAMÁS recomiendes contenido +13, +16, +18, R, PG-13 o equivalente en ese contexto. Sin excepciones.
 
 FORMATO DE SALIDA: Devuelve ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:
-{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""}],"clarification_needed":null}`;
+{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""}],"clarification_needed":null}`;
 
 function parseAiJson<T>(text: string, schema: z.ZodType<T>): T {
   const cleaned = text

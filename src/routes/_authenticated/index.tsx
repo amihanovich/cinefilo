@@ -654,7 +654,10 @@ function MainResultCard({
               <span className="text-[11px] font-semibold" style={{ color }}>{rec.platform}</span>
             </div>
             <h2 className="text-[20px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h2>
-            <p className="mt-1 text-[12px] text-muted-foreground/60">{rec.duration} · {rec.type}</p>
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+              <p className="text-[12px] text-muted-foreground/60">{rec.duration} · {rec.type}{rec.year ? ` · ${rec.year}` : ""}</p>
+              {rec.ageRating && <AgeRatingBadge rating={rec.ageRating} />}
+            </div>
             <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed text-foreground/65">{rec.reason}</p>
           </div>
 
@@ -762,7 +765,10 @@ function AltResultCard({
           <span className="text-[9px] font-semibold" style={{ color }}>{rec.platform}</span>
         </div>
         <h3 className="line-clamp-2 text-[12px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
-        <p className="text-[10px] text-muted-foreground/60">{rec.duration} · {rec.type}</p>
+        <div className="flex items-center gap-1 flex-wrap">
+          <p className="text-[10px] text-muted-foreground/60">{rec.duration} · {rec.type}{rec.year ? ` · ${rec.year}` : ""}</p>
+          {rec.ageRating && <AgeRatingBadge rating={rec.ageRating} size="xs" />}
+        </div>
         <p className="line-clamp-2 text-[10px] leading-relaxed text-foreground/55">{rec.reason}</p>
       </div>
 
@@ -817,6 +823,38 @@ function AltResultCard({
 }
 
 /* ===================== SHARED ===================== */
+
+function ageRatingColor(rating: string): string {
+  const r = rating.toUpperCase();
+  if (r === "ATP") return "#16a34a";   // green
+  if (r === "PG")  return "#2563eb";   // blue
+  if (r === "+13") return "#d97706";   // amber
+  if (r === "+16") return "#ea580c";   // orange
+  if (r === "+18") return "#dc2626";   // red
+  return "#6b7280";
+}
+
+function AgeRatingBadge({ rating, size = "sm" }: { rating: string; size?: "sm" | "xs" }) {
+  const color = ageRatingColor(rating);
+  if (size === "xs") {
+    return (
+      <span
+        className="inline-flex items-center rounded px-1 py-0.5 text-[8px] font-bold leading-none"
+        style={{ color, background: `${color}18` }}
+      >
+        {rating}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-none"
+      style={{ color, background: `${color}18` }}
+    >
+      {rating}
+    </span>
+  );
+}
 
 function ActionBtn({
   active,

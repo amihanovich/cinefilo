@@ -37,6 +37,8 @@ export type Recommendation = {
   platform: string;
   duration: string;
   type: string;
+  year?: string;       // ej: "2019"
+  ageRating?: string;  // "ATP" | "PG" | "+13" | "+16" | "+18"
   reason: string;
 };
 
