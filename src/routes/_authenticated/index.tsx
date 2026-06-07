@@ -185,8 +185,8 @@ function HomePage() {
       setPosters({});
 
       fetchPostersClient([
-        { title: data.main.title, type: data.main.type },
-        ...data.alternatives.map((a) => ({ title: a.title, type: a.type })),
+        { title: data.main.title, type: data.main.type, year: data.main.year },
+        ...data.alternatives.map((a) => ({ title: a.title, type: a.type, year: a.year })),
       ]).then((map) => setPosters(map));
 
       if (isGuest) {

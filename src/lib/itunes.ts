@@ -1,9 +1,9 @@
-// Client-side iTunes poster fetcher (called directly from the browser — no server hop)
-// iTunes Search API supports CORS, so this avoids server IP throttling.
+// Client-side poster fetcher: iTunes first, Wikipedia fallback.
+// Both APIs support CORS — no server hop needed.
 
 function upscale(url: string): string {
-  // Replace any size suffix like /100x100bb.jpg or /500x750bb.jpg with /600x900bb.jpg
-  return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x900bb.$1");
+  // iTunes artwork URLs support square sizes reliably; 600x600bb covers movies and series.
+  return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x600bb.$1");
 }
 
 function normalizeTitle(title: string): string {
@@ -33,7 +33,7 @@ function titleScore(result: string, expected: string): number {
   return 0;
 }
 
-async function searchOne(
+async function searchItunes(
   title: string,
   media: "movie" | "tvShow",
   country: string,
@@ -41,14 +41,16 @@ async function searchOne(
   try {
     const entity = media === "movie" ? "movie" : "tvSeason";
     const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${entity}&limit=5&country=${country}`;
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
     if (!res.ok) return null;
     const data = await res.json();
     const results: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> =
       data.results ?? [];
     if (results.length === 0) return null;
 
-    // Pick the result that best matches the title
     let best = results[0];
     let bestScore = -1;
     for (const r of results) {
@@ -68,38 +70,104 @@ async function searchOne(
   }
 }
 
-export async function fetchPosterClient(title: string, type: string): Promise<string | null> {
+async function searchWikipedia(title: string, year?: string): Promise<string | null> {
+  // Try several search terms: "{title} film", "{title} {year}", "{title}"
+  const queries: string[] = [`${title} film`];
+  if (year) queries.push(`${title} ${year}`);
+  queries.push(title);
+
+  for (const q of queries) {
+    try {
+      const url =
+        `https://en.wikipedia.org/w/api.php?action=query` +
+        `&titles=${encodeURIComponent(q)}` +
+        `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const pages = data?.query?.pages ?? {};
+      type WikiPage = { missing?: string; thumbnail?: { source?: string } };
+      const page = Object.values(pages)[0] as WikiPage | undefined;
+      if (!page || "missing" in page) continue;
+      if (page.thumbnail?.source) return page.thumbnail.source;
+    } catch {
+      continue;
+    }
+  }
+
+  // Try Spanish Wikipedia as a second source
+  try {
+    const url =
+      `https://es.wikipedia.org/w/api.php?action=query` +
+      `&titles=${encodeURIComponent(title)}` +
+      `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      const pages = data?.query?.pages ?? {};
+      type WikiPage = { missing?: string; thumbnail?: { source?: string } };
+      const page = Object.values(pages)[0] as WikiPage | undefined;
+      if (page && !("missing" in page) && page.thumbnail?.source) {
+        return page.thumbnail.source;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+export async function fetchPosterClient(
+  title: string,
+  type: string,
+  year?: string,
+): Promise<string | null> {
   const clean = normalizeTitle(title);
   const noArticle = stripArticle(clean);
   const media: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const altMedia: "movie" | "tvShow" = media === "movie" ? "tvShow" : "movie";
 
-  // First round: primary media type, US + AR
+  // Round 1: primary media, US + AR
   const [usMain, arMain] = await Promise.all([
-    searchOne(clean, media, "us"),
-    searchOne(clean, media, "ar"),
+    searchItunes(clean, media, "us"),
+    searchItunes(clean, media, "ar"),
   ]);
   if (usMain ?? arMain) return usMain ?? arMain;
 
-  // Second round: alternate media type + strip article
-  const [usAlt, arAlt, usNo, arNo] = await Promise.all([
-    searchOne(clean, altMedia, "us"),
-    searchOne(clean, altMedia, "ar"),
-    noArticle !== clean ? searchOne(noArticle, media, "us") : Promise.resolve(null),
-    noArticle !== clean ? searchOne(noArticle, media, "ar") : Promise.resolve(null),
+  // Round 2: alternate media + strip article + ES/MX stores
+  const [usAlt, arAlt, usNo, esMain, mxMain] = await Promise.all([
+    searchItunes(clean, altMedia, "us"),
+    searchItunes(clean, altMedia, "ar"),
+    noArticle !== clean ? searchItunes(noArticle, media, "us") : Promise.resolve(null),
+    searchItunes(clean, media, "es"),
+    searchItunes(clean, media, "mx"),
   ]);
+  const itunesResult = usAlt ?? arAlt ?? usNo ?? esMain ?? mxMain ?? null;
+  if (itunesResult) return itunesResult;
 
-  return usAlt ?? arAlt ?? usNo ?? arNo ?? null;
+  // Round 3: Wikipedia fallback (covers classics, arthouse, foreign films)
+  return searchWikipedia(clean, year);
 }
 
 export async function fetchPostersClient(
-  items: { title: string; type: string }[],
+  items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
-  // Sequential with small delay to avoid iTunes rate-limiting
   const result: Record<string, string | null> = {};
-  for (const it of items) {
-    result[it.title] = await fetchPosterClient(it.title, it.type);
-    await new Promise<void>((r) => setTimeout(r, 120));
+
+  // Process in batches of 3 to balance speed vs. rate limits
+  const BATCH = 3;
+  for (let i = 0; i < items.length; i += BATCH) {
+    const batch = items.slice(i, i + BATCH);
+    const posters = await Promise.all(
+      batch.map((it) => fetchPosterClient(it.title, it.type, it.year)),
+    );
+    batch.forEach((it, idx) => {
+      result[it.title] = posters[idx];
+    });
+    if (i + BATCH < items.length) {
+      await new Promise<void>((r) => setTimeout(r, 200));
+    }
   }
   return result;
 }
