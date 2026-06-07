@@ -246,7 +246,7 @@ Pedido del usuario (filtros):
 Recuerda: "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -358,7 +358,7 @@ Tu tarea:
 4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -482,7 +482,7 @@ ${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"
 "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -592,7 +592,7 @@ Reglas:
 - Si un campo no se infiere razonablemente, usa null (no inventes).`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 800 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, filtersOutSchema);
       return result;
     } catch (err) {

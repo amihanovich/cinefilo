@@ -678,7 +678,7 @@ function MainResultCard({
             <p className="mt-3 line-clamp-3 text-[13px] leading-relaxed text-foreground/65">{rec.reason}</p>
           </div>
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex items-center gap-2">
             <a
               href={deepLinkFor(rec.platform, rec.title)}
               target="_blank"
@@ -693,7 +693,8 @@ function MainResultCard({
               href={trailerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 rounded-full border border-red-200 px-4 py-2.5 text-[12px] font-semibold text-red-500 transition-colors hover:bg-red-50"
+              title="Ver tráiler"
+              className="flex shrink-0 items-center justify-center gap-1 rounded-full border border-red-200 px-3 py-2.5 text-[11px] font-medium text-red-500 transition-colors hover:bg-red-50"
             >
               <Youtube className="h-3.5 w-3.5" />
               Tráiler
@@ -704,7 +705,7 @@ function MainResultCard({
 
       {/* Action row */}
       {!isGuest && (
-        <div className="flex items-center gap-0.5 border-t border-black/[0.04] px-3 py-2">
+        <div className="grid grid-cols-4 divide-x divide-black/[0.04] border-t border-black/[0.04]">
           <ActionBtn
             active={feedback === "love"}
             activeClass="bg-rose-50 text-rose-500"
@@ -729,15 +730,6 @@ function MainResultCard({
             icon={<Eye className="h-3.5 w-3.5" />}
             label="Ya la vi"
           />
-          <ActionBtn
-            active={feedback === "watchlist"}
-            activeClass="bg-primary/10 text-primary"
-            hoverClass="hover:bg-primary/8 hover:text-primary"
-            onClick={() => onFeedback("watchlist")}
-            icon={<Bookmark className="h-3.5 w-3.5" />}
-            label="Guardar"
-          />
-          <div className="flex-1" />
           <ActionBtn
             active={feedback === "dislike"}
             activeClass="bg-destructive/10 text-destructive"
@@ -928,8 +920,8 @@ function ActionBtn({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors",
-        active ? activeClass : cn("text-muted-foreground/55", hoverClass),
+        "flex w-full flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-medium transition-colors",
+        active ? activeClass : cn("text-muted-foreground/50", hoverClass),
       )}
     >
       {icon}
