@@ -12,6 +12,8 @@ import {
   X,
   Youtube,
   ThumbsDown,
+  Heart,
+  ThumbsUp,
 } from "lucide-react";
 import { PosterMarquee } from "@/components/PosterMarquee";
 import { MicButton } from "@/components/MicButton";
@@ -52,7 +54,9 @@ export const Route = createFileRoute("/_authenticated/")({
   component: HomePage,
 });
 
-type FeedbackSentiment = "seen" | "watchlist" | "dislike";
+type FeedbackSentiment = "seen" | "watchlist" | "like" | "love" | "dislike";
+
+const WATCHLIST_KEY = "cinefilo:watchlist";
 
 const GUEST_PLATFORMS_KEY = "queveo:guest:default_platforms";
 
@@ -197,9 +201,22 @@ function HomePage() {
 
   const handleFeedback = (title: string, platform: string, sentiment: FeedbackSentiment) => {
     setFeedbackGiven((prev) => ({ ...prev, [title]: sentiment }));
+
+    if (sentiment === "watchlist") {
+      try {
+        const raw = localStorage.getItem(WATCHLIST_KEY);
+        const arr: string[] = raw ? JSON.parse(raw) : [];
+        if (!arr.includes(title)) {
+          localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...arr, title]));
+        }
+      } catch { /* noop */ }
+      return;
+    }
+
     if (sentiment === "dislike" || sentiment === "seen") {
       setExcluded((prev) => prev.includes(title) ? prev : [...prev, title]);
     }
+
     void recordTitleFeedback({ data: { title, platform, sentiment } }).catch(() => {});
   };
 
@@ -687,7 +704,23 @@ function MainResultCard({
 
       {/* Action row */}
       {!isGuest && (
-        <div className="flex items-center gap-1 border-t border-black/[0.04] px-4 py-2">
+        <div className="flex items-center gap-0.5 border-t border-black/[0.04] px-3 py-2">
+          <ActionBtn
+            active={feedback === "love"}
+            activeClass="bg-rose-50 text-rose-500"
+            hoverClass="hover:bg-rose-50 hover:text-rose-500"
+            onClick={() => onFeedback("love")}
+            icon={<Heart className="h-3.5 w-3.5" />}
+            label="Me encantó"
+          />
+          <ActionBtn
+            active={feedback === "like"}
+            activeClass="bg-green-50 text-green-600"
+            hoverClass="hover:bg-green-50 hover:text-green-600"
+            onClick={() => onFeedback("like")}
+            icon={<ThumbsUp className="h-3.5 w-3.5" />}
+            label="Me gustó"
+          />
           <ActionBtn
             active={feedback === "seen"}
             activeClass="bg-muted text-foreground"
@@ -795,6 +828,26 @@ function AltResultCard({
         </a>
         {!isGuest && (
           <>
+            <button
+              onClick={() => onFeedback("love")}
+              title="Me encantó"
+              className={cn(
+                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
+                feedback === "love" ? "text-rose-500" : "text-muted-foreground/50 hover:text-rose-500",
+              )}
+            >
+              <Heart className="h-3 w-3" />
+            </button>
+            <button
+              onClick={() => onFeedback("like")}
+              title="Me gustó"
+              className={cn(
+                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
+                feedback === "like" ? "text-green-600" : "text-muted-foreground/50 hover:text-green-600",
+              )}
+            >
+              <ThumbsUp className="h-3 w-3" />
+            </button>
             <button
               onClick={() => onFeedback("seen")}
               title="Ya la vi"
