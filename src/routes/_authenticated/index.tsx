@@ -764,105 +764,90 @@ function AltResultCard({
   const dismissed = feedback === "dislike" || feedback === "seen";
 
   return (
-    <div className={cn("w-[172px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-card transition-opacity duration-300", dismissed && "opacity-40")}>
-      {/* Poster */}
-      <div
-        className="relative h-[110px] w-full overflow-hidden"
-        style={!poster ? { background: `${color}12` } : undefined}
-      >
-        {poster ? (
-          <img src={poster} alt={rec.title} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <span className="text-3xl font-black opacity-[0.08]" style={{ color }}>{rec.title.charAt(0)}</span>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-      </div>
-
-      {/* Info */}
-      <div className="flex flex-col gap-1.5 p-3">
+    <div className={cn("w-[260px] shrink-0 overflow-hidden rounded-2xl bg-white shadow-card transition-opacity duration-300", dismissed && "opacity-40")}>
+      {/* Horizontal layout: poster left, info right */}
+      <div className="flex">
         <div
-          className="inline-flex w-fit items-center gap-1 rounded-full px-1.5 py-0.5"
-          style={{ background: `${color}14` }}
+          className="relative h-[150px] w-[90px] shrink-0 overflow-hidden"
+          style={!poster ? { background: `${color}12` } : undefined}
         >
-          <span className="h-1 w-1 rounded-full" style={{ background: color }} />
-          <span className="text-[9px] font-semibold" style={{ color }}>{rec.platform}</span>
+          {poster ? (
+            <img src={poster} alt={rec.title} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <span className="text-3xl font-black opacity-[0.08]" style={{ color }}>{rec.title.charAt(0)}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-black/5" />
         </div>
-        <h3 className="line-clamp-2 text-[12px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
-        <div className="flex items-center gap-1 flex-wrap">
-          <p className="text-[10px] text-muted-foreground/60">{rec.duration} · {rec.type}{rec.year ? ` · ${rec.year}` : ""}</p>
-          {rec.ageRating && <AgeRatingBadge rating={rec.ageRating} size="xs" />}
+
+        {/* Info */}
+        <div className="flex flex-1 flex-col justify-between p-3">
+          <div>
+            <div
+              className="mb-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5"
+              style={{ background: `${color}14` }}
+            >
+              <span className="h-1 w-1 rounded-full" style={{ background: color }} />
+              <span className="text-[9px] font-semibold" style={{ color }}>{rec.platform}</span>
+            </div>
+            <h3 className="line-clamp-2 text-[13px] font-bold leading-tight tracking-tight text-foreground">{rec.title}</h3>
+            <div className="mt-1 flex items-center gap-1 flex-wrap">
+              <p className="text-[10px] text-muted-foreground/60">{rec.duration} · {rec.type}{rec.year ? ` · ${rec.year}` : ""}</p>
+              {rec.ageRating && <AgeRatingBadge rating={rec.ageRating} size="xs" />}
+            </div>
+            <p className="mt-1.5 line-clamp-2 text-[10px] leading-relaxed text-foreground/55">{rec.reason}</p>
+          </div>
+
+          <div className="mt-2 flex items-center gap-1.5">
+            <a
+              href={deepLinkFor(rec.platform, rec.title)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-1 items-center justify-center gap-1 rounded-full py-1.5 text-[10px] font-semibold text-white transition-opacity hover:opacity-85"
+              style={{ background: color }}
+            >
+              <ExternalLink className="h-2.5 w-2.5" />
+              Ver ahora
+            </a>
+            <a
+              href={trailerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Ver tráiler"
+              className="flex shrink-0 items-center justify-center gap-0.5 rounded-full border border-red-200 px-2 py-1.5 text-[10px] font-medium text-red-500 transition-colors hover:bg-red-50"
+            >
+              <Youtube className="h-2.5 w-2.5" />
+              Tráiler
+            </a>
+          </div>
         </div>
-        <p className="line-clamp-2 text-[10px] leading-relaxed text-foreground/55">{rec.reason}</p>
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-1.5 border-t border-black/[0.04] px-3 py-2">
-        <a
-          href={deepLinkFor(rec.platform, rec.title)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex flex-1 items-center justify-center gap-1 rounded-full py-2 text-[10px] font-semibold text-white transition-opacity hover:opacity-85"
-          style={{ background: color }}
-        >
-          <ExternalLink className="h-2.5 w-2.5" />
-          Ver
-        </a>
-        <a
-          href={trailerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center rounded-full border border-red-200 px-2.5 py-2 text-red-500 transition-colors hover:bg-red-50"
-          title="Ver tráiler"
-        >
-          <Youtube className="h-3 w-3" />
-        </a>
-        {!isGuest && (
-          <>
+      {/* Action bar: same 4-col grid as main card */}
+      {!isGuest && (
+        <div className="grid grid-cols-4 divide-x divide-black/[0.04] border-t border-black/[0.04]">
+          {[
+            { s: "love" as const, icon: <Heart className="h-3 w-3" />, label: "Me encantó", ac: "bg-rose-50 text-rose-500", hc: "hover:bg-rose-50 hover:text-rose-500" },
+            { s: "like" as const, icon: <ThumbsUp className="h-3 w-3" />, label: "Me gustó", ac: "bg-green-50 text-green-600", hc: "hover:bg-green-50 hover:text-green-600" },
+            { s: "seen" as const, icon: <Eye className="h-3 w-3" />, label: "Ya la vi", ac: "bg-muted text-foreground", hc: "hover:bg-muted hover:text-foreground" },
+            { s: "dislike" as const, icon: <ThumbsDown className="h-3 w-3" />, label: "No me gusta", ac: "bg-destructive/10 text-destructive", hc: "hover:bg-destructive/8 hover:text-destructive" },
+          ].map(({ s, icon, label, ac, hc }) => (
             <button
-              onClick={() => onFeedback("love")}
-              title="Me encantó"
+              key={s}
+              onClick={() => onFeedback(s)}
+              title={label}
               className={cn(
-                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
-                feedback === "love" ? "text-rose-500" : "text-muted-foreground/50 hover:text-rose-500",
+                "flex flex-col items-center justify-center gap-0.5 py-2 text-[9px] font-medium transition-colors",
+                feedback === s ? ac : cn("text-muted-foreground/50", hc),
               )}
             >
-              <Heart className="h-3 w-3" />
+              {icon}
+              <span className="leading-none">{label.split(" ").slice(-1)[0]}</span>
             </button>
-            <button
-              onClick={() => onFeedback("like")}
-              title="Me gustó"
-              className={cn(
-                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
-                feedback === "like" ? "text-green-600" : "text-muted-foreground/50 hover:text-green-600",
-              )}
-            >
-              <ThumbsUp className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => onFeedback("seen")}
-              title="Ya la vi"
-              className={cn(
-                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
-                feedback === "seen" ? "bg-muted text-foreground" : "text-muted-foreground/50 hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <Eye className="h-3 w-3" />
-            </button>
-            <button
-              onClick={() => onFeedback("dislike")}
-              title="No me gusta"
-              className={cn(
-                "flex items-center justify-center rounded-full px-2.5 py-2 transition-colors",
-                feedback === "dislike" ? "text-destructive" : "text-muted-foreground/50 hover:text-destructive",
-              )}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
