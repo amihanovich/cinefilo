@@ -54,6 +54,7 @@ export type RecommendationsResult = {
   main: Recommendation;
   alternatives: Recommendation[];
   clarification_needed?: string | null;
+  cinephile_note?: string | null;
 };
 
 export const TIME_OPTIONS: TimeOption[] = ["30 min", "1 hora", "1.5 horas", "Noche entera"];

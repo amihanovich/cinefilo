@@ -14,6 +14,7 @@ import {
   ThumbsDown,
   Heart,
   ThumbsUp,
+  Clapperboard,
 } from "lucide-react";
 import { PosterMarquee } from "@/components/PosterMarquee";
 import { MicButton } from "@/components/MicButton";
@@ -539,6 +540,18 @@ function ResultsScreen({
         </button>
       </div>
 
+      {/* Cinéfilo note */}
+      {result.cinephile_note && (
+        <div className="mb-4 flex items-start gap-3 animate-fade-in">
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
+            <Clapperboard className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <p className="text-[13px] italic leading-relaxed text-foreground/60">
+            {result.cinephile_note}
+          </p>
+        </div>
+      )}
+
       {/* Main card */}
       <div className={cn("transition-opacity duration-300", isLoading && "opacity-40 pointer-events-none")}>
         <MainResultCard
@@ -574,7 +587,7 @@ function ResultsScreen({
       {/* Refine bar */}
       <div className="mt-8">
         <p className="mb-2 text-center text-[12px] text-muted-foreground/55">
-          ¿No era lo que buscabas? Refiná tu búsqueda:
+          Conversá con Cinéfilo para afinar la recomendación
         </p>
         <div className={cn(
           "flex items-center gap-3 rounded-2xl bg-white px-4 shadow-card transition-all duration-200",
@@ -585,7 +598,7 @@ function ResultsScreen({
             value={refineText}
             onChange={(e) => setRefineText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleRefine(); }}
-            placeholder={isLoading ? "Buscando…" : "Algo más corto, sin violencia, de los 80s…"}
+            placeholder={isLoading ? "Cinéfilo está pensando…" : "Algo más oscuro, de los 70s, con Scorsese…"}
             disabled={isLoading}
             className="min-h-[52px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none"
           />
