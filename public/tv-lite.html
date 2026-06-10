@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cinéfilo TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Paleta cálida tipo Anthropic: marfil claro + texto cálido + acento coral. */
+  * { box-sizing: border-box; }
+  body { margin:0; background:#F7F4ED; color:#2B2A27;
+    font-family:'Inter', system-ui, -apple-system, Arial, sans-serif; -webkit-font-smoothing:antialiased; }
+  .serif { font-family:'Newsreader', Georgia, serif; }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #E7E2D6; background:#FBFAF5; }
+  .brand { font-family:'Newsreader', Georgia, serif; font-size:30px; font-weight:600; letter-spacing:-.01em; }
+  .brand span { color:#CC785C; }
+  .ai { font-size:13px; color:#8A8678; margin-left:10px; font-family:'Inter',sans-serif; }
+  .badge { font-size:16px; color:#6B6A61; background:#FFFFFF; border:1px solid #E7E2D6; border-radius:999px; padding:7px 15px; }
+  .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#BDB8AB; }
+  .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
+
+  /* === Landing / vinculación === */
+  .pair { text-align:center; padding:34px 24px 44px; }
+  .taglines { max-width:920px; margin:0 auto 8px; }
+  .taglines p { margin:8px 0; font-size:24px; color:#4A4942; line-height:1.35; }
+  .taglines .a { color:#CC785C; font-weight:600; }
+  .stage { position:relative; width:660px; max-width:94%; height:380px; margin:14px auto 6px; }
+  .qrbox { position:absolute; left:50%; top:50%; margin-left:-178px; margin-top:-178px; background:#fff; padding:18px; border-radius:22px; border:1px solid #E7E2D6; box-shadow:0 14px 50px rgba(204,120,92,.20); }
+  .qrbox img { display:block; width:320px; height:320px; }
+  .chip { position:absolute; color:#fff; font-weight:600; font-size:18px; padding:9px 16px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.18); animation:float 3.2s ease-in-out infinite; white-space:nowrap; }
+  @keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-16px)} 100%{transform:translateY(0)} }
+  .pair h1 { font-family:'Newsreader', Georgia, serif; font-size:38px; font-weight:600; margin:16px 0 6px; }
+  .pair .sub { font-size:19px; color:#6B6A61; margin:0; }
+  .sess { margin-top:14px; color:#A39E91; font-size:15px; }
+
+  /* === Resultados / home === */
+  .wrap { padding:18px 34px 44px; }
+  .topline { font-size:20px; color:#4A4942; margin-bottom:14px; }
+  .topline b { color:#2B2A27; }
+  .topline .hint { color:#CC785C; font-weight:600; }
+
+  .spot { display:flex; gap:18px; background:#FFFFFF; border:1px solid #E7E2D6; border-radius:18px; padding:16px; margin-bottom:18px; position:sticky; top:0; z-index:5; box-shadow:0 6px 22px rgba(0,0,0,.05); }
+  .spot .poster { width:84px; height:126px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#EFEBE0; }
+  .spot .poster img { width:100%; height:100%; object-fit:cover; }
+  .spot h2 { font-family:'Newsreader', Georgia, serif; margin:0; font-size:24px; font-weight:600; }
+  .spot .yr { color:#A39E91; font-size:15px; font-weight:normal; margin-left:8px; font-family:'Inter',sans-serif; }
+  .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; margin-top:7px; }
+  .syn { font-size:16px; color:#4A4942; margin:8px 0 0; line-height:1.4; }
+  .why { font-size:16px; color:#2B2A27; margin:6px 0 0; line-height:1.4; }
+  .why b { color:#CC785C; }
+  .why .ico { color:#CC785C; }
+
+  .sec { font-family:'Newsreader', Georgia, serif; font-size:23px; font-weight:600; margin:20px 0 12px; color:#2B2A27; }
+  .sec:first-child { margin-top:0; }
+  .grid { display:flex; flex-wrap:wrap; margin:-6px; }
+  .card { width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #ECE7DA; border-radius:13px; overflow:hidden; background:#FFFFFF; opacity:.92; transition:all .12s; }
+  .card.foc { opacity:1; border-color:#CC785C; box-shadow:0 6px 22px rgba(204,120,92,.30); transform:scale(1.05); }
+  .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#EFEBE0; overflow:hidden; }
+  .card .ph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .card .ph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; color:#8A8678; font-size:13px; font-weight:500; }
+  .card .meta { padding:8px 10px; }
+  .card .meta .t { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#2B2A27; }
+  .card .meta .p { font-size:12px; margin-top:2px; }
+  .center { text-align:center; color:#8A8678; font-size:21px; padding:60px 20px; }
+  .more { text-align:center; color:#8A8678; font-size:18px; padding:20px; width:100%; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Cinéfilo <span>TV</span><span class="ai">✦ recomendado con Inteligencia Artificial</span></div>
+    <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
+  </div>
+
+  <div id="pair" class="pair">
+    <div class="taglines">
+      <p>🎬 Películas y Series de <span class="a">todas las plataformas</span> en un solo lugar</p>
+      <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
+    </div>
+    <div class="stage" id="stage">
+      <div class="qrbox"><img id="qr" alt="QR"></div>
+    </div>
+    <h1>Usá tu teléfono como control</h1>
+    <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
+    <div class="sess" id="sess">Generando sesión…</div>
+  </div>
+
+  <div id="results" class="wrap hidden">
+    <div class="topline" id="topline"></div>
+    <div id="spot" class="spot hidden"></div>
+    <div id="content"></div>
+  </div>
+
+<script>
+/* Red de seguridad: si algo falla, mostrarlo en pantalla (no puedo ver la consola de la TV). */
+(function () {
+  function showErr(text) {
+    var d = document.getElementById("err");
+    if (!d) {
+      d = document.createElement("div");
+      d.id = "err";
+      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:12px 16px;font-size:15px;z-index:9999;white-space:pre-wrap;font-family:monospace;";
+      if (document.body) document.body.appendChild(d);
+    }
+    if (d) d.textContent = "⚠ " + text;
+  }
+  window.__showErr = showErr; // para diagnósticos desde el script principal
+  window.onerror = function (msg, src, line, col) {
+    showErr(msg + "  (línea " + line + ":" + col + ")");
+    return false;
+  };
+  window.addEventListener("unhandledrejection", function (e) {
+    showErr("Promesa rechazada: " + ((e && e.reason && (e.reason.message || e.reason)) || "?"));
+  });
+})();
+/* Polyfills para navegadores viejos (Tizen 4.0 / chrome56). DEBEN ir antes del bundle. */
+(function () {
+  if (typeof globalThis === "undefined") { window.globalThis = window; }
+  if (typeof Object.fromEntries !== "function") {
+    Object.fromEntries = function (iter) {
+      var o = {}, arr = Array.from(iter || []);
+      for (var i = 0; i < arr.length; i++) { o[arr[i][0]] = arr[i][1]; }
+      return o;
+    };
+  }
+  if (!String.prototype.padStart) {
+    String.prototype.padStart = function (len, pad) {
+      var s = String(this); pad = pad === undefined ? " " : String(pad);
+      if (s.length >= len || !pad) return s;
+      var fill = ""; while (fill.length < len - s.length) { fill += pad; }
+      return fill.slice(0, len - s.length) + s;
+    };
+  }
+  if (typeof Promise !== "undefined" && !Promise.prototype["finally"]) {
+    Promise.prototype["finally"] = function (cb) {
+      var P = this.constructor;
+      return this.then(
+        function (v) { return P.resolve(cb()).then(function () { return v; }); },
+        function (e) { return P.resolve(cb()).then(function () { throw e; }); }
+      );
+    };
+  }
+  if (typeof AbortController === "undefined") {
+    var Sig = function () { this.aborted = false; this.onabort = null; this._l = []; };
+    Sig.prototype.addEventListener = function (t, cb) { if (t === "abort") this._l.push(cb); };
+    Sig.prototype.removeEventListener = function (t, cb) {
+      if (t === "abort") { var i = this._l.indexOf(cb); if (i >= 0) this._l.splice(i, 1); }
+    };
+    Sig.prototype.dispatchEvent = function () { return true; };
+    var Ctrl = function () { this.signal = new Sig(); };
+    Ctrl.prototype.abort = function () {
+      this.signal.aborted = true;
+      if (this.signal.onabort) { try { this.signal.onabort(); } catch (e) {} }
+      for (var i = 0; i < this.signal._l.length; i++) { try { this.signal._l[i](); } catch (e) {} }
+    };
+    window.AbortController = Ctrl;
+    window.AbortSignal = Sig;
+  }
+})();
+</script>
+<script src="/tv-supabase.js"></script>
+<script>
+/* === Cinéfilo TV liviana — JS clásico para navegadores viejos (Tizen 4.0). ===
+   Sin spread {...} ni optional chaining ?. — ese navegador no los soporta. */
+(function () {
+  "use strict";
+
+  var SUPABASE_URL = "https://gyxooovdwputhznnlqhi.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_Rr1Xw4no3qdm2uFSI1kVYg_4asF5n6o";
+
+  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+  var COLORS = {
+    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
+    "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
+  };
+  function colorFor(p) { return COLORS[p] || "#2563EB"; }
+
+  function deepLink(platform, title) {
+    var t = encodeURIComponent(title);
+    var dom = {
+      "Netflix": "netflix.com", "Disney+": "disneyplus.com", "Max": "max.com",
+      "Prime Video": "primevideo.com", "Apple TV+": "tv.apple.com",
+      "Paramount+": "paramountplus.com", "Star+": "disneyplus.com"
+    };
+    var d = dom[platform];
+    if (d) return "https://www.google.com/search?q=" + t + "+site%3A" + d + "&btnI=1";
+    return "https://www.google.com/search?q=" + t + "+ver+online";
+  }
+
+  function makeSessionId() {
+    try {
+      var b = new Uint8Array(6);
+      window.crypto.getRandomValues(b);
+      var s = "";
+      for (var i = 0; i < b.length; i++) { s += ("0" + b[i].toString(16)).slice(-2); }
+      return s;
+    } catch (e) { return Math.random().toString(36).slice(2, 10); }
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // --- Estado ---
+  var sessionId = makeSessionId();
+  var origin = window.location.origin;
+  var controlUrl = origin + "/control?session=" + sessionId;
+  var items = [];
+  var focusedIndex = 0;
+  var screen = "home";
+  var query = "";
+  var mode = "home"; // "home" | "search" | "list"
+  var history = []; // pila de pantallas anteriores (para "Volver")
+  var loading = false;
+  var loadingMore = false;
+  var paired = false;
+  var homeLoaded = false;
+  var channel = null;
+
+  var elPair = document.getElementById("pair");
+  var elResults = document.getElementById("results");
+  var elTopline = document.getElementById("topline");
+  var elSpot = document.getElementById("spot");
+  var elContent = document.getElementById("content");
+  var elBadge = document.getElementById("badge");
+  var elDot = document.getElementById("dot");
+
+  // QR + sesión + logos flotando
+  document.getElementById("qr").src =
+    "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
+  document.getElementById("sess").textContent = "Sesión " + sessionId;
+  (function buildChips() {
+    var stage = document.getElementById("stage");
+    // posiciones (left%, top%) alrededor del QR central
+    var pos = [[6, 12], [82, 8], [2, 58], [88, 52], [20, 84], [70, 86], [44, 2]];
+    for (var i = 0; i < PLATFORMS.length; i++) {
+      var p = PLATFORMS[i];
+      var c = document.createElement("span");
+      c.className = "chip";
+      c.textContent = p;
+      c.style.background = colorFor(p);
+      c.style.left = pos[i][0] + "%";
+      c.style.top = pos[i][1] + "%";
+      c.style.animationDelay = (i * 0.4) + "s";
+      stage.appendChild(c);
+    }
+  })();
+
+  function setBadge(text, cls) {
+    elBadge.textContent = text;
+    elDot.className = "dot" + (cls ? " " + cls : "");
+  }
+
+  // --- Render ---
+  function posterHTML(it) {
+    if (it.posterUrl) return '<img src="' + esc(it.posterUrl) + '" alt="">';
+    return '<div class="txt">' + esc(it.title) + "</div>";
+  }
+
+  function renderSpot() {
+    var it = items[focusedIndex];
+    if (!it) { elSpot.className = "spot hidden"; return; }
+    elSpot.className = "spot";
+    var html = '<div class="poster">' + posterHTML(it) + "</div><div>";
+    html += "<h2>" + esc(it.title);
+    if (it.year) html += '<span class="yr">' + esc(it.year) + "</span>";
+    html += "</h2>";
+    if (it.platform) html += '<span class="pill" style="background:' + colorFor(it.platform) + '">' + esc(it.platform) + "</span>";
+    if (it.synopsis) html += '<p class="syn">' + esc(it.synopsis) + "</p>";
+    if (it.reason) html += '<p class="why"><b><span class="ico">✦</span> Por qué te lo recomiendo: </b>' + esc(it.reason) + "</p>";
+    html += "</div>";
+    elSpot.innerHTML = html;
+  }
+
+  function cardHTML(it, foc) {
+    var h = '<div class="card' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
+    h += '<div class="ph">' + posterHTML(it) + "</div>";
+    h += '<div class="meta"><div class="t">' + esc(it.title) + "</div>";
+    if (it.platform) h += '<div class="p" style="color:' + colorFor(it.platform) + '">' + esc(it.platform) + "</div>";
+    h += "</div></div>";
+    return h;
+  }
+
+  function renderContent() {
+    if (loading && items.length === 0) { elContent.innerHTML = '<div class="center">Buscando…</div>'; return; }
+    if (items.length === 0) {
+      elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
+      return;
+    }
+    var html = "";
+    var cur = null;
+    var open = false;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var sec = it.section || "";
+      if (sec !== cur) {
+        if (open) { html += "</div>"; open = false; }
+        cur = sec;
+        if (sec) html += '<h3 class="sec">' + esc(sec) + "</h3>";
+        html += '<div class="grid">'; open = true;
+      }
+      html += cardHTML(it, i === focusedIndex);
+    }
+    if (open) html += "</div>";
+    if (loadingMore) html += '<div class="more">Cargando más…</div>';
+    elContent.innerHTML = html;
+  }
+
+  function render() {
+    if (!paired) { elPair.className = "pair"; elResults.className = "wrap hidden"; return; }
+    elPair.className = "pair hidden";
+    elResults.className = "wrap";
+    if (mode === "search") {
+      elTopline.innerHTML = "Resultados para <b>“" + esc(query) + "”</b>";
+    } else if (mode === "list") {
+      elTopline.innerHTML = '<span class="hint">Mi lista</span> — tus películas y series guardadas.';
+    } else {
+      elTopline.innerHTML = '<span class="hint">Usá tu teléfono para buscar</span> — más práctico que el control de la TV.';
+    }
+    renderSpot();
+    renderContent();
+  }
+
+  function scrollFocusIntoView() {
+    var it = items[focusedIndex];
+    if (!it) return;
+    var el = document.getElementById("card-" + it.id);
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
+    var mid = rect.top + window.pageYOffset - (window.innerHeight / 2) + (rect.height / 2);
+    if (mid < 0) mid = 0;
+    try { window.scrollTo(0, mid); } catch (e) {}
+  }
+
+  function updateFocusClasses() {
+    var cards = elContent.getElementsByClassName("card");
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].className = "card" + (i === focusedIndex ? " foc" : "");
+    }
+  }
+
+  // --- Mensajes al teléfono ---
+  function sendState(payload) {
+    if (channel) { try { channel.send({ type: "broadcast", event: "state", payload: payload }); } catch (e) {} }
+  }
+  function emitScreen() {
+    var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
+    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items });
+  }
+
+  // --- Pósters vía Cinemeta (catálogo público de Stremio: con CORS y sin clave). ---
+  var lastPosterErr = "";
+  function cinemetaPoster(title, type, cb) {
+    var kind = /serie/i.test(type || "") ? "series" : "movie";
+    var u = "https://v3-cinemeta.strem.io/catalog/" + kind + "/top/search=" +
+      encodeURIComponent(title) + ".json";
+    fetch(u)
+      .then(function (r) {
+        if (!r.ok) { lastPosterErr = "HTTP " + r.status; return null; }
+        return r.json();
+      })
+      .then(function (j) {
+        var m = j && j.metas && j.metas[0];
+        cb(m && m.poster ? m.poster : null);
+      })
+      .catch(function (e) { lastPosterErr = (e && e.message) || "fetch falló (¿CORS/red?)"; cb(null); });
+  }
+
+  var posterRun = 0;
+  function loadPosters() {
+    var run = ++posterRun; // una nueva lista cancela el llenado anterior
+    var done = 0, total = 0, loaded = 0;
+    function onPoster(it, url) {
+      if (run !== posterRun) return;
+      if (url) {
+        loaded++;
+        it.posterUrl = url;
+        var ph = document.querySelector("#card-" + it.id + " .ph");
+        if (ph) ph.innerHTML = posterHTML(it);
+        if (items[focusedIndex] && items[focusedIndex].id === it.id) renderSpot();
+      }
+      done++;
+      if (done % 4 === 0 || done >= total) emitScreen();
+      // Diagnóstico: si terminó y no entró ninguna carátula, avisamos por qué.
+      if (done >= total && loaded === 0 && total > 0 && window.__showErr) {
+        window.__showErr("Carátulas 0/" + total + " — Cinemeta: " + (lastPosterErr || "sin resultados"));
+      }
+    }
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (it.posterUrl) continue;
+      total++;
+      (function (item) { cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); }); })(it);
+    }
+  }
+
+  // --- Acciones ---
+  function assignIds(raw, startIndex) {
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var r = raw[i];
+      var it = { id: "m" + (startIndex + i), title: r.title, platform: r.platform };
+      if (r.year) it.year = r.year;
+      if (r.type) it.type = r.type;
+      if (r.posterUrl) it.posterUrl = r.posterUrl;
+      if (r.synopsis) it.synopsis = r.synopsis;
+      if (r.reason) it.reason = r.reason;
+      if (r.section) it.section = r.section;
+      out.push(it);
+    }
+    return out;
+  }
+
+  function loadHome() {
+    if (homeLoaded) return;
+    homeLoaded = true;
+    screen = "home";
+    mode = "home";
+    query = "";
+    render();
+    fetch("/api/tv-home")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (query) return; // si el usuario ya buscó, no piso sus resultados
+        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; }
+        render();
+        emitScreen();
+        loadPosters();
+      })
+      .catch(function () {});
+  }
+
+  var lastLiked = [], lastDisliked = [];
+  function postSearch(body) {
+    return fetch("/api/tv-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+
+  function runSearch(cmd) {
+    var q = ((cmd && cmd.query) || "").trim();
+    if (!q) return;
+    pushHistory(); // recordá la pantalla actual antes de mostrar resultados
+    query = q;
+    mode = "search";
+    lastLiked = (cmd && cmd.liked) || [];
+    lastDisliked = (cmd && cmd.disliked) || [];
+    screen = "search";
+    loading = true;
+    items = [];
+    focusedIndex = 0;
+    render();
+    emitScreen();
+    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked })
+      .then(function (data) {
+        loading = false;
+        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; }
+        render();
+        emitScreen();
+        loadPosters();
+      })
+      .catch(function () {
+        loading = false; items = [];
+        elContent.innerHTML = '<div class="center">No pudimos buscar. Probá de nuevo.</div>';
+      });
+  }
+
+  function loadMore() {
+    if (loadingMore || loading || items.length === 0 || items.length >= 60) return;
+    if (mode !== "home" && mode !== "search") return; // "Mi lista" no tiene scroll infinito
+    loadingMore = true;
+    renderContent();
+    var titles = [];
+    for (var i = 0; i < items.length && i < 40; i++) { titles.push(items[i].title); }
+    var p;
+    if (mode === "search") {
+      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked });
+    } else {
+      p = fetch("/api/tv-home-more", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exclude: titles })
+      }).then(function (r) { return r.json(); });
+    }
+    p
+      .then(function (data) {
+        loadingMore = false;
+        if (data && data.items && data.items.length) {
+          var seen = {};
+          for (var j = 0; j < items.length; j++) { seen[items[j].title.toLowerCase()] = true; }
+          var fresh = [];
+          for (var k = 0; k < data.items.length; k++) {
+            if (!seen[String(data.items[k].title).toLowerCase()]) fresh.push(data.items[k]);
+          }
+          items = items.concat(assignIds(fresh, items.length));
+        }
+        render();
+        emitScreen();
+        loadPosters();
+      })
+      .catch(function () { loadingMore = false; renderContent(); });
+  }
+
+  function focusById(mediaId) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === mediaId) {
+        if (i !== focusedIndex) {
+          focusedIndex = i; updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen();
+        }
+        return;
+      }
+    }
+  }
+
+  function moveFocus(dir) {
+    if (items.length === 0) return;
+    var n = focusedIndex;
+    if (dir === "right") n = Math.min(n + 1, items.length - 1);
+    else if (dir === "left") n = Math.max(n - 1, 0);
+    else if (dir === "down") n = Math.min(n + 6, items.length - 1);
+    else if (dir === "up") n = Math.max(n - 6, 0);
+    if (n !== focusedIndex) { focusedIndex = n; updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen(); }
+  }
+
+  function removeById(mediaId) {
+    var idx = -1;
+    for (var i = 0; i < items.length; i++) { if (items[i].id === mediaId) { idx = i; break; } }
+    if (idx < 0) return;
+    items.splice(idx, 1);
+    if (focusedIndex >= items.length) focusedIndex = Math.max(0, items.length - 1);
+    render();
+    emitScreen();
+  }
+
+  function snapshot() {
+    return {
+      items: items, mode: mode, query: query, focusedIndex: focusedIndex,
+      lastLiked: lastLiked, lastDisliked: lastDisliked
+    };
+  }
+  function pushHistory() {
+    if (items.length === 0) return; // nada que recordar
+    history.push(snapshot());
+    if (history.length > 12) history.shift();
+  }
+
+  function showList(listItems) {
+    if (mode !== "list") pushHistory(); // recordá la pantalla actual
+    mode = "list";
+    query = "";
+    screen = "search";
+    loading = false;
+    items = assignIds(listItems || [], 0); // conserva section "Mi lista"
+    focusedIndex = 0;
+    render();
+    emitScreen();
+    loadPosters();
+  }
+
+  function goBack() {
+    if (history.length === 0) return; // no hay a dónde volver (pantalla inicial)
+    var s = history.pop();
+    items = s.items;
+    mode = s.mode;
+    query = s.query;
+    lastLiked = s.lastLiked || [];
+    lastDisliked = s.lastDisliked || [];
+    focusedIndex = Math.min(s.focusedIndex || 0, Math.max(0, items.length - 1));
+    render();
+    emitScreen();
+  }
+
+  function play(mediaId) {
+    var it = null;
+    for (var i = 0; i < items.length; i++) { if (items[i].id === mediaId) { it = items[i]; break; } }
+    if (!it) it = items[focusedIndex];
+    if (!it) return;
+    sendState({ type: "NOW_PLAYING", media: it });
+    if (it.platform) { try { window.open(deepLink(it.platform, it.title), "_blank"); } catch (e) {} }
+  }
+
+  function handleCommand(cmd) {
+    if (!cmd || !cmd.type) return;
+    if (cmd.type === "SEARCH") runSearch(cmd);
+    else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
+    else if (cmd.type === "LOAD_MORE") loadMore();
+    else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
+    else if (cmd.type === "SELECT") focusById(cmd.mediaId);
+    else if (cmd.type === "PLAY") play(cmd.mediaId);
+    else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
+    else if (cmd.type === "SHOW_LIST") showList(cmd.items);
+    else if (cmd.type === "BACK") goBack();
+  }
+
+  // Teclas del control físico de la TV.
+  document.addEventListener("keydown", function (e) {
+    var k = e.keyCode;
+    if (k === 37) moveFocus("left");
+    else if (k === 39) moveFocus("right");
+    else if (k === 38) moveFocus("up");
+    else if (k === 40) moveFocus("down");
+    else if (k === 13) { var it = items[focusedIndex]; if (it) play(it.id); }
+    else return;
+    e.preventDefault();
+  });
+
+  // --- Supabase Realtime ---
+  function updatePaired() {
+    var st = channel.presenceState();
+    var present = !!st && Object.prototype.hasOwnProperty.call(st, "control");
+    if (present && !paired) {
+      paired = true;
+      setBadge("Teléfono vinculado", "on");
+      sendState({ type: "PAIRED" });
+      render();
+      loadHome();
+    } else if (!present && paired) {
+      paired = false;
+      setBadge("Esperando teléfono", "wait");
+      render();
+    }
+  }
+
+  function connect() {
+    if (!window.CinefiloSB || !window.CinefiloSB.createClient) {
+      setBadge("Error cargando librería", "wait");
+      return;
+    }
+    var sb = window.CinefiloSB.createClient(SUPABASE_URL, SUPABASE_KEY);
+    channel = sb.channel("cinefilo:" + sessionId, {
+      config: { broadcast: { self: false }, presence: { key: "tv" } }
+    });
+    channel.on("broadcast", { event: "command" }, function (msg) { handleCommand(msg && msg.payload); });
+    channel.on("presence", { event: "sync" }, updatePaired);
+    channel.on("presence", { event: "join" }, updatePaired);
+    channel.on("presence", { event: "leave" }, updatePaired);
+    channel.subscribe(function (status) {
+      if (status === "SUBSCRIBED") { setBadge("Esperando teléfono", "wait"); channel.track({ role: "tv" }); }
+      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setBadge("Error de conexión", "wait"); }
+    });
+  }
+
+  render();
+  connect();
+})();
+</script>
+</body>
+</html>

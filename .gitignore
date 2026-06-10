@@ -35,3 +35,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Certificados https de desarrollo (self-signed)
+.certs/

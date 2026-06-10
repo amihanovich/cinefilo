@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cinéfilo — Diagnóstico TV</title>
+<style>
+  body { font-family: Arial, sans-serif; background:#0b0b10; color:#eee; margin:0; padding:24px; font-size:20px; }
+  h1 { color:#7c5cff; font-size:28px; }
+  .ua { background:#1a1a22; padding:14px; border-radius:10px; word-break:break-all; font-size:16px; color:#9fd; margin:14px 0; }
+  ul { list-style:none; padding:0; }
+  li { padding:8px 0; border-bottom:1px solid #222; }
+  .ok { color:#4ade80; }
+  .no { color:#f87171; }
+  .tag { display:inline-block; min-width:42px; font-weight:bold; }
+</style>
+</head>
+<body>
+<h1>Cinéfilo — Diagnóstico de TV</h1>
+<p>Sacale una foto a TODA esta pantalla y mandásela. 📸</p>
+<div class="ua" id="ua">navegador: ...</div>
+<ul id="list"></ul>
+<script>
+/* JavaScript clásico (ES5) — corre en navegadores viejos. */
+(function () {
+  document.getElementById("ua").textContent = "navegador: " + navigator.userAgent;
+
+  function test(name, fn) {
+    var ok = false;
+    try { ok = !!fn(); } catch (e) { ok = false; }
+    return { name: name, ok: ok };
+  }
+
+  var checks = [
+    test("Módulos ES (lo que más importa)", function () {
+      return "noModule" in document.createElement("script");
+    }),
+    test("fetch()", function () { return typeof fetch === "function"; }),
+    test("WebSocket", function () { return typeof WebSocket === "function"; }),
+    test("Promise", function () { return typeof Promise === "function"; }),
+    test("crypto.getRandomValues", function () {
+      return window.crypto && typeof window.crypto.getRandomValues === "function";
+    }),
+    test("async/await", function () { eval("(async function(){})"); return true; }),
+    test("spread { ...obj }", function () { eval("var x={...{a:1}}"); return x.a === 1; }),
+    test("optional chaining ?.", function () { eval("var o={};o?.a"); return true; }),
+    test("Array.includes", function () { return typeof [].includes === "function"; }),
+    test("IntersectionObserver", function () { return typeof IntersectionObserver === "function"; })
+  ];
+
+  var html = "";
+  for (var i = 0; i < checks.length; i++) {
+    var c = checks[i];
+    html += '<li><span class="tag ' + (c.ok ? "ok" : "no") + '">' +
+            (c.ok ? "SÍ" : "NO") + "</span> " + c.name + "</li>";
+  }
+  document.getElementById("list").innerHTML = html;
+})();
+</script>
+</body>
+</html>
