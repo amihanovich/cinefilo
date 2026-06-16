@@ -37,7 +37,7 @@ function CastTestPhone() {
 
       cast.framework.CastContext.getInstance().setOptions({
         receiverApplicationId: APP_ID,
-        autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.CUSTOM_CONTROLLER_SCOPED,
       });
 
       cast.framework.CastContext.getInstance().addEventListener(
