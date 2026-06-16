@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Tv, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { recommendConversational, askAboutTitle } from "@/lib/recommendations.functions";
+import { fetchPosters } from "@/lib/posters.functions";
 import { deepLinkFor } from "@/lib/recommendations";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
-import { fetchPosterClient } from "@/lib/itunes";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
 import type { Recommendation } from "@/lib/recommendations";
@@ -210,15 +210,11 @@ function WizardPage() {
       setScreen("magic");
       setLoading(false);
 
-      // Load posters progressively — each one updates state as it arrives
-      const finalPosters: Record<string, string | null> = {};
-      await Promise.all(
-        allItems.map(async (item) => {
-          const poster = await fetchPosterClient(item.title, item.type, item.year);
-          finalPosters[item.title] = poster;
-          setPosters((prev) => ({ ...prev, [item.title]: poster }));
-        })
-      );
+      // Server-side fetch: more reliable than client-side iTunes calls
+      const { posters: finalPosters } = await fetchPosters({
+        data: { items: allItems.map((i) => ({ title: i.title, type: i.type, year: i.year })) },
+      });
+      setPosters(finalPosters);
 
       if (withTV) {
         await broadcast({
