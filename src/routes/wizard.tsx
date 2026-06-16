@@ -368,7 +368,6 @@ function WizardPage() {
             {/* Prominent mic */}
             <MicButton
               size="md"
-              mode="push"
               className="h-14 w-14 shrink-0"
               onTranscript={(t, isFinal) => {
                 if (!t) { setChatText(""); return; }
