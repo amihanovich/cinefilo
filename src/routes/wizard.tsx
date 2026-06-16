@@ -407,11 +407,11 @@ function WizardPage() {
           </div>
         </div>
 
-        {/* ── Middle: hero + reply bubble — scrollable ── */}
-        <div className="flex-1 overflow-y-auto px-5 pb-2 min-h-0">
-          {/* Mini hero card — swipeable, fixed height */}
+        {/* ── Middle: hero + reply bubble ── */}
+        <div className="flex-1 min-h-0 flex flex-col gap-3 px-5 pb-2">
+          {/* Mini hero card — swipeable, fills available space */}
           <div
-            className="h-44 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+            className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
             onTouchEnd={(e) => {
               const dx = e.changedTouches[0].clientX - touchStartX.current;
@@ -440,7 +440,7 @@ function WizardPage() {
                     </span>
                   )}
                 </p>
-                <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
+                <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
                   {current.reason}
                 </p>
                 <a
@@ -455,13 +455,13 @@ function WizardPage() {
             </div>
           </div>
 
-          {/* Agent reply bubble — always visible below hero */}
+          {/* Agent reply bubble — shrink-0 so card yields space */}
           {agentReply ? (
-            <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3">
+            <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3">
               <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
             </div>
           ) : (
-            <p className="pt-2 text-center text-[10px] text-muted-foreground/40">
+            <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
               deslizá para cambiar · o usá los botones
             </p>
           )}
