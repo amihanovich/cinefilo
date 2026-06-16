@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 const APP_ID = "58ED99B5";
 const NAMESPACE = "urn:x-cast:com.cinefilo.app";
@@ -37,7 +37,7 @@ function CastTestPhone() {
 
       cast.framework.CastContext.getInstance().setOptions({
         receiverApplicationId: APP_ID,
-        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.PAGE_SCOPED,
       });
 
       cast.framework.CastContext.getInstance().addEventListener(
@@ -132,13 +132,19 @@ function CastTestPhone() {
       </div>
 
       {(castState === "not_connected" || castState === "no_devices") && (
-        <button
-          onClick={handleConnect}
-          disabled={castState === "no_devices"}
-          className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition-opacity disabled:opacity-30"
-        >
-          Conectar TV
-        </button>
+        <div className="flex flex-col items-center gap-4">
+          {/* Web component oficial de Google Cast — dispara el picker correcto */}
+          {React.createElement("google-cast-launcher", {
+            style: { width: "48px", height: "48px", cursor: "pointer" },
+          })}
+          <button
+            onClick={handleConnect}
+            disabled={castState === "no_devices"}
+            className="rounded-full bg-white px-8 py-3 text-sm font-semibold text-black transition-opacity disabled:opacity-30"
+          >
+            Conectar TV
+          </button>
+        </div>
       )}
 
       {castState === "connected" && (
