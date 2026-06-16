@@ -54,22 +54,41 @@ export function MicButton({
     }
     const rec = new Ctor();
     rec.lang = lang;
-    rec.continuous = false;
+    rec.continuous = true;   // survive short pauses
     rec.interimResults = true;
+
+    let accumulated = "";
+    let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+    let didSubmit = false;
+
+    const submit = () => {
+      if (didSubmit) return;
+      didSubmit = true;
+      const final = accumulated.trim();
+      if (final) onTranscript(final, true);
+    };
+
+    const resetSilenceTimer = () => {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      // 2.2s of silence → auto-stop
+      silenceTimer = setTimeout(() => {
+        try { rec.stop(); } catch { /* noop */ }
+      }, 2200);
+    };
 
     rec.onresult = (e: any) => {
       let interim = "";
-      let final = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) final += r[0].transcript;
+        if (r.isFinal) accumulated += (accumulated ? " " : "") + r[0].transcript;
         else interim += r[0].transcript;
       }
-      if (final) onTranscript(final.trim(), true);
-      else if (interim) onTranscript(interim.trim(), false);
+      resetSilenceTimer(); // any speech activity resets the countdown
+      onTranscript((accumulated + (interim ? " " + interim : "")).trim(), false);
     };
 
     rec.onerror = (e: any) => {
+      if (silenceTimer) clearTimeout(silenceTimer);
       setListening(false);
       if (e?.error === "not-allowed") {
         toast.error("Permití el micrófono en el navegador (ícono del candado en la barra).");
@@ -80,12 +99,20 @@ export function MicButton({
       }
     };
 
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      if (silenceTimer) clearTimeout(silenceTimer);
+      setListening(false);
+      submit();
+    };
 
     recRef.current = rec;
     try {
       rec.start();
       setListening(true);
+      // Safety cap: if user never speaks, stop after 12s
+      silenceTimer = setTimeout(() => {
+        try { rec.stop(); } catch { /* noop */ }
+      }, 12000);
     } catch {
       setListening(false);
       toast.error("No se pudo iniciar el micrófono. ¿Está permitido en este navegador?");
