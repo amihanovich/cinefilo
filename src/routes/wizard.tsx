@@ -43,6 +43,7 @@ function WizardPage() {
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartX = useRef(0);
 
   const tvUrl =
     typeof window !== "undefined"
@@ -245,101 +246,146 @@ function WizardPage() {
 
     return (
       <div className="flex h-[100dvh] flex-col bg-background">
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between px-5 pt-8 pb-3">
+
+        {/* ── Header ── */}
+        <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-[15px] font-semibold">Cinéfilo</span>
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span className="text-sm font-semibold">Cinéfilo</span>
           </div>
-          {withTV && tvConnected && <span className="text-xs text-muted-foreground">📺 TV sincronizada</span>}
-        </div>
-
-        {/* Content */}
-        <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 pb-2">
-          {poster && (
-            <img src={poster} alt={current.title} className="h-48 w-full rounded-2xl object-cover shadow-md" />
+          {withTV && tvConnected && (
+            <span className="flex items-center gap-1.5 text-xs font-medium text-green-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+              TV en vivo
+            </span>
           )}
-
-          {/* Nav + title */}
-          <div className="flex items-start gap-3">
-            <div className="flex shrink-0 items-center gap-1 pt-1">
-              <button
-                onClick={() => navigate(currentIndex - 1)}
-                disabled={!hasPrev}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-foreground disabled:opacity-20"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="w-8 text-center text-xs text-muted-foreground">{currentIndex + 1}/{items.length}</span>
-              <button
-                onClick={() => navigate(currentIndex + 1)}
-                disabled={!hasNext}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-foreground disabled:opacity-20"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-xl font-bold leading-tight">{current.title}</h2>
-              <p className="text-sm text-muted-foreground">{current.platform} · {current.duration}</p>
-            </div>
-          </div>
-
-          <p className="text-sm leading-relaxed text-foreground/70">{current.reason}</p>
-
-          <a
-            href={deepLinkFor(current.platform, current.title)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full rounded-full bg-foreground py-3.5 text-center text-sm font-semibold text-background"
-          >
-            ▶ Ver ahora
-          </a>
-
-          {/* Alternatives dots */}
-          <div className="flex justify-center gap-1.5 py-1">
-            {items.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => navigate(i)}
-                className={cn("h-2 rounded-full transition-all", i === currentIndex ? "w-5 bg-foreground" : "w-2 bg-foreground/20")}
-              />
-            ))}
-          </div>
         </div>
 
-        {/* AI Agent chat */}
-        <div className="shrink-0 border-t border-border px-5 py-3">
-          <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-            Hablá con Cinéfilo
+        {/* ── Agente Cinéfilo (top, prominent) ── */}
+        <div className="shrink-0 px-5 pt-4 pb-3">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+            Agente Cinéfilo
           </p>
-          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-4 transition-opacity", loading && "opacity-50 pointer-events-none")}>
-            <input
-              type="text"
-              value={chatText}
-              onChange={(e) => setChatText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={loading ? "Pensando..." : "Dame algo más oscuro, algo con Villeneuve..."}
-              disabled={loading}
-              className="min-h-[48px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-            />
+          <div className={cn("flex items-center gap-3", loading && "opacity-50 pointer-events-none")}>
+            {/* Prominent mic */}
             <MicButton
-              size="sm"
+              size="md"
+              className="h-14 w-14 shrink-0"
               onTranscript={(t, isFinal) => {
                 if (!t) { setChatText(""); return; }
                 if (isFinal) { void getReco(t.trim()); setChatText(""); }
                 else setChatText(t);
               }}
             />
+            {/* Text input */}
+            <div className="flex flex-1 items-center gap-2 rounded-2xl bg-muted px-4">
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
+                placeholder={loading ? "Pensando..." : "Dame algo más oscuro..."}
+                disabled={loading}
+                className="min-h-[46px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+              />
+              <button
+                onClick={sendChat}
+                disabled={!chatText.trim() || loading}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Mini hero card — swipeable ── */}
+        <div
+          className="mx-5 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+          onTouchEnd={(e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX.current;
+            if (dx < -50 && hasNext) void navigate(currentIndex + 1);
+            else if (dx > 50 && hasPrev) void navigate(currentIndex - 1);
+          }}
+        >
+          <div className="flex h-full">
+            {/* Poster */}
+            <div className="w-28 shrink-0 overflow-hidden">
+              {poster ? (
+                <img src={poster} alt={current.title} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full bg-muted" />
+              )}
+            </div>
+            {/* Info */}
+            <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+              <h2 className="text-base font-bold leading-tight">{current.title}</h2>
+              <p className="text-xs text-muted-foreground">{current.platform} · {current.duration}</p>
+              <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
+                {current.reason}
+              </p>
+              <a
+                href={deepLinkFor(current.platform, current.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 w-full rounded-full bg-foreground py-2.5 text-center text-xs font-semibold text-background"
+              >
+                ▶ Ver ahora
+              </a>
+            </div>
+          </div>
+        </div>
+        {/* Swipe hint */}
+        <p className="shrink-0 pt-1.5 text-center text-[10px] text-muted-foreground/40">
+          deslizá para cambiar · o usá los botones
+        </p>
+
+        {/* ── TV navigation commands ── */}
+        <div className="shrink-0 px-5 pt-3 pb-6">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+            Controlar la TV
+          </p>
+          <div className="flex items-center gap-3">
             <button
-              onClick={sendChat}
-              disabled={!chatText.trim() || loading}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
+              onClick={() => void navigate(currentIndex - 1)}
+              disabled={!hasPrev}
+              className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-border font-semibold text-foreground transition-transform active:scale-95 disabled:opacity-20"
             >
-              <Send className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-5 w-5" />
+              <span className="text-sm">Anterior</span>
+            </button>
+
+            <div className="flex flex-col items-center gap-1.5 px-1">
+              <span className="text-sm font-bold">
+                {currentIndex + 1}
+                <span className="font-normal text-muted-foreground">/{items.length}</span>
+              </span>
+              <div className="flex gap-1">
+                {items.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => void navigate(i)}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      i === currentIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20"
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={() => void navigate(currentIndex + 1)}
+              disabled={!hasNext}
+              className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-border font-semibold text-foreground transition-transform active:scale-95 disabled:opacity-20"
+            >
+              <span className="text-sm">Siguiente</span>
+              <ChevronRight className="h-5 w-5" />
             </button>
           </div>
         </div>
+
       </div>
     );
   }
