@@ -124,6 +124,7 @@ function WizardPage() {
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatText, setChatText] = useState("");
   const [agentReply, setAgentReply] = useState<string | null>(null);
+  const [detailHistory, setDetailHistory] = useState<{ title: string; question: string; answer: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -170,9 +171,15 @@ function WizardPage() {
     const current = items[currentIndex];
     try {
       const { text } = await askAboutTitle({
-        data: { title: current.title, platform: current.platform, userQuestion: userQuery },
+        data: {
+          title: current.title,
+          platform: current.platform,
+          userQuestion: userQuery,
+          history: detailHistory,
+        },
       });
       setAgentReply(text);
+      setDetailHistory((prev) => [...prev, { title: current.title, question: userQuery, answer: text }]);
     } catch (e) {
       console.error("[wizard/ask]", e);
     } finally {
@@ -182,6 +189,7 @@ function WizardPage() {
 
   const getReco = async (userQuery: string) => {
     setAgentReply(null);
+    setDetailHistory([]);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : ALL_PLATFORMS;
     const ctx = inferContext();

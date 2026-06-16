@@ -566,9 +566,16 @@ const askAboutTitleSchema = z.object({
   title: z.string().min(1).max(200),
   platform: z.string().min(1).max(80),
   userQuestion: z.string().min(1).max(500),
+  history: z
+    .array(z.object({ title: z.string(), question: z.string(), answer: z.string() }))
+    .max(6)
+    .optional()
+    .default([]),
 });
 
-const DETAIL_SYSTEM = `Sos Cinéfilo: un experto cinematográfico apasionado que conoce cada película y serie en profundidad. Cuando el usuario te pregunta sobre un título específico, respondés con criterio, pasión y precisión — como ese crítico televisivo de los 70 que abría una ventana al cine con una sola frase. Usás primera persona, tono rioplatense cálido, sin emojis. Máximo 4 oraciones. Nunca recomendés otro título: el foco es SOLO el título preguntado.`;
+const DETAIL_SYSTEM = `Sos Cinéfilo: un experto cinematográfico apasionado que conoce cada película y serie en profundidad. Cuando el usuario te pregunta sobre un título específico, respondés con criterio, pasión y precisión — como ese crítico televisivo de los 70 que abría una ventana al cine con una sola frase. Usás primera persona, tono rioplatense cálido, sin emojis. Máximo 2 oraciones. Nunca recomendés otro título: el foco es SOLO el título preguntado.
+
+IMPORTANTE: Si ya explicaste otros títulos antes en esta conversación (ver historial), no repitas fórmulas de apertura como "Esta trata de..." — arrancá de otro ángulo, como si continuaras la charla: "Y esta otra...", "En cambio acá...", "Esta va por otro lado...", etc. Variá el tono para que suene natural, no repetitivo.`;
 
 export const askAboutTitle = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => askAboutTitleSchema.parse(data))
@@ -579,16 +586,23 @@ export const askAboutTitle = createServerFn({ method: "POST" })
     const provider = createAiProvider(apiKey);
     const model = provider("claude-haiku-4-5-20251001");
 
-    const prompt = `${DETAIL_SYSTEM}
+    const historySection =
+      data.history.length > 0
+        ? `\nHistorial de esta sesión (lo que ya explicaste):\n${data.history
+            .map((h) => `- ${h.title}: "${h.answer}"`)
+            .join("\n")}\n`
+        : "";
 
-Título: ${data.title} (disponible en ${data.platform})
+    const prompt = `${DETAIL_SYSTEM}
+${historySection}
+Título actual: ${data.title} (disponible en ${data.platform})
 
 Pregunta del usuario:
 """
 ${data.userQuestion}
 """
 
-Respondé en MÁXIMO 2 oraciones. Directo, concreto, apasionado. Sin rodeos. No recomiendes otros títulos.`;
+Respondé en MÁXIMO 2 oraciones. Directo, concreto, apasionado. Sin rodeos.`;
 
     try {
       const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
