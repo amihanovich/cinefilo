@@ -30,6 +30,89 @@ const MOODS = [
 
 type Screen = "welcome" | "tv" | "platforms" | "mood" | "magic";
 
+const FAKE_DEVICES = [
+  { id: "philips-1", name: "Philips 65PUD7906/77", icon: "📺" },
+];
+
+type PickerPhase = "searching" | "found" | "connecting" | "done";
+
+function TVPickerScreen({ onConnected, onSkip }: { onConnected: () => void; onSkip: () => void }) {
+  const [phase, setPhase] = useState<PickerPhase>("searching");
+
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("found"), 1400);
+    return () => clearTimeout(t);
+  }, []);
+
+  const handleSelect = () => {
+    setPhase("connecting");
+    setTimeout(() => {
+      setPhase("done");
+      setTimeout(onConnected, 600);
+    }, 1200);
+  };
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-8">
+      <Tv className={cn("h-12 w-12 transition-colors", phase === "done" ? "text-green-500" : "text-foreground/30")} />
+
+      <div className="text-center">
+        <h2 className="text-2xl font-bold tracking-tight">¿A qué TV conectamos?</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {phase === "searching" && "Buscando dispositivos..."}
+          {phase === "found" && "Dispositivos encontrados"}
+          {phase === "connecting" && "Conectando..."}
+          {phase === "done" && "¡Conectado!"}
+        </p>
+      </div>
+
+      {/* Device list */}
+      <div className="w-full max-w-sm space-y-2">
+        {phase === "searching" && (
+          <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-5 py-4">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
+            <span className="text-sm text-muted-foreground">Buscando en la red...</span>
+          </div>
+        )}
+
+        {(phase === "found" || phase === "connecting" || phase === "done") && FAKE_DEVICES.map((d) => (
+          <button
+            key={d.id}
+            onClick={phase === "found" ? handleSelect : undefined}
+            className={cn(
+              "flex w-full items-center gap-4 rounded-2xl border-2 px-5 py-4 text-left transition-all",
+              phase === "found" && "border-border bg-background active:scale-[0.98]",
+              phase === "connecting" && "border-primary/40 bg-primary/5",
+              phase === "done" && "border-green-500/40 bg-green-500/5",
+            )}
+          >
+            <span className="text-3xl">{d.icon}</span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{d.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {phase === "found" && "Disponible"}
+                {phase === "connecting" && "Conectando..."}
+                {phase === "done" && "Conectado ✓"}
+              </p>
+            </div>
+            {phase === "connecting" && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
+            )}
+            {phase === "done" && <span className="text-green-500 text-lg">✓</span>}
+          </button>
+        ))}
+      </div>
+
+      <button
+        onClick={onSkip}
+        className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+      >
+        Sin TV → Seguir igual
+      </button>
+    </div>
+  );
+}
+
 function WizardPage() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [tvConnected, setTvConnected] = useState(false);
@@ -191,30 +274,10 @@ function WizardPage() {
 
   // ── CONNECT TV ─────────────────────────────────────────────────────
   if (screen === "tv") {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-8">
-        <Tv className="h-12 w-12 text-foreground/30" />
-        <div className="text-center">
-          <h2 className="text-2xl font-bold tracking-tight">¿A qué TV conectamos?</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Abrí esta URL en la laptop conectada al TV:</p>
-        </div>
-        <div className="w-full max-w-sm rounded-2xl bg-muted p-4 text-center">
-          <p className="break-all font-mono text-xs text-foreground/80">{tvUrl}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={cn("h-2.5 w-2.5 rounded-full", tvConnected ? "bg-green-500" : "animate-pulse bg-muted-foreground/30")} />
-          <span className="text-sm text-muted-foreground">{tvConnected ? "TV conectada ✓" : "Esperando la TV..."}</span>
-        </div>
-        {tvConnected && (
-          <button onClick={() => setScreen("platforms")} className="rounded-full bg-foreground px-12 py-4 text-base font-semibold text-background">
-            Continuar →
-          </button>
-        )}
-        <button onClick={() => { setWithTV(false); setScreen("platforms"); }} className="text-sm text-muted-foreground underline-offset-2 hover:underline">
-          Sin TV → Seguir igual
-        </button>
-      </div>
-    );
+    return <TVPickerScreen
+      onConnected={() => { setWithTV(true); setTvConnected(true); setScreen("platforms"); }}
+      onSkip={() => { setWithTV(false); setScreen("platforms"); }}
+    />;
   }
 
   // ── PLATFORMS ──────────────────────────────────────────────────────
