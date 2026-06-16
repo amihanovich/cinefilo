@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WizardRouteImport } from './routes/wizard'
 import { Route as TvRouteImport } from './routes/tv'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
@@ -16,6 +17,11 @@ import { Route as CastTestRouteImport } from './routes/cast-test'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 
+const WizardRoute = WizardRouteImport.update({
+  id: '/wizard',
+  path: '/wizard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TvRoute = TvRouteImport.update({
   id: '/tv',
   path: '/tv',
@@ -52,12 +58,14 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/tv': typeof TvRoute
+  '/wizard': typeof WizardRoute
 }
 export interface FileRoutesByTo {
   '/cast-test': typeof CastTestRoute
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/tv': typeof TvRoute
+  '/wizard': typeof WizardRoute
   '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
@@ -67,13 +75,14 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/tv': typeof TvRoute
+  '/wizard': typeof WizardRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cast-test' | '/login' | '/reset-password' | '/tv'
+  fullPaths: '/' | '/cast-test' | '/login' | '/reset-password' | '/tv' | '/wizard'
   fileRoutesByTo: FileRoutesByTo
-  to: '/cast-test' | '/login' | '/reset-password' | '/tv' | '/'
+  to: '/cast-test' | '/login' | '/reset-password' | '/tv' | '/wizard' | '/'
   id:
     | '__root__'
     | '/_authenticated'
@@ -81,6 +90,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/tv'
+    | '/wizard'
     | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
@@ -90,6 +100,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   TvRoute: typeof TvRoute
+  WizardRoute: typeof WizardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -120,6 +131,13 @@ declare module '@tanstack/react-router' {
       path: '/cast-test'
       fullPath: '/cast-test'
       preLoaderRoute: typeof CastTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/wizard': {
+      id: '/wizard'
+      path: '/wizard'
+      fullPath: '/wizard'
+      preLoaderRoute: typeof WizardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -157,6 +175,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   TvRoute: TvRoute,
+  WizardRoute: WizardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

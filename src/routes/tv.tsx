@@ -27,8 +27,15 @@ function TVReceiver() {
       .on("broadcast", { event: "message" }, ({ payload }: { payload: TVMessage }) => {
         setMessage(payload);
       })
-      .subscribe((status) => {
-        setConnected(status === "SUBSCRIBED");
+      .on("broadcast", { event: "wizard_ping" }, () => {
+        // Respond to phone ping so it knows the TV is ready
+        void ch.send({ type: "broadcast", event: "tv_ready", payload: {} });
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          setConnected(true);
+          await ch.send({ type: "broadcast", event: "tv_ready", payload: {} });
+        }
       });
 
     channelRef.current = ch;
