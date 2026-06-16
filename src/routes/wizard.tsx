@@ -299,6 +299,7 @@ function WizardPage() {
             {/* Prominent mic */}
             <MicButton
               size="md"
+              mode="push"
               className="h-14 w-14 shrink-0"
               onTranscript={(t, isFinal) => {
                 if (!t) { setChatText(""); return; }
@@ -374,7 +375,7 @@ function WizardPage() {
         {/* Agent reply bubble */}
         {agentReply && (
           <div className="mx-5 mt-2 rounded-2xl bg-primary/8 border border-primary/20 px-4 py-3">
-            <p className="text-[12px] leading-relaxed text-foreground/80">{agentReply}</p>
+            <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
           </div>
         )}
         {/* Swipe hint */}

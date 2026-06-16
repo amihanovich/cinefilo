@@ -25,12 +25,15 @@ export function MicButton({
   lang = "es-AR",
   className,
   size = "md",
+  mode = "toggle",
 }: {
   onTranscript: (text: string, isFinal: boolean) => void;
   lang?: string;
   className?: string;
-  /** "sm" = original compact, "md" = prominent orb (default for refinement bar) */
+  /** "sm" = compact icon, "md" = prominent orb */
   size?: "sm" | "md";
+  /** "toggle" = tap to start/stop, "push" = hold to talk */
+  mode?: "toggle" | "push";
 }) {
   const [supported, setSupported] = useState(true);
   const [listening, setListening] = useState(false);
@@ -96,15 +99,28 @@ export function MicButton({
 
   if (!supported) return null;
 
+  const pushProps =
+    mode === "push"
+      ? {
+          onPointerDown: (e: React.PointerEvent) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+            start();
+          },
+          onPointerUp: () => stop(),
+          onPointerLeave: () => { if (listening) stop(); },
+        }
+      : { onClick: listening ? stop : start };
+
   if (size === "sm") {
     return (
       <button
         type="button"
-        onClick={listening ? stop : start}
+        {...pushProps}
         aria-label={listening ? "Detener grabación" : "Dictar por voz"}
-        title={listening ? "Detener" : "Hablar"}
+        title={mode === "push" ? "Mantené apretado para hablar" : listening ? "Detener" : "Hablar"}
         className={cn(
-          "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200",
+          "relative inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 select-none",
           listening
             ? "bg-destructive/10 text-destructive shadow-[0_0_0_3px_oklch(0.55_0.22_25_/_0.18)]"
             : "text-muted-foreground/50 hover:text-primary hover:bg-primary/8",
@@ -123,26 +139,26 @@ export function MicButton({
     );
   }
 
-  // md: prominent orb for the refinement input bar
+  // md: prominent orb
   return (
     <button
       type="button"
-      onClick={listening ? stop : start}
+      {...pushProps}
       aria-label={listening ? "Detener grabación" : "Dictar por voz"}
-      title={listening ? "Detener" : "Hablar"}
+      title={mode === "push" ? "Mantené apretado para hablar" : listening ? "Detener" : "Hablar"}
       className={cn(
-        "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200",
+        "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 select-none",
         listening
           ? [
               "bg-destructive text-white",
               "shadow-[0_0_0_4px_oklch(0.55_0.22_25_/_0.18),0_0_18px_4px_oklch(0.55_0.22_25_/_0.30)]",
-              "scale-95",
+              "scale-110",
             ]
           : [
               "bg-gradient-primary text-primary-foreground",
               "shadow-[0_2px_12px_oklch(0.55_0.22_280_/_0.35),0_0_0_0_transparent]",
               "hover:shadow-[0_4px_20px_oklch(0.55_0.22_280_/_0.55),0_0_0_4px_oklch(0.55_0.22_280_/_0.12)]",
-              "hover:scale-105 active:scale-95",
+              "active:scale-110",
             ],
         className,
       )}
@@ -150,7 +166,6 @@ export function MicButton({
       {listening ? (
         <>
           <MicOff className="h-5 w-5" />
-          {/* pulsing ring */}
           <span className="pointer-events-none absolute inset-0 rounded-full animate-ping bg-destructive/30" />
         </>
       ) : (

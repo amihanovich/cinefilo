@@ -588,7 +588,7 @@ Pregunta del usuario:
 ${data.userQuestion}
 """
 
-Respondé en 2-4 oraciones en español rioplatense. Sé específico, apasionado y concreto. No recomiendes otros títulos.`;
+Respondé en MÁXIMO 2 oraciones. Directo, concreto, apasionado. Sin rodeos. No recomiendes otros títulos.`;
 
     try {
       const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
