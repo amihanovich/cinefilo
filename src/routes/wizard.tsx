@@ -407,63 +407,65 @@ function WizardPage() {
           </div>
         </div>
 
-        {/* ── Mini hero card — swipeable ── */}
-        <div
-          className="mx-5 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
-          onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
-          onTouchEnd={(e) => {
-            const dx = e.changedTouches[0].clientX - touchStartX.current;
-            if (dx < -50 && hasNext) void navigate(currentIndex + 1);
-            else if (dx > 50 && hasPrev) void navigate(currentIndex - 1);
-          }}
-        >
-          <div className="flex h-full">
-            {/* Poster */}
-            <div className="w-28 shrink-0 overflow-hidden">
-              {poster ? (
-                <img src={poster} alt={current.title} className="h-full w-full object-cover" />
-              ) : (
-                <div className="h-full w-full animate-pulse bg-muted" />
-              )}
-            </div>
-            {/* Info */}
-            <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-              <h2 className="text-base font-bold leading-tight">{current.title}</h2>
-              <p className="text-xs text-muted-foreground">
-                {current.platform} · {current.type} · {current.duration}
-                {current.year && ` · ${current.year}`}
-                {current.ageRating && (
-                  <span className="ml-1.5 rounded border border-current px-1 py-0.5 text-[10px] font-semibold leading-none">
-                    {current.ageRating}
-                  </span>
+        {/* ── Middle: hero + reply bubble — scrollable ── */}
+        <div className="flex-1 overflow-y-auto px-5 pb-2 min-h-0">
+          {/* Mini hero card — swipeable, fixed height */}
+          <div
+            className="h-44 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+            onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+            onTouchEnd={(e) => {
+              const dx = e.changedTouches[0].clientX - touchStartX.current;
+              if (dx < -50 && hasNext) void navigate(currentIndex + 1);
+              else if (dx > 50 && hasPrev) void navigate(currentIndex - 1);
+            }}
+          >
+            <div className="flex h-full">
+              {/* Poster */}
+              <div className="w-28 shrink-0 overflow-hidden">
+                {poster ? (
+                  <img src={poster} alt={current.title} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full animate-pulse bg-muted" />
                 )}
-              </p>
-              <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
-                {current.reason}
-              </p>
-              <a
-                href={deepLinkFor(current.platform, current.title)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 w-full rounded-full bg-foreground py-2.5 text-center text-xs font-semibold text-background"
-              >
-                ▶ Ver ahora
-              </a>
+              </div>
+              {/* Info */}
+              <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+                <h2 className="text-base font-bold leading-tight">{current.title}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {current.platform} · {current.type} · {current.duration}
+                  {current.year && ` · ${current.year}`}
+                  {current.ageRating && (
+                    <span className="ml-1.5 rounded border border-current px-1 py-0.5 text-[10px] font-semibold leading-none">
+                      {current.ageRating}
+                    </span>
+                  )}
+                </p>
+                <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
+                  {current.reason}
+                </p>
+                <a
+                  href={deepLinkFor(current.platform, current.title)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 w-full rounded-full bg-foreground py-2.5 text-center text-xs font-semibold text-background"
+                >
+                  ▶ Ver ahora
+                </a>
+              </div>
             </div>
           </div>
+
+          {/* Agent reply bubble — always visible below hero */}
+          {agentReply ? (
+            <div className="mt-3 rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3">
+              <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
+            </div>
+          ) : (
+            <p className="pt-2 text-center text-[10px] text-muted-foreground/40">
+              deslizá para cambiar · o usá los botones
+            </p>
+          )}
         </div>
-        {/* Agent reply bubble */}
-        {agentReply && (
-          <div className="mx-5 mt-2 rounded-2xl bg-primary/8 border border-primary/20 px-4 py-3">
-            <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
-          </div>
-        )}
-        {/* Swipe hint */}
-        {!agentReply && (
-          <p className="shrink-0 pt-1.5 text-center text-[10px] text-muted-foreground/40">
-            deslizá para cambiar · o usá los botones
-          </p>
-        )}
 
         {/* ── TV navigation commands ── */}
         <div className="shrink-0 px-5 pt-3 pb-6">
