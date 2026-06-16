@@ -421,7 +421,15 @@ function WizardPage() {
             {/* Info */}
             <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
               <h2 className="text-base font-bold leading-tight">{current.title}</h2>
-              <p className="text-xs text-muted-foreground">{current.platform} · {current.duration}</p>
+              <p className="text-xs text-muted-foreground">
+                {current.platform} · {current.type} · {current.duration}
+                {current.year && ` · ${current.year}`}
+                {current.ageRating && (
+                  <span className="ml-1.5 rounded border border-current px-1 py-0.5 text-[10px] font-semibold leading-none">
+                    {current.ageRating}
+                  </span>
+                )}
+              </p>
               <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
                 {current.reason}
               </p>
