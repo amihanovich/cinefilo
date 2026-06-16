@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { recommendConversational, askAboutTitle } from "@/lib/recommendations.functions";
 import { deepLinkFor } from "@/lib/recommendations";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
-import { fetchPostersClient } from "@/lib/itunes";
+import { fetchPosterClient } from "@/lib/itunes";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
 import type { Recommendation } from "@/lib/recommendations";
@@ -119,28 +119,34 @@ function WizardPage() {
       if (!data?.main) throw new Error("Sin resultado");
 
       const allItems = [data.main, ...(data.alternatives ?? []).slice(0, 4)];
-      const posterMap = await fetchPostersClient(
-        allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))
-      );
-
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
       setMessages([...newMessages, { role: "assistant", content: assistantSummary }]);
       setItems(allItems);
-      setPosters(posterMap);
+      setPosters({});
       setCurrentIndex(0);
       setScreen("magic");
+      setLoading(false);
+
+      // Load posters progressively — each one updates state as it arrives
+      const finalPosters: Record<string, string | null> = {};
+      await Promise.all(
+        allItems.map(async (item) => {
+          const poster = await fetchPosterClient(item.title, item.type, item.year);
+          finalPosters[item.title] = poster;
+          setPosters((prev) => ({ ...prev, [item.title]: poster }));
+        })
+      );
 
       if (withTV) {
         await broadcast({
           type: "results",
           items: allItems,
-          posters: posterMap,
+          posters: finalPosters,
           selectedIndex: 0,
         });
       }
     } catch (e) {
       console.error("[wizard]", e);
-    } finally {
       setLoading(false);
     }
   };
@@ -351,7 +357,7 @@ function WizardPage() {
               {poster ? (
                 <img src={poster} alt={current.title} className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-muted" />
+                <div className="h-full w-full animate-pulse bg-muted" />
               )}
             </div>
             {/* Info */}

@@ -43,7 +43,7 @@ async function searchItunes(
     const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${entity}&limit=5&country=${country}`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
     const data = await res.json();
@@ -71,51 +71,35 @@ async function searchItunes(
 }
 
 async function searchWikipedia(title: string, year?: string): Promise<string | null> {
-  // Try several search terms: "{title} film", "{title} {year}", "{title}"
+  // Try "{title} film" then "{title} year" in parallel, take first hit
   const queries: string[] = [`${title} film`];
   if (year) queries.push(`${title} ${year}`);
-  queries.push(title);
 
-  for (const q of queries) {
+  const tryQuery = async (q: string, lang = "en"): Promise<string | null> => {
     try {
       const url =
-        `https://en.wikipedia.org/w/api.php?action=query` +
+        `https://${lang}.wikipedia.org/w/api.php?action=query` +
         `&titles=${encodeURIComponent(q)}` +
         `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
-      const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-      if (!res.ok) continue;
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) return null;
       const data = await res.json();
       const pages = data?.query?.pages ?? {};
       type WikiPage = { missing?: string; thumbnail?: { source?: string } };
       const page = Object.values(pages)[0] as WikiPage | undefined;
-      if (!page || "missing" in page) continue;
-      if (page.thumbnail?.source) return page.thumbnail.source;
+      if (!page || "missing" in page) return null;
+      return page.thumbnail?.source ?? null;
     } catch {
-      continue;
+      return null;
     }
-  }
+  };
 
-  // Try Spanish Wikipedia as a second source
-  try {
-    const url =
-      `https://es.wikipedia.org/w/api.php?action=query` +
-      `&titles=${encodeURIComponent(title)}` +
-      `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const data = await res.json();
-      const pages = data?.query?.pages ?? {};
-      type WikiPage = { missing?: string; thumbnail?: { source?: string } };
-      const page = Object.values(pages)[0] as WikiPage | undefined;
-      if (page && !("missing" in page) && page.thumbnail?.source) {
-        return page.thumbnail.source;
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
+  // Run all wikipedia queries in parallel, return first non-null
+  const results = await Promise.all([
+    ...queries.map((q) => tryQuery(q, "en")),
+    tryQuery(title, "es"),
+  ]);
+  return results.find(Boolean) ?? null;
 }
 
 export async function fetchPosterClient(
@@ -128,46 +112,40 @@ export async function fetchPosterClient(
   const media: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const altMedia: "movie" | "tvShow" = media === "movie" ? "tvShow" : "movie";
 
-  // Round 1: primary media, US + AR
-  const [usMain, arMain] = await Promise.all([
-    searchItunes(clean, media, "us"),
-    searchItunes(clean, media, "ar"),
-  ]);
-  if (usMain ?? arMain) return usMain ?? arMain;
+  // Hard cap: give up after 5s total regardless of what's still in flight
+  const deadline = new Promise<null>((r) => setTimeout(() => r(null), 5000));
 
-  // Round 2: alternate media + strip article + ES/MX stores
-  const [usAlt, arAlt, usNo, esMain, mxMain] = await Promise.all([
-    searchItunes(clean, altMedia, "us"),
-    searchItunes(clean, altMedia, "ar"),
-    noArticle !== clean ? searchItunes(noArticle, media, "us") : Promise.resolve(null),
-    searchItunes(clean, media, "es"),
-    searchItunes(clean, media, "mx"),
-  ]);
-  const itunesResult = usAlt ?? arAlt ?? usNo ?? esMain ?? mxMain ?? null;
-  if (itunesResult) return itunesResult;
+  const search = async (): Promise<string | null> => {
+    // Round 1: primary media US + AR in parallel
+    const [usMain, arMain] = await Promise.all([
+      searchItunes(clean, media, "us"),
+      searchItunes(clean, media, "ar"),
+    ]);
+    if (usMain ?? arMain) return usMain ?? arMain;
 
-  // Round 3: Wikipedia fallback (covers classics, arthouse, foreign films)
-  return searchWikipedia(clean, year);
+    // Round 2: alt media + no-article + ES store, all in parallel
+    const [usAlt, arAlt, usNo, esMain] = await Promise.all([
+      searchItunes(clean, altMedia, "us"),
+      searchItunes(clean, altMedia, "ar"),
+      noArticle !== clean ? searchItunes(noArticle, media, "us") : Promise.resolve(null),
+      searchItunes(clean, media, "es"),
+    ]);
+    const itunesResult = usAlt ?? arAlt ?? usNo ?? esMain ?? null;
+    if (itunesResult) return itunesResult;
+
+    // Round 3: Wikipedia fallback
+    return searchWikipedia(clean, year);
+  };
+
+  return Promise.race([search(), deadline]);
 }
 
+// All items in parallel — each has its own 5s cap inside fetchPosterClient
 export async function fetchPostersClient(
   items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
-  const result: Record<string, string | null> = {};
-
-  // Process in batches of 3 to balance speed vs. rate limits
-  const BATCH = 3;
-  for (let i = 0; i < items.length; i += BATCH) {
-    const batch = items.slice(i, i + BATCH);
-    const posters = await Promise.all(
-      batch.map((it) => fetchPosterClient(it.title, it.type, it.year)),
-    );
-    batch.forEach((it, idx) => {
-      result[it.title] = posters[idx];
-    });
-    if (i + BATCH < items.length) {
-      await new Promise<void>((r) => setTimeout(r, 200));
-    }
-  }
-  return result;
+  const entries = await Promise.all(
+    items.map(async (it) => [it.title, await fetchPosterClient(it.title, it.type, it.year)] as const),
+  );
+  return Object.fromEntries(entries);
 }
