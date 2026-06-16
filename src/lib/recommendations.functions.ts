@@ -560,6 +560,44 @@ export const chooseFromLiked = createServerFn({ method: "POST" })
     }
   });
 
+/* ---------- askAboutTitle (detail/argument mode) ---------- */
+
+const askAboutTitleSchema = z.object({
+  title: z.string().min(1).max(200),
+  platform: z.string().min(1).max(80),
+  userQuestion: z.string().min(1).max(500),
+});
+
+const DETAIL_SYSTEM = `Sos Cinéfilo: un experto cinematográfico apasionado que conoce cada película y serie en profundidad. Cuando el usuario te pregunta sobre un título específico, respondés con criterio, pasión y precisión — como ese crítico televisivo de los 70 que abría una ventana al cine con una sola frase. Usás primera persona, tono rioplatense cálido, sin emojis. Máximo 4 oraciones. Nunca recomendés otro título: el foco es SOLO el título preguntado.`;
+
+export const askAboutTitle = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => askAboutTitleSchema.parse(data))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+
+    const provider = createAiProvider(apiKey);
+    const model = provider("claude-haiku-4-5-20251001");
+
+    const prompt = `${DETAIL_SYSTEM}
+
+Título: ${data.title} (disponible en ${data.platform})
+
+Pregunta del usuario:
+"""
+${data.userQuestion}
+"""
+
+Respondé en 2-4 oraciones en español rioplatense. Sé específico, apasionado y concreto. No recomiendes otros títulos.`;
+
+    try {
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
+      return { text: text.trim() };
+    } catch (err) {
+      throw mapErr(err);
+    }
+  });
+
 /* ---------- inferMomentFilters (text → filter values) ---------- */
 
 const inferInputSchema = z.object({

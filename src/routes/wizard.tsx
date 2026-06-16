@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Tv, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { recommendConversational } from "@/lib/recommendations.functions";
+import { recommendConversational, askAboutTitle } from "@/lib/recommendations.functions";
 import { deepLinkFor } from "@/lib/recommendations";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
 import { fetchPostersClient } from "@/lib/itunes";
@@ -40,6 +40,7 @@ function WizardPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatText, setChatText] = useState("");
+  const [agentReply, setAgentReply] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -74,7 +75,30 @@ function WizardPage() {
     await channelRef.current?.send({ type: "broadcast", event: "message", payload });
   };
 
+  // Detect if the user is asking for details about the current movie vs new recommendations
+  const isDetailQuery = (q: string) => {
+    const t = q.toLowerCase();
+    return /contame|explicame|explicá|por qu[eé]|porque|de qu[eé] trata|sinopsis|argumento|director|reparto|cast|quién|quien|cu[aá]ndo|vale la pena|recomend[aá]s|te gusta|opinion|opini[oó]n|buena[?]?$|m[aá]s info|mejor escena|temática|estilo|comparar|similar/.test(t);
+  };
+
+  const askAbout = async (userQuery: string) => {
+    if (items.length === 0) return;
+    setLoading(true);
+    const current = items[currentIndex];
+    try {
+      const { text } = await askAboutTitle({
+        data: { title: current.title, platform: current.platform, userQuestion: userQuery },
+      });
+      setAgentReply(text);
+    } catch (e) {
+      console.error("[wizard/ask]", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getReco = async (userQuery: string) => {
+    setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : ALL_PLATFORMS;
     const ctx = inferContext();
@@ -123,6 +147,7 @@ function WizardPage() {
 
   const navigate = async (newIndex: number) => {
     setCurrentIndex(newIndex);
+    setAgentReply(null);
     if (withTV) await broadcast({ type: "select", index: newIndex });
   };
 
@@ -130,7 +155,11 @@ function WizardPage() {
     const text = chatText.trim();
     if (!text || loading) return;
     setChatText("");
-    await getReco(text);
+    if (screen === "magic" && isDetailQuery(text)) {
+      await askAbout(text);
+    } else {
+      await getReco(text);
+    }
   };
 
   // ── WELCOME ────────────────────────────────────────────────────────
@@ -273,8 +302,14 @@ function WizardPage() {
               className="h-14 w-14 shrink-0"
               onTranscript={(t, isFinal) => {
                 if (!t) { setChatText(""); return; }
-                if (isFinal) { void getReco(t.trim()); setChatText(""); }
-                else setChatText(t);
+                if (isFinal) {
+                  const q = t.trim();
+                  if (isDetailQuery(q)) void askAbout(q);
+                  else void getReco(q);
+                  setChatText("");
+                } else {
+                  setChatText(t);
+                }
               }}
             />
             {/* Text input */}
@@ -284,7 +319,7 @@ function WizardPage() {
                 value={chatText}
                 onChange={(e) => setChatText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-                placeholder={loading ? "Pensando..." : "Dame algo más oscuro..."}
+                placeholder={loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
                 disabled={loading}
                 className="min-h-[46px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
               />
@@ -336,10 +371,18 @@ function WizardPage() {
             </div>
           </div>
         </div>
+        {/* Agent reply bubble */}
+        {agentReply && (
+          <div className="mx-5 mt-2 rounded-2xl bg-primary/8 border border-primary/20 px-4 py-3">
+            <p className="text-[12px] leading-relaxed text-foreground/80">{agentReply}</p>
+          </div>
+        )}
         {/* Swipe hint */}
-        <p className="shrink-0 pt-1.5 text-center text-[10px] text-muted-foreground/40">
-          deslizá para cambiar · o usá los botones
-        </p>
+        {!agentReply && (
+          <p className="shrink-0 pt-1.5 text-center text-[10px] text-muted-foreground/40">
+            deslizá para cambiar · o usá los botones
+          </p>
+        )}
 
         {/* ── TV navigation commands ── */}
         <div className="shrink-0 px-5 pt-3 pb-6">
