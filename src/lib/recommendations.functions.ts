@@ -13,6 +13,8 @@ const recSchema = z.object({
   type: z.string(),
   year: z.string().optional(),
   ageRating: z.string().optional(),
+  // synopsis: opcional; solo lo pide la vista TV (recommendFromText).
+  synopsis: z.string().optional(),
   reason: z.string(),
 });
 
@@ -28,7 +30,7 @@ const filtersOutSchema = z.object({
 const resultSchema = z.object({
   filters: filtersOutSchema,
   main: recSchema,
-  alternatives: z.array(recSchema).min(2).max(6),
+  alternatives: z.array(recSchema).min(2).max(20),
   clarification_needed: z.string().nullable().optional(),
   cinephile_note: z.string().nullable().optional(),
 });
@@ -67,9 +69,7 @@ function parseAiJson<T>(text: string, schema: z.ZodType<T>): T {
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
   const jsonStr =
-    firstBrace >= 0 && lastBrace > firstBrace
-      ? cleaned.slice(firstBrace, lastBrace + 1)
-      : cleaned;
+    firstBrace >= 0 && lastBrace > firstBrace ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned;
   return schema.parse(JSON.parse(jsonStr));
 }
 
@@ -151,7 +151,9 @@ function buildTasteLine(taste: TasteSnapshot | null): string {
   if (taste.loved.length > 0) parts.push(`Le encantó (señal fuerte): ${taste.loved.join(", ")}`);
   if (taste.liked.length > 0) parts.push(`Le gustó: ${taste.liked.join(", ")}`);
   if (taste.disliked.length > 0)
-    parts.push(`NO le gustó (señal negativa fuerte — evitá títulos similares en tono/género/director): ${taste.disliked.join(", ")}`);
+    parts.push(
+      `NO le gustó (señal negativa fuerte — evitá títulos similares en tono/género/director): ${taste.disliked.join(", ")}`,
+    );
   return parts.length ? `\n\nGusto del usuario:\n- ${parts.join("\n- ")}` : "";
 }
 
@@ -178,7 +180,7 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     const provider = createAiProvider(apiKey);
     const model = provider("claude-haiku-4-5-20251001");
 
-    const fmt = (v: string | null) => (v ?? "Elegí por mí (decide tú)");
+    const fmt = (v: string | null) => v ?? "Elegí por mí (decide tú)";
 
     const extra = data.extraText?.trim()
       ? `\n\nAdemás, el usuario añadió este matiz en texto libre (combinalo con los filtros):\n"""\n${data.extraText.trim()}\n"""`
@@ -211,7 +213,9 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? undefined }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? undefined,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -324,7 +328,9 @@ export const recommendFromText = createServerFn({ method: "POST" })
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? data.text.length }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? data.text.length,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -357,10 +363,14 @@ Tu tarea:
 1. Inferir del texto: tiempo aproximado, compañía, mood, tipo, nivel de atención y novedad. Si algo no está claro, deducí lo más razonable según el contexto.
 2. Recomendá basándote en esa inferencia + contexto ambiental.
 3. En "filters", devolvé los valores que dedujiste (catálogo: tiempo "30 min"|"1 hora"|"1.5 horas"|"Noche entera"; tipo "Película"|"Serie"|"Capítulo de serie"; atención "Inmersivo"|"De fondo"|"Comfort watch"; novedad "Algo nuevo"|"Algo conocido"|"Ya visto (rever)").
-4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
+4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.
+
+IMPORTANTE (vista TV): ignorá la cantidad de alternativas indicada más arriba. Para esta búsqueda devolvé 1 principal + EXACTAMENTE 14 alternativas distintas entre sí (es una grilla grande para televisor). Mantené la misma forma de JSON, solo con más objetos en "alternatives".
+
+Además, en CADA objeto (main y cada alternative) agregá un campo "synopsis": una frase breve (máx 20 palabras) que diga de qué trata la película/serie, sin spoilers. Y en "reason" explicá por qué la elegiste para ESTA lista, conectándola con el pedido del usuario. Si algún título se aleja del pedido original (porque ya se agotaron las opciones más obvias), aclaralo explícitamente en su "reason" (ej: "Se aleja un poco de lo que pediste, pero...").`;
 
     try {
-      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 3500 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -440,7 +450,9 @@ export const recommendConversational = createServerFn({ method: "POST" })
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const lastMsg = data.messages[data.messages.length - 1].content;
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? lastMsg.length }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? lastMsg.length,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -463,9 +475,7 @@ export const recommendConversational = createServerFn({ method: "POST" })
     const historyLines =
       prior.length > 0
         ? `\nHistorial de la conversación:\n${prior
-            .map((m) =>
-              m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`,
-            )
+            .map((m) => (m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`))
             .join("\n")}\n`
         : "";
 
@@ -480,7 +490,7 @@ ${lastMsg}
 """
 ${tasteLine}${seedLine}${personalitySection}${excludeLine}
 
-${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"algo más viejo\", \"sin violencia\", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados." : ""}
+${prior.length > 0 ? 'Importante: es una conversación. Si el usuario refina ("algo más viejo", "sin violencia", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados.' : ""}
 "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
