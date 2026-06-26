@@ -1,10 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Tv, ChevronLeft, ChevronRight, Send } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Sparkles, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { recommendConversational, askAboutTitle } from "@/lib/recommendations.functions";
 import { fetchPosters } from "@/lib/posters.functions";
-import { deepLinkFor } from "@/lib/recommendations";
+import { deepLinkFor, colorForPlatform } from "@/lib/recommendations";
 import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
 import { MicButton } from "@/components/MicButton";
 import { cn } from "@/lib/utils";
@@ -14,110 +13,38 @@ export const Route = createFileRoute("/wizard")({
   component: WizardPage,
 });
 
-const SESSION_ID = "cinefilo-test";
-
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 const ALL_PLATFORMS = PLATFORMS;
+const COUNTRY_KEY = "cinefilo:country";
+const PLATFORMS_KEY = "queveo:guest:default_platforms";
 
-const MOODS = [
-  { label: "Reírme", emoji: "😂", query: "una comedia para reírme" },
-  { label: "Sorprenderme", emoji: "😮", query: "algo que me sorprenda" },
-  { label: "Emocionarme", emoji: "😢", query: "algo para emocionarme" },
-  { label: "Suspenso", emoji: "😱", query: "algo de suspenso" },
-  { label: "Aprender", emoji: "🧠", query: "algo para aprender" },
-  { label: "Lo que sea", emoji: "🎬", query: "lo mejor para esta noche" },
-];
+type Screen = "welcome" | "platforms" | "magic";
 
-type Screen = "welcome" | "tv" | "platforms" | "mood" | "magic";
-
-const FAKE_DEVICES = [
-  { id: "philips-1", name: "Philips 65PUD7906/77", icon: "📺" },
-];
-
-type PickerPhase = "searching" | "found" | "connecting" | "done";
-
-function TVPickerScreen({ onConnected, onSkip }: { onConnected: () => void; onSkip: () => void }) {
-  const [phase, setPhase] = useState<PickerPhase>("searching");
-
-  useEffect(() => {
-    const t = setTimeout(() => setPhase("found"), 1400);
-    return () => clearTimeout(t);
-  }, []);
-
-  const handleSelect = () => {
-    setPhase("connecting");
-    setTimeout(() => {
-      setPhase("done");
-      setTimeout(onConnected, 600);
-    }, 1200);
-  };
-
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-8">
-      <Tv className={cn("h-12 w-12 transition-colors", phase === "done" ? "text-green-500" : "text-foreground/30")} />
-
-      <div className="text-center">
-        <h2 className="text-2xl font-bold tracking-tight">¿A qué TV conectamos?</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {phase === "searching" && "Buscando dispositivos..."}
-          {phase === "found" && "Dispositivos encontrados"}
-          {phase === "connecting" && "Conectando..."}
-          {phase === "done" && "¡Conectado!"}
-        </p>
-      </div>
-
-      {/* Device list */}
-      <div className="w-full max-w-sm space-y-2">
-        {phase === "searching" && (
-          <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-5 py-4">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
-            <span className="text-sm text-muted-foreground">Buscando en la red...</span>
-          </div>
-        )}
-
-        {(phase === "found" || phase === "connecting" || phase === "done") && FAKE_DEVICES.map((d) => (
-          <button
-            key={d.id}
-            onClick={phase === "found" ? handleSelect : undefined}
-            className={cn(
-              "flex w-full items-center gap-4 rounded-2xl border-2 px-5 py-4 text-left transition-all",
-              phase === "found" && "border-border bg-background active:scale-[0.98]",
-              phase === "connecting" && "border-primary/40 bg-primary/5",
-              phase === "done" && "border-green-500/40 bg-green-500/5",
-            )}
-          >
-            <span className="text-3xl">{d.icon}</span>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">{d.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {phase === "found" && "Disponible"}
-                {phase === "connecting" && "Conectando..."}
-                {phase === "done" && "Conectado ✓"}
-              </p>
-            </div>
-            {phase === "connecting" && (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-            )}
-            {phase === "done" && <span className="text-green-500 text-lg">✓</span>}
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={onSkip}
-        className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-      >
-        Sin TV → Seguir igual
-      </button>
-    </div>
-  );
+async function detectCountry(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(COUNTRY_KEY)) return;
+  try {
+    const res = await fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const code = (await res.text()).trim().toUpperCase();
+      if (/^[A-Z]{2}$/.test(code)) localStorage.setItem(COUNTRY_KEY, code);
+    }
+  } catch {
+    // non-blocking
+  }
 }
 
 function WizardPage() {
   const [screen, setScreen] = useState<Screen>("welcome");
-  const [tvConnected, setTvConnected] = useState(false);
-  const [withTV, setWithTV] = useState(true);
-  const [platforms, setPlatforms] = useState<string[]>([]);
+  const [platforms, setPlatforms] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(PLATFORMS_KEY);
+      return saved ? (JSON.parse(saved) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [items, setItems] = useState<Recommendation[]>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -126,40 +53,10 @@ function WizardPage() {
   const [agentReply, setAgentReply] = useState<string | null>(null);
   const [detailHistory, setDetailHistory] = useState<{ title: string; question: string; answer: string }[]>([]);
   const [loading, setLoading] = useState(false);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const touchStartX = useRef(0);
 
-  const tvUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/tv?s=${SESSION_ID}`
-      : `/tv?s=${SESSION_ID}`;
+  useEffect(() => { void detectCountry(); }, []);
 
-  useEffect(() => {
-    const ch = supabase
-      .channel(`cinefilo:session:${SESSION_ID}`)
-      .on("broadcast", { event: "tv_ready" }, () => {
-        setTvConnected(true);
-        if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null; }
-      })
-      .subscribe();
-    channelRef.current = ch;
-    return () => { void supabase.removeChannel(ch); if (pingIntervalRef.current) clearInterval(pingIntervalRef.current); };
-  }, []);
-
-  useEffect(() => {
-    if (screen !== "tv" || tvConnected) { if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null; } return; }
-    const ping = () => void channelRef.current?.send({ type: "broadcast", event: "wizard_ping", payload: {} });
-    ping();
-    pingIntervalRef.current = setInterval(ping, 2000);
-    return () => { if (pingIntervalRef.current) clearInterval(pingIntervalRef.current); };
-  }, [screen, tvConnected]);
-
-  const broadcast = async (payload: Record<string, unknown>) => {
-    await channelRef.current?.send({ type: "broadcast", event: "message", payload });
-  };
-
-  // Detect if the user is asking for details about the current movie vs new recommendations
   const isDetailQuery = (q: string) => {
     const t = q.toLowerCase();
     return /contame|explicame|explicá|por qu[eé]|porque|de qu[eé] trata|sinopsis|argumento|director|reparto|cast|quién|quien|cu[aá]ndo|vale la pena|recomend[aá]s|te gusta|opinion|opini[oó]n|buena[?]?$|m[aá]s info|mejor escena|temática|estilo|comparar|similar/.test(t);
@@ -218,30 +115,19 @@ function WizardPage() {
       setScreen("magic");
       setLoading(false);
 
-      // Server-side fetch: more reliable than client-side iTunes calls
       const { posters: finalPosters } = await fetchPosters({
         data: { items: allItems.map((i) => ({ title: i.title, type: i.type, year: i.year })) },
       });
       setPosters(finalPosters);
-
-      if (withTV) {
-        await broadcast({
-          type: "results",
-          items: allItems,
-          posters: finalPosters,
-          selectedIndex: 0,
-        });
-      }
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
     }
   };
 
-  const navigate = async (newIndex: number) => {
+  const navigate = (newIndex: number) => {
     setCurrentIndex(newIndex);
     setAgentReply(null);
-    if (withTV) await broadcast({ type: "select", index: newIndex });
   };
 
   const sendChat = async () => {
@@ -255,20 +141,29 @@ function WizardPage() {
     }
   };
 
-  // ── WELCOME ────────────────────────────────────────────────────────
+  const handleStartReco = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    }
+    const ctx = inferContext();
+    const contextQuery = `lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`;
+    void getReco(contextQuery);
+  };
+
+  // ── WELCOME ──────────────────────────────────────────────────────────
   if (screen === "welcome") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-background px-8 text-center">
-        <div className="flex flex-col items-center gap-3">
-          <Sparkles className="h-10 w-10 text-primary" />
-          <h1 className="text-4xl font-bold tracking-tight">Cinéfilo</h1>
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-10 bg-background px-8 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <Sparkles className="h-12 w-12 text-primary" />
+          <h1 className="text-5xl font-bold tracking-tight">Cinéfilo</h1>
+          <p className="text-lg leading-snug text-muted-foreground">
+            Tu guía personal para elegir<br />qué ver esta noche.
+          </p>
         </div>
-        <p className="text-xl leading-snug text-muted-foreground">
-          Decidí qué ver esta noche<br />en 3 pasos.
-        </p>
         <button
-          onClick={() => setScreen("tv")}
-          className="rounded-full bg-foreground px-12 py-4 text-base font-semibold text-background"
+          onClick={() => setScreen("platforms")}
+          className="rounded-full bg-foreground px-14 py-4 text-base font-semibold text-background active:scale-95 transition-transform"
         >
           Empezar
         </button>
@@ -276,103 +171,85 @@ function WizardPage() {
     );
   }
 
-  // ── CONNECT TV ─────────────────────────────────────────────────────
-  if (screen === "tv") {
-    return <TVPickerScreen
-      onConnected={() => { setWithTV(true); setTvConnected(true); setScreen("platforms"); }}
-      onSkip={() => { setWithTV(false); setScreen("platforms"); }}
-    />;
-  }
-
-  // ── PLATFORMS ──────────────────────────────────────────────────────
+  // ── PLATFORMS ────────────────────────────────────────────────────────
   if (screen === "platforms") {
     return (
-      <div className="flex min-h-screen flex-col bg-background px-6 pt-14 pb-8">
-        <h2 className="text-2xl font-bold tracking-tight">¿En qué plataformas estás?</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Si no elegís ninguna, buscamos en todas.</p>
-        <div className="mt-6 grid grid-cols-3 gap-3">
+      <div className="flex min-h-[100dvh] flex-col bg-background px-6 pt-16 pb-10">
+        <h2 className="text-2xl font-bold tracking-tight">¿Cuáles tenés?</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Seleccioná tus plataformas. Si no elegís ninguna, buscamos en todas.
+        </p>
+
+        <div className="mt-8 grid grid-cols-2 gap-3">
           {PLATFORMS.map((p) => {
             const selected = platforms.includes(p);
+            const color = colorForPlatform(p);
             return (
               <button
                 key={p}
-                onClick={() => setPlatforms((prev) => selected ? prev.filter((x) => x !== p) : [...prev, p])}
-                className={cn("rounded-2xl border-2 px-2 py-4 text-sm font-semibold transition-all", selected ? "border-foreground bg-foreground text-background" : "border-border bg-background text-foreground")}
+                onClick={() =>
+                  setPlatforms((prev) =>
+                    selected ? prev.filter((x) => x !== p) : [...prev, p]
+                  )
+                }
+                className={cn(
+                  "rounded-2xl border-2 px-4 py-5 text-left text-sm font-semibold transition-all active:scale-95",
+                  selected
+                    ? "border-transparent text-white"
+                    : "border-border bg-background text-foreground"
+                )}
+                style={selected ? { backgroundColor: color, borderColor: color } : {}}
               >
                 {p}
               </button>
             );
           })}
         </div>
-        <button onClick={() => setScreen("mood")} className="mt-auto w-full rounded-full bg-foreground py-4 text-base font-semibold text-background">
-          Continuar →
-        </button>
-      </div>
-    );
-  }
 
-  // ── MOOD ───────────────────────────────────────────────────────────
-  if (screen === "mood") {
-    return (
-      <div className="flex min-h-screen flex-col bg-background px-6 pt-14 pb-8">
-        <h2 className="text-2xl font-bold tracking-tight">¿Qué te copa esta noche?</h2>
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          {MOODS.map((m) => (
+        <div className="mt-auto pt-8">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
+              <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
+            </div>
+          ) : (
             <button
-              key={m.label}
-              onClick={() => getReco(m.query)}
-              disabled={loading}
-              className="flex flex-col items-center gap-2 rounded-2xl border-2 border-border bg-background py-6 text-center transition-all active:scale-95 disabled:opacity-40"
+              onClick={handleStartReco}
+              className="w-full rounded-full bg-foreground py-4 text-base font-semibold text-background active:scale-95 transition-transform"
             >
-              <span className="text-4xl">{m.emoji}</span>
-              <span className="text-sm font-semibold">{m.label}</span>
+              Empezar →
             </button>
-          ))}
+          )}
         </div>
-        {loading && (
-          <div className="mt-6 flex items-center justify-center gap-2 text-muted-foreground">
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            <span className="text-sm">Buscando las mejores opciones...</span>
-          </div>
-        )}
       </div>
     );
   }
 
-  // ── MAGIC MOMENT ───────────────────────────────────────────────────
+  // ── MAGIC MOMENT ─────────────────────────────────────────────────────
   if (screen === "magic" && items.length > 0) {
     const current = items[currentIndex];
     const poster = posters[current.title];
     const hasPrev = currentIndex > 0;
     const hasNext = currentIndex < items.length - 1;
+    const platformColor = colorForPlatform(current.platform);
 
     return (
       <div className="flex h-[100dvh] flex-col bg-background">
 
-        {/* ── Header ── */}
-        <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
+        {/* Header */}
+        <div className="flex shrink-0 items-center px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             <span className="text-sm font-semibold">Cinéfilo</span>
           </div>
-          {withTV && tvConnected && (
-            <span className="flex items-center gap-1.5 text-xs font-medium text-green-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-              TV en vivo
-            </span>
-          )}
         </div>
 
-        {/* ── Agente Cinéfilo (top, prominent) ── */}
-        <div className="shrink-0 px-5 pt-4 pb-3">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-            Agente Cinéfilo
-          </p>
+        {/* Agent input */}
+        <div className="shrink-0 px-5 pt-3 pb-3">
           <div className={cn("flex items-center gap-3", loading && "opacity-50 pointer-events-none")}>
-            {/* Prominent mic */}
             <MicButton
               size="md"
-              className="h-14 w-14 shrink-0"
+              className="h-12 w-12 shrink-0"
               onTranscript={(t, isFinal) => {
                 if (!t) { setChatText(""); return; }
                 if (isFinal) {
@@ -385,7 +262,6 @@ function WizardPage() {
                 }
               }}
             />
-            {/* Text input */}
             <div className="flex flex-1 items-center gap-2 rounded-2xl bg-muted px-4">
               <input
                 type="text"
@@ -394,7 +270,7 @@ function WizardPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
                 placeholder={loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
                 disabled={loading}
-                className="min-h-[46px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
               />
               <button
                 onClick={sendChat}
@@ -407,20 +283,18 @@ function WizardPage() {
           </div>
         </div>
 
-        {/* ── Middle: hero + reply bubble ── */}
+        {/* Hero card + reply */}
         <div className="flex-1 min-h-0 flex flex-col gap-3 px-5 pb-2">
-          {/* Mini hero card — swipeable, fills available space */}
           <div
             className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
             onTouchEnd={(e) => {
               const dx = e.changedTouches[0].clientX - touchStartX.current;
-              if (dx < -50 && hasNext) void navigate(currentIndex + 1);
-              else if (dx > 50 && hasPrev) void navigate(currentIndex - 1);
+              if (dx < -50 && hasNext) navigate(currentIndex + 1);
+              else if (dx > 50 && hasPrev) navigate(currentIndex - 1);
             }}
           >
             <div className="flex h-full">
-              {/* Poster */}
               <div className="w-28 shrink-0 overflow-hidden">
                 {poster ? (
                   <img src={poster} alt={current.title} className="h-full w-full object-cover" />
@@ -428,18 +302,25 @@ function WizardPage() {
                   <div className="h-full w-full animate-pulse bg-muted" />
                 )}
               </div>
-              {/* Info */}
               <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
                 <h2 className="text-base font-bold leading-tight">{current.title}</h2>
-                <p className="text-xs text-muted-foreground">
-                  {current.platform} · {current.type} · {current.duration}
-                  {current.year && ` · ${current.year}`}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+                    style={{ backgroundColor: platformColor }}
+                  >
+                    {current.platform === "Star+" ? "Disney+" : current.platform}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {current.type} · {current.duration}
+                    {current.year && ` · ${current.year}`}
+                  </span>
                   {current.ageRating && (
-                    <span className="ml-1.5 rounded border border-current px-1 py-0.5 text-[10px] font-semibold leading-none">
+                    <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
                       {current.ageRating}
                     </span>
                   )}
-                </p>
+                </div>
                 <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
                   {current.reason}
                 </p>
@@ -447,42 +328,39 @@ function WizardPage() {
                   href={deepLinkFor(current.platform, current.title)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 w-full rounded-full bg-foreground py-2.5 text-center text-xs font-semibold text-background"
+                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white"
+                  style={{ backgroundColor: platformColor }}
                 >
-                  ▶ Ver ahora
+                  ▶ Ver ahora en {current.platform === "Star+" ? "Disney+" : current.platform}
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Agent reply bubble — shrink-0 so card yields space */}
           {agentReply ? (
             <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3">
               <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
             </div>
           ) : (
             <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
-              deslizá para cambiar · o usá los botones
+              deslizá para ver alternativas
             </p>
           )}
         </div>
 
-        {/* ── TV navigation commands ── */}
-        <div className="shrink-0 px-5 pt-3 pb-6">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
-            Controlar la TV
-          </p>
+        {/* Navigation */}
+        <div className="shrink-0 px-5 pt-2 pb-8">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => void navigate(currentIndex - 1)}
+              onClick={() => navigate(currentIndex - 1)}
               disabled={!hasPrev}
-              className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-border font-semibold text-foreground transition-transform active:scale-95 disabled:opacity-20"
+              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="h-4 w-4" />
               <span className="text-sm">Anterior</span>
             </button>
 
-            <div className="flex flex-col items-center gap-1.5 px-1">
+            <div className="flex flex-col items-center gap-1.5 px-2">
               <span className="text-sm font-bold">
                 {currentIndex + 1}
                 <span className="font-normal text-muted-foreground">/{items.length}</span>
@@ -491,7 +369,7 @@ function WizardPage() {
                 {items.map((_, i) => (
                   <button
                     key={i}
-                    onClick={() => void navigate(i)}
+                    onClick={() => navigate(i)}
                     className={cn(
                       "h-1.5 rounded-full transition-all",
                       i === currentIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20"
@@ -502,16 +380,26 @@ function WizardPage() {
             </div>
 
             <button
-              onClick={() => void navigate(currentIndex + 1)}
+              onClick={() => navigate(currentIndex + 1)}
               disabled={!hasNext}
-              className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border-2 border-border font-semibold text-foreground transition-transform active:scale-95 disabled:opacity-20"
+              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
             >
               <span className="text-sm">Siguiente</span>
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
 
+      </div>
+    );
+  }
+
+  // Transitional loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background">
+        <Sparkles className="h-8 w-8 animate-pulse text-primary" />
+        <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
       </div>
     );
   }
