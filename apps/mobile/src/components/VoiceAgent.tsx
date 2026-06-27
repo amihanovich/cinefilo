@@ -63,19 +63,17 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
       const updatedMessages: Message[] = [...newMessages, { role: "assistant", content: assistantSummary }];
 
+      // Pasamos los resultados al padre para que las cards se actualicen en background
+      onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
+
       if (data.cinephile_note) {
         setState("speaking");
         setHint(data.cinephile_note);
-        await speak(data.cinephile_note, undefined, () => {
-          setState("done");
-          setHint("Listo — cerrá para ver las recomendaciones");
-        });
-      } else {
-        setState("done");
-        setHint("Listo — cerrá para ver las recomendaciones");
+        await speak(data.cinephile_note);
       }
 
-      onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
+      // Al terminar de hablar, cerramos el overlay automáticamente
+      onDismiss();
     } catch (e) {
       console.error("[VoiceAgent]", e);
       setState("idle");
@@ -194,15 +192,6 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
         </p>
       </div>
 
-      {/* Instrucción secundaria */}
-      {state === "done" && (
-        <button
-          onClick={handleDismiss}
-          className="mt-8 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background active:scale-95 transition-transform"
-        >
-          Ver recomendaciones →
-        </button>
-      )}
     </div>
   );
 }

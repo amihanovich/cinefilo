@@ -200,12 +200,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   if (screen === "welcome") {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
-        <div className="flex flex-col items-center gap-4 animate-pulse">
-          <Sparkles className="h-14 w-14 text-primary" />
-          <h1 className="text-5xl font-bold tracking-tight text-foreground">Cinéfilo</h1>
-          <p className="text-base text-muted-foreground leading-snug">
-            Tu guía personal para elegir<br />qué ver esta noche.
-          </p>
+        <div className="flex flex-col items-center gap-5">
+          <Sparkles className="h-12 w-12 text-primary" />
+          <div className="flex flex-col gap-2">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo.</h1>
+            <p className="text-base text-muted-foreground leading-snug">
+              Contame qué querés ver<br />y te ayudo a encontrarlo.
+            </p>
+          </div>
         </div>
       </div>
     );
