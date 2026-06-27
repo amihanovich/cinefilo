@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
-import { deepLinkFor, colorForPlatform, platformLabel } from "./lib/deeplink";
-import { checkAvailability } from "./lib/availability";
+import { colorForPlatform, platformLabel } from "./lib/deeplink";
+import { jwSearch, openNative } from "./lib/justwatch";
 import type { Recommendation, Message } from "./lib/api";
-import type { AvailabilityResult } from "./lib/availability";
+import type { JwResult } from "./lib/justwatch";
 
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 const COUNTRY_KEY = "cinefilo:country";
@@ -47,7 +47,7 @@ export default function WizardPage() {
 
   const [items, setItems] = useState<Recommendation[]>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
-  const [availability, setAvailability] = useState<Record<string, AvailabilityResult>>({});
+  const [availability, setAvailability] = useState<Record<string, JwResult>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
@@ -71,10 +71,10 @@ export default function WizardPage() {
 
   const loadAvailability = async (allItems: Recommendation[]) => {
     const country = getCountry();
-    // Chequeamos en paralelo, actualizando cada card a medida que llegan
+    // Chequeamos en paralelo via JustWatch GraphQL, actualizando card por card
     await Promise.allSettled(
       allItems.map(async (item) => {
-        const result = await checkAvailability(item.title, item.platform, item.type, country);
+        const result = await jwSearch(item.title, item.platform, item.type, country);
         setAvailability((prev) => ({ ...prev, [item.title]: result }));
       })
     );
@@ -223,9 +223,6 @@ export default function WizardPage() {
     const platformColor = colorForPlatform(current.platform);
     const label = platformLabel(current.platform);
 
-    // Usar JustWatch link si TMDB lo confirmó, si no el deep link de búsqueda
-    const watchUrl = avail?.jwLink ?? deepLinkFor(current.platform, current.title);
-
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
@@ -317,15 +314,30 @@ export default function WizardPage() {
                   {current.reason}
                 </p>
 
-                <a
-                  href={watchUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white"
+                <button
+                  onClick={() => {
+                    if (avail?.confirmed && avail.deeplinkIos) {
+                      openNative(avail);
+                    } else {
+                      // fallback: abre búsqueda en la web de la plataforma
+                      const q = encodeURIComponent(current.title);
+                      const urls: Record<string, string> = {
+                        Netflix: `https://www.netflix.com/search?q=${q}`,
+                        "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
+                        "Disney+": `https://www.disneyplus.com/search`,
+                        "Star+": `https://www.disneyplus.com/search`,
+                        Max: `https://play.max.com/search?q=${q}`,
+                        "Apple TV+": `https://tv.apple.com/search?term=${q}`,
+                        "Paramount+": `https://www.paramountplus.com/search/${q}/`,
+                      };
+                      window.open(urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`, "_blank");
+                    }
+                  }}
+                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
                   style={{ backgroundColor: platformColor }}
                 >
                   ▶ Ver ahora en {label}
-                </a>
+                </button>
               </div>
             </div>
           </div>
