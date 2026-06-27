@@ -63,17 +63,13 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
       const updatedMessages: Message[] = [...newMessages, { role: "assistant", content: assistantSummary }];
 
-      // Pasamos los resultados al padre para que las cards se actualicen en background
+      // Cerramos el overlay inmediatamente — las cards aparecen mientras el audio sigue en background
       onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
+      onDismiss();
 
       if (data.cinephile_note) {
-        setState("speaking");
-        setHint(data.cinephile_note);
-        await speak(data.cinephile_note);
+        void speak(data.cinephile_note);
       }
-
-      // Al terminar de hablar, cerramos el overlay automáticamente
-      onDismiss();
     } catch (e) {
       console.error("[VoiceAgent]", e);
       setState("idle");
