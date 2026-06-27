@@ -54,7 +54,10 @@ http
           res.end(JSON.stringify({ error: String((e && e.message) || e) }));
         });
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 859fdeed2351356c529e607b28072fad34189158
     if (urlPath === "/api/tv-search") {
       if (req.method === "POST") {
         let body = "";
@@ -134,6 +137,10 @@ http
       if (urlPath.startsWith("/assets/")) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       } else if (ext === ".html") {
+<<<<<<< HEAD
+=======
+        // HTML nunca se cachea: así la TV siempre toma la última versión.
+>>>>>>> 859fdeed2351356c529e607b28072fad34189158
         res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
       }
       fs.createReadStream(filePath).pipe(res);
@@ -144,5 +151,9 @@ http
   })
   .listen(port, () => {
     console.log(`Server listening on port ${port}`);
+<<<<<<< HEAD
     warmHome();
+=======
+    warmHome(); // pre-carga el home en caché para que el primer usuario no espere
+>>>>>>> 859fdeed2351356c529e607b28072fad34189158
   });

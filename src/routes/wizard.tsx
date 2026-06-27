@@ -1,23 +1,27 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, ChevronLeft, ChevronRight, Send } from "lucide-react";
-import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters } from "./lib/api";
-import { deepLinkFor, colorForPlatform, platformLabel } from "./lib/deeplink";
-<<<<<<< HEAD
-import type { Recommendation, Message } from "./lib/api";
-=======
-import { checkAvailability } from "./lib/availability";
-import type { Recommendation, Message } from "./lib/api";
-import type { AvailabilityResult } from "./lib/availability";
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
+import { recommendConversational, askAboutTitle } from "@/lib/recommendations.functions";
+import { fetchPosters } from "@/lib/posters.functions";
+import { deepLinkFor, colorForPlatform } from "@/lib/recommendations";
+import { inferContext, contextToPromptHint, seasonHintShort } from "@/lib/context";
+import { MicButton } from "@/components/MicButton";
+import { cn } from "@/lib/utils";
+import type { Recommendation } from "@/lib/recommendations";
+
+export const Route = createFileRoute("/wizard")({
+  component: WizardPage,
+});
 
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+const ALL_PLATFORMS = PLATFORMS;
 const COUNTRY_KEY = "cinefilo:country";
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 
 type Screen = "welcome" | "platforms" | "magic";
 
 async function detectCountry(): Promise<void> {
+  if (typeof window === "undefined") return;
   if (localStorage.getItem(COUNTRY_KEY)) return;
   try {
     const res = await fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(4000) });
@@ -26,24 +30,14 @@ async function detectCountry(): Promise<void> {
       if (/^[A-Z]{2}$/.test(code)) localStorage.setItem(COUNTRY_KEY, code);
     }
   } catch {
-    // silencioso
+    // non-blocking
   }
 }
 
-<<<<<<< HEAD
-=======
-function getCountry(): string {
-  return localStorage.getItem(COUNTRY_KEY) ?? "AR";
-}
-
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
-function cn(...classes: (string | boolean | undefined | null)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
-
-export default function WizardPage() {
+function WizardPage() {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
       const saved = localStorage.getItem(PLATFORMS_KEY);
       return saved ? (JSON.parse(saved) as string[]) : [];
@@ -51,96 +45,80 @@ export default function WizardPage() {
       return [];
     }
   });
-
   const [items, setItems] = useState<Recommendation[]>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
-<<<<<<< HEAD
-=======
-  const [availability, setAvailability] = useState<Record<string, AvailabilityResult>>({});
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [chatText, setChatText] = useState("");
   const [agentReply, setAgentReply] = useState<string | null>(null);
-  const [cinephileNote, setCinephileNote] = useState<string | null>(null);
+  const [detailHistory, setDetailHistory] = useState<{ title: string; question: string; answer: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const touchStartX = useRef(0);
-<<<<<<< HEAD
-  const inputRef = useRef<HTMLInputElement>(null);
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
 
-  // Auto-advance welcome → platforms after 2s
-  useEffect(() => {
-    if (screen !== "welcome") return;
-    void detectCountry();
-    const timer = setTimeout(() => setScreen("platforms"), 2000);
-    return () => clearTimeout(timer);
-  }, [screen]);
+  useEffect(() => { void detectCountry(); }, []);
 
-  const isDetailQuery = (q: string): boolean => {
+  const isDetailQuery = (q: string) => {
     const t = q.toLowerCase();
     return /contame|explicame|explicá|por qu[eé]|porque|de qu[eé] trata|sinopsis|argumento|director|reparto|cast|quién|quien|cu[aá]ndo|vale la pena|recomend[aá]s|te gusta|opinion|opini[oó]n|buena[?]?$|m[aá]s info|mejor escena|temática|estilo|comparar|similar/.test(t);
   };
 
-<<<<<<< HEAD
-=======
-  const loadAvailability = async (allItems: Recommendation[]) => {
-    const country = getCountry();
-    // Chequeamos en paralelo, actualizando cada card a medida que llegan
-    await Promise.allSettled(
-      allItems.map(async (item) => {
-        const result = await checkAvailability(item.title, item.platform, item.type, country);
-        setAvailability((prev) => ({ ...prev, [item.title]: result }));
-      })
-    );
+  const askAbout = async (userQuery: string) => {
+    if (items.length === 0) return;
+    setLoading(true);
+    const current = items[currentIndex];
+    try {
+      const { text } = await askAboutTitle({
+        data: {
+          title: current.title,
+          platform: current.platform,
+          userQuestion: userQuery,
+          history: detailHistory,
+        },
+      });
+      setAgentReply(text);
+      setDetailHistory((prev) => [...prev, { title: current.title, question: userQuery, answer: text }]);
+    } catch (e) {
+      console.error("[wizard/ask]", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
   const getReco = async (userQuery: string) => {
     setAgentReply(null);
-    setCinephileNote(null);
+    setDetailHistory([]);
     setLoading(true);
-    const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
+    const effectivePlatforms = platforms.length > 0 ? platforms : ALL_PLATFORMS;
     const ctx = inferContext();
-    const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
+    const newMessages = [...messages, { role: "user" as const, content: userQuery }];
 
     try {
-      const data = await fetchRecommendation({
-        messages: newMessages,
-        platforms: effectivePlatforms,
-        contextHint: contextToPromptHint(ctx),
-        seasonHint: seasonHintShort(ctx),
-        weatherHint: null,
-        excludeTitles: items.map((i) => i.title),
+      const data = await recommendConversational({
+        data: {
+          messages: newMessages,
+          platforms: effectivePlatforms,
+          contextHint: contextToPromptHint(ctx),
+          seasonHint: seasonHintShort(ctx),
+          weatherHint: null,
+          excludeTitles: items.map((i) => i.title),
+        },
       });
 
       if (!data?.main) throw new Error("Sin resultado");
 
       const allItems = [data.main, ...(data.alternatives ?? []).slice(0, 4)];
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
-
       setMessages([...newMessages, { role: "assistant", content: assistantSummary }]);
       setItems(allItems);
       setPosters({});
-<<<<<<< HEAD
-=======
-      setAvailability({});
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
       setCurrentIndex(0);
-      setCinephileNote(data.cinephile_note ?? null);
       setScreen("magic");
       setLoading(false);
 
-<<<<<<< HEAD
-      // Load posters in background
-      const posterMap = await fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year })));
-      setPosters(posterMap);
-=======
-      // Posters y disponibilidad en background — no bloquean la UI
-      void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
-      void loadAvailability(allItems);
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
+      const { posters: finalPosters } = await fetchPosters({
+        data: { items: allItems.map((i) => ({ title: i.title, type: i.type, year: i.year })) },
+      });
+      setPosters(finalPosters);
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
@@ -157,19 +135,16 @@ export default function WizardPage() {
     if (!text || loading) return;
     setChatText("");
     if (screen === "magic" && isDetailQuery(text)) {
-<<<<<<< HEAD
-      // For detail queries on the current title, show a cinephile-style note
-      // (without calling the full reco engine — just use cinephileNote if set)
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
-      setAgentReply(`Pregunta sobre "${items[currentIndex]?.title}": ${text}`);
+      await askAbout(text);
     } else {
       await getReco(text);
     }
   };
 
   const handleStartReco = () => {
-    localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    if (typeof window !== "undefined") {
+      localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    }
     const ctx = inferContext();
     const contextQuery = `lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`;
     void getReco(contextQuery);
@@ -178,14 +153,20 @@ export default function WizardPage() {
   // ── WELCOME ──────────────────────────────────────────────────────────
   if (screen === "welcome") {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
-        <div className="flex flex-col items-center gap-4 animate-pulse">
-          <Sparkles className="h-14 w-14 text-primary" />
-          <h1 className="text-5xl font-bold tracking-tight text-foreground">Cinéfilo</h1>
-          <p className="text-base text-muted-foreground leading-snug">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-10 bg-background px-8 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <Sparkles className="h-12 w-12 text-primary" />
+          <h1 className="text-5xl font-bold tracking-tight">Cinéfilo</h1>
+          <p className="text-lg leading-snug text-muted-foreground">
             Tu guía personal para elegir<br />qué ver esta noche.
           </p>
         </div>
+        <button
+          onClick={() => setScreen("platforms")}
+          className="rounded-full bg-foreground px-14 py-4 text-base font-semibold text-background active:scale-95 transition-transform"
+        >
+          Empezar
+        </button>
       </div>
     );
   }
@@ -193,8 +174,8 @@ export default function WizardPage() {
   // ── PLATFORMS ────────────────────────────────────────────────────────
   if (screen === "platforms") {
     return (
-      <div className="flex h-[100dvh] flex-col bg-background px-6 pt-16 pb-10 safe-top safe-bottom">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">¿Cuáles tenés?</h2>
+      <div className="flex min-h-[100dvh] flex-col bg-background px-6 pt-16 pb-10">
+        <h2 className="text-2xl font-bold tracking-tight">¿Cuáles tenés?</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Seleccioná tus plataformas. Si no elegís ninguna, buscamos en todas.
         </p>
@@ -248,59 +229,61 @@ export default function WizardPage() {
   if (screen === "magic" && items.length > 0) {
     const current = items[currentIndex];
     const poster = posters[current.title];
-<<<<<<< HEAD
-=======
-    const avail = availability[current.title];
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
     const hasPrev = currentIndex > 0;
     const hasNext = currentIndex < items.length - 1;
     const platformColor = colorForPlatform(current.platform);
-    const label = platformLabel(current.platform);
 
-<<<<<<< HEAD
-=======
-    // Usar JustWatch link si TMDB lo confirmó, si no el deep link de búsqueda
-    const watchUrl = avail?.jwLink ?? deepLinkFor(current.platform, current.title);
-
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
     return (
-      <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
+      <div className="flex h-[100dvh] flex-col bg-background">
 
         {/* Header */}
         <div className="flex shrink-0 items-center px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
+            <span className="text-sm font-semibold">Cinéfilo</span>
           </div>
         </div>
 
-        {/* Chat input */}
+        {/* Agent input */}
         <div className="shrink-0 px-5 pt-3 pb-3">
-          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-4", loading && "opacity-50 pointer-events-none")}>
-            <input
-<<<<<<< HEAD
-              ref={inputRef}
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
-              type="text"
-              value={chatText}
-              onChange={(e) => setChatText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
-              disabled={loading}
-              className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+          <div className={cn("flex items-center gap-3", loading && "opacity-50 pointer-events-none")}>
+            <MicButton
+              size="md"
+              className="h-12 w-12 shrink-0"
+              onTranscript={(t, isFinal) => {
+                if (!t) { setChatText(""); return; }
+                if (isFinal) {
+                  const q = t.trim();
+                  if (isDetailQuery(q)) void askAbout(q);
+                  else void getReco(q);
+                  setChatText("");
+                } else {
+                  setChatText(t);
+                }
+              }}
             />
-            <button
-              onClick={() => void sendChat()}
-              disabled={!chatText.trim() || loading}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex flex-1 items-center gap-2 rounded-2xl bg-muted px-4">
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
+                placeholder={loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
+                disabled={loading}
+                className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+              />
+              <button
+                onClick={sendChat}
+                disabled={!chatText.trim() || loading}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
+              >
+                <Send className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Hero card */}
+        {/* Hero card + reply */}
         <div className="flex-1 min-h-0 flex flex-col gap-3 px-5 pb-2">
           <div
             className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
@@ -312,7 +295,6 @@ export default function WizardPage() {
             }}
           >
             <div className="flex h-full">
-              {/* Poster */}
               <div className="w-28 shrink-0 overflow-hidden">
                 {poster ? (
                   <img src={poster} alt={current.title} className="h-full w-full object-cover" />
@@ -320,20 +302,14 @@ export default function WizardPage() {
                   <div className="h-full w-full animate-pulse bg-muted" />
                 )}
               </div>
-
-              {/* Info */}
               <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-                <h2 className="text-base font-bold leading-tight text-foreground">{current.title}</h2>
-<<<<<<< HEAD
-=======
-
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
+                <h2 className="text-base font-bold leading-tight">{current.title}</h2>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
                     style={{ backgroundColor: platformColor }}
                   >
-                    {label}
+                    {current.platform === "Star+" ? "Disney+" : current.platform}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     {current.type} · {current.duration}
@@ -345,53 +321,25 @@ export default function WizardPage() {
                     </span>
                   )}
                 </div>
-<<<<<<< HEAD
                 <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
                   {current.reason}
                 </p>
                 <a
                   href={deepLinkFor(current.platform, current.title)}
-=======
-
-                {/* Badge de disponibilidad */}
-                <div className="mt-0.5">
-                  {avail === undefined ? (
-                    <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
-                  ) : avail.confirmed ? (
-                    <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/50">⚠ No confirmado en tu región</span>
-                  )}
-                </div>
-
-                <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
-                  {current.reason}
-                </p>
-
-                <a
-                  href={watchUrl}
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white"
                   style={{ backgroundColor: platformColor }}
                 >
-                  ▶ Ver ahora en {label}
+                  ▶ Ver ahora en {current.platform === "Star+" ? "Disney+" : current.platform}
                 </a>
               </div>
             </div>
           </div>
 
-<<<<<<< HEAD
-          {/* Cinephile note or agent reply */}
-=======
-          {/* Cinephile note o agent reply */}
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
-          {(agentReply || cinephileNote) ? (
-            <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
-              <p className="text-sm leading-snug text-foreground/90">
-                {agentReply ?? cinephileNote}
-              </p>
+          {agentReply ? (
+            <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/8 px-4 py-3">
+              <p className="text-sm leading-snug text-foreground/90">{agentReply}</p>
             </div>
           ) : (
             <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
@@ -413,7 +361,7 @@ export default function WizardPage() {
             </button>
 
             <div className="flex flex-col items-center gap-1.5 px-2">
-              <span className="text-sm font-bold text-foreground">
+              <span className="text-sm font-bold">
                 {currentIndex + 1}
                 <span className="font-normal text-muted-foreground">/{items.length}</span>
               </span>
@@ -441,6 +389,7 @@ export default function WizardPage() {
             </button>
           </div>
         </div>
+
       </div>
     );
   }
@@ -448,7 +397,7 @@ export default function WizardPage() {
   // Transitional loading state
   if (loading) {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background">
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background">
         <Sparkles className="h-8 w-8 animate-pulse text-primary" />
         <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
       </div>
