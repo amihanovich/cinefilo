@@ -6,6 +6,7 @@ import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
 import { recommend } from "./recommend.mjs";
+import { transcribeAudio } from "./transcribe.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -82,6 +83,27 @@ http
         try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
         sendJson(tvHomeMore(p.exclude || []));
       });
+      return;
+    }
+
+    // Transcripción de voz via Groq Whisper (recibe audio binario).
+    if (urlPath === "/api/transcribe" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const chunks = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        const buffer = Buffer.concat(chunks);
+        const mimeType = req.headers["content-type"] || "audio/webm";
+        sendJson(transcribeAudio(buffer, mimeType));
+      });
+      return;
+    }
+    if (urlPath === "/api/transcribe" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
       return;
     }
 

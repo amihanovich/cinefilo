@@ -34,7 +34,7 @@ function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function WizardPage() {
+export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
     try {
@@ -139,6 +139,10 @@ export default function WizardPage() {
 
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    if (onComplete) {
+      onComplete();
+      return;
+    }
     const ctx = inferContext();
     const contextQuery = `lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`;
     void getReco(contextQuery);
