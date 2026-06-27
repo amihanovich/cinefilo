@@ -1,6 +1,6 @@
-// Replica de src/lib/context.ts — contexto temporal para el prompt de la IA.
+// Contexto temporal para el hemisferio sur (Argentina).
 
-export type DayPart = "mañana" | "mediodía" | "tarde" | "noche" | "madrugada";
+export type DayPart = "madrugada" | "mañana" | "tarde" | "noche";
 export type DayType = "semana" | "finde";
 export type Season = "verano" | "otoño" | "invierno" | "primavera";
 
@@ -11,44 +11,38 @@ export type AppContext = {
   hour: number;
 };
 
-function getSeason(month: number): Season {
-  // Hemisferio sur (Argentina)
-  if (month >= 12 || month <= 2) return "verano";
-  if (month >= 3 && month <= 5) return "otoño";
-  if (month >= 6 && month <= 8) return "invierno";
-  return "primavera";
-}
-
-function getDayPart(hour: number): DayPart {
-  if (hour >= 6 && hour < 12) return "mañana";
-  if (hour >= 12 && hour < 14) return "mediodía";
-  if (hour >= 14 && hour < 20) return "tarde";
-  if (hour >= 20 || hour < 1) return "noche";
-  return "madrugada";
-}
-
 export function inferContext(): AppContext {
   const now = new Date();
   const hour = now.getHours();
-  const dow = now.getDay(); // 0=Dom, 6=Sáb
-  const month = now.getMonth() + 1;
-  return {
-    dayPart: getDayPart(hour),
-    dayType: dow === 0 || dow === 6 ? "finde" : "semana",
-    season: getSeason(month),
-    hour,
-  };
+  const month = now.getMonth() + 1; // 1-12
+  const day = now.getDay(); // 0=dom, 6=sab
+
+  const dayPart: DayPart =
+    hour >= 0 && hour < 6 ? "madrugada"
+    : hour < 12 ? "mañana"
+    : hour < 18 ? "tarde"
+    : "noche";
+
+  const dayType: DayType = day === 0 || day === 6 ? "finde" : "semana";
+
+  // Hemisferio sur: DJF=verano, MAM=otoño, JJA=invierno, SON=primavera
+  const season: Season =
+    [12, 1, 2].includes(month) ? "verano"
+    : [3, 4, 5].includes(month) ? "otoño"
+    : [6, 7, 8].includes(month) ? "invierno"
+    : "primavera";
+
+  return { dayPart, dayType, season, hour };
 }
 
 export function contextToPromptHint(ctx: AppContext): string {
   const parts: string[] = [];
   if (ctx.dayType === "finde") parts.push("fin de semana");
-  else parts.push("noche de semana");
-  parts.push(ctx.dayPart);
-  parts.push(ctx.season);
+  else parts.push("día de semana");
+  parts.push(`${ctx.dayPart} de ${ctx.season}`);
   return parts.join(", ");
 }
 
 export function seasonHintShort(ctx: AppContext): string {
-  return ctx.season.charAt(0).toUpperCase() + ctx.season.slice(1);
+  return `${ctx.season} en el hemisferio sur`;
 }

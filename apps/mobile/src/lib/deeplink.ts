@@ -1,42 +1,35 @@
-// Universal Links para abrir la app de streaming nativa en iOS/Android.
-// iOS (Universal Links) y Android (App Links) interceptan estas URLs HTTPS
-// y abren la app instalada automáticamente. Sin custom schemes ni timeouts.
+// Colores de marca y deep links para cada plataforma de streaming.
 
 export const PLATFORM_COLORS: Record<string, string> = {
   Netflix: "#E50914",
-  "Disney+": "#113CCF",
+  "Disney+": "#0063E5",
   Max: "#002BE7",
   "Prime Video": "#00A8E1",
-  "Apple TV+": "#111111",
+  "Apple TV+": "#000000",
   "Paramount+": "#0064FF",
-  "Star+": "#1CE783",
+  "Star+": "#0063E5", // absorbido por Disney+ en LatAm
 };
 
 export function colorForPlatform(platform: string): string {
-  return PLATFORM_COLORS[platform] ?? "#2563EB";
+  return PLATFORM_COLORS[platform] ?? "#6d28d9";
+}
+
+// Star+ fue fusionado con Disney+ en LatAm (2024)
+export function platformLabel(platform: string): string {
+  if (platform === "Star+") return "Disney+";
+  return platform;
 }
 
 export function deepLinkFor(platform: string, title: string): string {
-  const t = encodeURIComponent(title);
-  switch (platform) {
-    case "Netflix":
-      return `https://www.netflix.com/search?q=${t}`;
-    case "Disney+":
-    case "Star+":
-      return `https://www.disneyplus.com/search`;
-    case "Max":
-      return `https://play.max.com/search?q=${t}`;
-    case "Prime Video":
-      return `https://www.primevideo.com/search/?phrase=${t}`;
-    case "Apple TV+":
-      return `https://tv.apple.com/search?term=${t}`;
-    case "Paramount+":
-      return `https://www.paramountplus.com/search/${t}/`;
-    default:
-      return `https://www.google.com/search?q=${t}+ver+online`;
-  }
-}
-
-export function platformLabel(platform: string): string {
-  return platform === "Star+" ? "Disney+" : platform;
+  const q = encodeURIComponent(title);
+  const urls: Record<string, string> = {
+    Netflix: `https://www.netflix.com/search?q=${q}`,
+    "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
+    "Disney+": `https://www.disneyplus.com/search`,
+    "Star+": `https://www.disneyplus.com/search`,
+    Max: `https://play.max.com/search?q=${q}`,
+    "Apple TV+": `https://tv.apple.com/search?term=${q}`,
+    "Paramount+": `https://www.paramountplus.com/search/${q}/`,
+  };
+  return urls[platform] ?? `https://www.google.com/search?q=${q}+streaming`;
 }

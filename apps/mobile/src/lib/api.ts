@@ -1,6 +1,9 @@
-// Cliente HTTP para la API REST del backend Railway.
+// Cliente REST para el backend de Cinéfilo (Railway).
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
+const CINEMETA = "https://v3-cinemeta.strem.io/catalog";
+
+export type Message = { role: "user" | "assistant"; content: string };
 
 export type Recommendation = {
   title: string;
@@ -12,15 +15,13 @@ export type Recommendation = {
   reason: string;
 };
 
-export type RecommendResult = {
-  filters: Record<string, string | null>;
+export type RecoResponse = {
+  filters: Record<string, string>;
   main: Recommendation;
   alternatives: Recommendation[];
-  clarification_needed?: string | null;
-  cinephile_note?: string | null;
+  clarification_needed: string | null;
+  cinephile_note: string | null;
 };
-
-export type Message = { role: "user" | "assistant"; content: string };
 
 export async function fetchRecommendation(params: {
   messages: Message[];
@@ -29,49 +30,35 @@ export async function fetchRecommendation(params: {
   seasonHint: string | null;
   weatherHint: string | null;
   excludeTitles: string[];
-}): Promise<RecommendResult> {
+}): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error ?? "Error del servidor");
-  }
-  return res.json() as Promise<RecommendResult>;
-}
-
-export async function fetchPoster(title: string, type: string, year?: string): Promise<string | null> {
-  // Cinemeta (Stremio catalog) — CORS abierto, sin API key.
-  // type: "movie" | "series"
-  const mediaType = type === "Serie" ? "series" : "movie";
-  try {
-    const q = encodeURIComponent(title);
-    const url = `https://v3-cinemeta.strem.io/catalog/${mediaType}/top/search=${q}.json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) return null;
-    const data = await res.json() as { metas?: { poster?: string }[] };
-    return data.metas?.[0]?.poster ?? null;
-  } catch {
-    return null;
-  }
+  if (!res.ok) throw new Error(`/api/recommend ${res.status}`);
+  return res.json() as Promise<RecoResponse>;
 }
 
 export async function fetchPosters(
-  items: { title: string; type: string; year?: string }[]
+  items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
-  const results = await Promise.allSettled(
+  const result: Record<string, string | null> = {};
+  await Promise.allSettled(
     items.map(async (item) => {
-      const poster = await fetchPoster(item.title, item.type, item.year);
-      return { title: item.title, poster };
-    })
+      const kind = item.type === "Serie" ? "series" : "movie";
+      const q = encodeURIComponent(item.title);
+      try {
+        const res = await fetch(`${CINEMETA}/${kind}/top/search=${q}.json`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) { result[item.title] = null; return; }
+        const data = await res.json() as { metas?: { poster?: string }[] };
+        result[item.title] = data.metas?.[0]?.poster ?? null;
+      } catch {
+        result[item.title] = null;
+      }
+    }),
   );
-  const map: Record<string, string | null> = {};
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      map[r.value.title] = r.value.poster;
-    }
-  }
-  return map;
+  return result;
 }

@@ -2,14 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, ChevronLeft, ChevronRight, Send } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
-import { deepLinkFor, colorForPlatform, platformLabel } from "./lib/deeplink";
-<<<<<<< HEAD
+import { colorForPlatform, platformLabel } from "./lib/deeplink";
+import { jwSearch, openNative } from "./lib/justwatch";
 import type { Recommendation, Message } from "./lib/api";
-=======
-import { checkAvailability } from "./lib/availability";
-import type { Recommendation, Message } from "./lib/api";
-import type { AvailabilityResult } from "./lib/availability";
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
+import type { JwResult } from "./lib/justwatch";
 
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 const COUNTRY_KEY = "cinefilo:country";
@@ -30,18 +26,15 @@ async function detectCountry(): Promise<void> {
   }
 }
 
-<<<<<<< HEAD
-=======
 function getCountry(): string {
   return localStorage.getItem(COUNTRY_KEY) ?? "AR";
 }
 
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function WizardPage() {
+export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
     try {
@@ -54,10 +47,7 @@ export default function WizardPage() {
 
   const [items, setItems] = useState<Recommendation[]>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
-<<<<<<< HEAD
-=======
-  const [availability, setAvailability] = useState<Record<string, AvailabilityResult>>({});
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
+  const [availability, setAvailability] = useState<Record<string, JwResult>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
@@ -65,10 +55,6 @@ export default function WizardPage() {
   const [cinephileNote, setCinephileNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const touchStartX = useRef(0);
-<<<<<<< HEAD
-  const inputRef = useRef<HTMLInputElement>(null);
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
 
   // Auto-advance welcome → platforms after 2s
   useEffect(() => {
@@ -83,20 +69,17 @@ export default function WizardPage() {
     return /contame|explicame|explicá|por qu[eé]|porque|de qu[eé] trata|sinopsis|argumento|director|reparto|cast|quién|quien|cu[aá]ndo|vale la pena|recomend[aá]s|te gusta|opinion|opini[oó]n|buena[?]?$|m[aá]s info|mejor escena|temática|estilo|comparar|similar/.test(t);
   };
 
-<<<<<<< HEAD
-=======
   const loadAvailability = async (allItems: Recommendation[]) => {
     const country = getCountry();
-    // Chequeamos en paralelo, actualizando cada card a medida que llegan
+    // Chequeamos en paralelo via JustWatch GraphQL, actualizando card por card
     await Promise.allSettled(
       allItems.map(async (item) => {
-        const result = await checkAvailability(item.title, item.platform, item.type, country);
+        const result = await jwSearch(item.title, item.platform, item.type, country);
         setAvailability((prev) => ({ ...prev, [item.title]: result }));
       })
     );
   };
 
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
   const getReco = async (userQuery: string) => {
     setAgentReply(null);
     setCinephileNote(null);
@@ -123,24 +106,15 @@ export default function WizardPage() {
       setMessages([...newMessages, { role: "assistant", content: assistantSummary }]);
       setItems(allItems);
       setPosters({});
-<<<<<<< HEAD
-=======
       setAvailability({});
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
       setCurrentIndex(0);
       setCinephileNote(data.cinephile_note ?? null);
       setScreen("magic");
       setLoading(false);
 
-<<<<<<< HEAD
-      // Load posters in background
-      const posterMap = await fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year })));
-      setPosters(posterMap);
-=======
       // Posters y disponibilidad en background — no bloquean la UI
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
@@ -157,11 +131,6 @@ export default function WizardPage() {
     if (!text || loading) return;
     setChatText("");
     if (screen === "magic" && isDetailQuery(text)) {
-<<<<<<< HEAD
-      // For detail queries on the current title, show a cinephile-style note
-      // (without calling the full reco engine — just use cinephileNote if set)
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
       setAgentReply(`Pregunta sobre "${items[currentIndex]?.title}": ${text}`);
     } else {
       await getReco(text);
@@ -170,6 +139,10 @@ export default function WizardPage() {
 
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    if (onComplete) {
+      onComplete();
+      return;
+    }
     const ctx = inferContext();
     const contextQuery = `lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`;
     void getReco(contextQuery);
@@ -248,21 +221,12 @@ export default function WizardPage() {
   if (screen === "magic" && items.length > 0) {
     const current = items[currentIndex];
     const poster = posters[current.title];
-<<<<<<< HEAD
-=======
     const avail = availability[current.title];
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
     const hasPrev = currentIndex > 0;
     const hasNext = currentIndex < items.length - 1;
     const platformColor = colorForPlatform(current.platform);
     const label = platformLabel(current.platform);
 
-<<<<<<< HEAD
-=======
-    // Usar JustWatch link si TMDB lo confirmó, si no el deep link de búsqueda
-    const watchUrl = avail?.jwLink ?? deepLinkFor(current.platform, current.title);
-
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
@@ -278,10 +242,6 @@ export default function WizardPage() {
         <div className="shrink-0 px-5 pt-3 pb-3">
           <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-4", loading && "opacity-50 pointer-events-none")}>
             <input
-<<<<<<< HEAD
-              ref={inputRef}
-=======
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
               type="text"
               value={chatText}
               onChange={(e) => setChatText(e.target.value)}
@@ -324,10 +284,7 @@ export default function WizardPage() {
               {/* Info */}
               <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
                 <h2 className="text-base font-bold leading-tight text-foreground">{current.title}</h2>
-<<<<<<< HEAD
-=======
 
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span
                     className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
@@ -345,13 +302,6 @@ export default function WizardPage() {
                     </span>
                   )}
                 </div>
-<<<<<<< HEAD
-                <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-4">
-                  {current.reason}
-                </p>
-                <a
-                  href={deepLinkFor(current.platform, current.title)}
-=======
 
                 {/* Badge de disponibilidad */}
                 <div className="mt-0.5">
@@ -368,25 +318,35 @@ export default function WizardPage() {
                   {current.reason}
                 </p>
 
-                <a
-                  href={watchUrl}
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white"
+                <button
+                  onClick={() => {
+                    if (avail?.confirmed && avail.deeplinkIos) {
+                      openNative(avail);
+                    } else {
+                      // fallback: abre búsqueda en la web de la plataforma
+                      const q = encodeURIComponent(current.title);
+                      const urls: Record<string, string> = {
+                        Netflix: `https://www.netflix.com/search?q=${q}`,
+                        "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
+                        "Disney+": `https://www.disneyplus.com/search`,
+                        "Star+": `https://www.disneyplus.com/search`,
+                        Max: `https://play.max.com/search?q=${q}`,
+                        "Apple TV+": `https://tv.apple.com/search?term=${q}`,
+                        "Paramount+": `https://www.paramountplus.com/search/${q}/`,
+                      };
+                      window.open(urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`, "_blank");
+                    }
+                  }}
+                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
                   style={{ backgroundColor: platformColor }}
                 >
                   ▶ Ver ahora en {label}
-                </a>
+                </button>
               </div>
             </div>
           </div>
 
-<<<<<<< HEAD
-          {/* Cinephile note or agent reply */}
-=======
           {/* Cinephile note o agent reply */}
->>>>>>> 859fdeed2351356c529e607b28072fad34189158
           {(agentReply || cinephileNote) ? (
             <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
               <p className="text-sm leading-snug text-foreground/90">
