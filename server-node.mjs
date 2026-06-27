@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
+import { recommend } from "./recommend.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -81,6 +82,34 @@ http
         try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
         sendJson(tvHomeMore(p.exclude || []));
       });
+      return;
+    }
+
+    // API REST para la app móvil (Capacitor).
+    if (urlPath === "/api/recommend" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        let p = {};
+        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+        sendJson(recommend({
+          messages: p.messages || [],
+          platforms: p.platforms || [],
+          contextHint: p.contextHint || null,
+          seasonHint: p.seasonHint || null,
+          weatherHint: p.weatherHint || null,
+          excludeTitles: p.excludeTitles || [],
+        }));
+      });
+      return;
+    }
+    if (urlPath === "/api/recommend" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
       return;
     }
 
