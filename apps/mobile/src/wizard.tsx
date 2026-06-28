@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { Sparkles, ChevronLeft, ChevronRight, Send, Mic } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative } from "./lib/justwatch";
+import { VoiceRecorder, transcribe } from "./lib/stt";
+import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
+import { Orb } from "./components/Orb";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
 
@@ -54,7 +57,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [agentReply, setAgentReply] = useState<string | null>(null);
   const [cinephileNote, setCinephileNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [micRecording, setMicRecording] = useState(false);
   const touchStartX = useRef(0);
+  const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
   // Auto-advance welcome → platforms after 2s
   useEffect(() => {
@@ -64,14 +70,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     return () => clearTimeout(timer);
   }, [screen]);
 
-  const isDetailQuery = (q: string): boolean => {
-    const t = q.toLowerCase();
-    return /contame|explicame|explicá|por qu[eé]|porque|de qu[eé] trata|sinopsis|argumento|director|reparto|cast|quién|quien|cu[aá]ndo|vale la pena|recomend[aá]s|te gusta|opinion|opini[oó]n|buena[?]?$|m[aá]s info|mejor escena|temática|estilo|comparar|similar/.test(t);
-  };
-
   const loadAvailability = async (allItems: Recommendation[]) => {
     const country = getCountry();
-    // Chequeamos en paralelo via JustWatch GraphQL, actualizando card por card
     await Promise.allSettled(
       allItems.map(async (item) => {
         const result = await jwSearch(item.title, item.platform, item.type, country);
@@ -112,7 +112,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setScreen("magic");
       setLoading(false);
 
-      // Posters y disponibilidad en background — no bloquean la UI
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
     } catch (e) {
@@ -130,22 +129,71 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const text = chatText.trim();
     if (!text || loading) return;
     setChatText("");
-    if (screen === "magic" && isDetailQuery(text)) {
-      setAgentReply(`Pregunta sobre "${items[currentIndex]?.title}": ${text}`);
+    await getReco(text);
+  };
+
+  // Mic en el chat: graba → transcribe → pone el texto en el input (no auto-envía)
+  const toggleMic = async () => {
+    if (micRecording) {
+      const recorder = micRecorderRef.current;
+      if (!recorder) return;
+      setMicRecording(false);
+      const blob = await recorder.stop();
+      micRecorderRef.current = null;
+      if (blob.size < 500) return;
+      try {
+        const text = await transcribe(blob);
+        if (text.trim()) setChatText(text.trim());
+      } catch {
+        // silencioso
+      }
     } else {
-      await getReco(text);
+      const recorder = new VoiceRecorder();
+      micRecorderRef.current = recorder;
+      setMicRecording(true);
+      try {
+        await recorder.start({
+          onAutoStop: async () => {
+            setMicRecording(false);
+            const blob = await recorder.stop();
+            micRecorderRef.current = null;
+            if (blob.size < 500) return;
+            try {
+              const text = await transcribe(blob);
+              if (text.trim()) setChatText(text.trim());
+            } catch {
+              // silencioso
+            }
+          },
+          silenceMs: 2500,
+        });
+      } catch {
+        setMicRecording(false);
+        micRecorderRef.current = null;
+      }
     }
+  };
+
+  // Callback del VoiceAgentOverlay: recibe items + nota y cierra el overlay
+  const handleVoiceResult = (result: VoiceResult) => {
+    const allItems = result.items;
+    setItems(allItems);
+    setPosters({});
+    setAvailability({});
+    setCurrentIndex(0);
+    setMessages(result.messages);
+    setCinephileNote(result.cinephileNote);
+    setAgentReply(null);
+    setScreen("magic");
+    void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
+    void loadAvailability(allItems);
   };
 
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
-    if (onComplete) {
-      onComplete();
-      return;
-    }
+    if (onComplete) { onComplete(); return; }
     const ctx = inferContext();
-    const contextQuery = `lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`;
-    void getReco(contextQuery);
+    void getReco(`lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`);
   };
 
   // ── WELCOME ──────────────────────────────────────────────────────────
@@ -186,9 +234,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 }
                 className={cn(
                   "rounded-2xl border-2 px-4 py-5 text-left text-sm font-semibold transition-all active:scale-95",
-                  selected
-                    ? "border-transparent text-white"
-                    : "border-border bg-background text-foreground"
+                  selected ? "border-transparent text-white" : "border-border bg-background text-foreground"
                 )}
                 style={selected ? { backgroundColor: color, borderColor: color } : {}}
               >
@@ -230,24 +276,61 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
+        {/* Voice overlay (opt-in) */}
+        {voiceMode && (
+          <VoiceAgentOverlay
+            platforms={platforms.length > 0 ? platforms : PLATFORMS}
+            excludeTitles={items.map((i) => i.title)}
+            history={messages}
+            onResult={(result) => { handleVoiceResult(result); setVoiceMode(false); }}
+            onDismiss={() => setVoiceMode(false)}
+          />
+        )}
+
         {/* Header */}
-        <div className="flex shrink-0 items-center px-5 pt-6 pb-1">
+        <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
           </div>
+
+          {/* Botón "Hablar con Cinéfilo" */}
+          <button
+            onClick={() => setVoiceMode(true)}
+            className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95 hover:bg-primary/10"
+          >
+            <Orb phase="idle" size="mini" />
+            <span className="text-[11px] font-semibold text-primary">Hablar con Cinéfilo</span>
+          </button>
         </div>
 
-        {/* Chat input */}
+        {/* Chat input con mic de transcripción */}
         <div className="shrink-0 px-5 pt-3 pb-3">
-          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-4", loading && "opacity-50 pointer-events-none")}>
+          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "opacity-50 pointer-events-none")}>
+            {/* Mic de transcripción */}
+            <button
+              onClick={() => void toggleMic()}
+              disabled={loading}
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-label={micRecording ? "Detener grabación" : "Grabar voz"}
+            >
+              <Mic className="h-4 w-4" />
+            </button>
+
             <input
               type="text"
               value={chatText}
               onChange={(e) => setChatText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
-              disabled={loading}
+              placeholder={
+                micRecording ? "Escuchando..." :
+                loading ? "Pensando..." :
+                "Más oscuro · ¿de qué trata? · nuevo set..."
+              }
+              disabled={loading || micRecording}
               className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
             />
             <button
@@ -303,7 +386,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   )}
                 </div>
 
-                {/* Badge de disponibilidad */}
                 <div className="mt-0.5">
                   {avail === undefined ? (
                     <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
@@ -320,10 +402,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
                 <button
                   onClick={() => {
-                    if (avail?.confirmed && avail.deeplinkIos) {
+                    if (avail?.confirmed) {
                       openNative(avail);
                     } else {
-                      // fallback: abre búsqueda en la web de la plataforma
                       const q = encodeURIComponent(current.title);
                       const urls: Record<string, string> = {
                         Netflix: `https://www.netflix.com/search?q=${q}`,
@@ -346,7 +427,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             </div>
           </div>
 
-          {/* Cinephile note o agent reply */}
+          {/* Cinephile note */}
           {(agentReply || cinephileNote) ? (
             <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
               <p className="text-sm leading-snug text-foreground/90">
@@ -405,7 +486,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     );
   }
 
-  // Transitional loading state
+  // Loading state
   if (loading) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background">
