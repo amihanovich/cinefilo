@@ -1,18 +1,39 @@
-// Grabación de audio + transcripción via Groq Whisper (backend).
+// STT usando Web Speech API (SpeechRecognition), igual que la versión web original.
+// Elimina la dependencia de MediaRecorder + Groq para la captura — mucho más estable en Android.
+// API pública idéntica: VoiceRecorder class + transcribe() function.
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
 
 export type RecordingState = "idle" | "recording" | "processing";
 
+type SpeechRecLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((e: any) => void) | null;
+  onerror: ((e: any) => void) | null;
+  onend: (() => void) | null;
+};
+
+function getSpeechCtor(): (new () => SpeechRecLike) | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 export class VoiceRecorder {
-  private mediaRecorder: MediaRecorder | null = null;
-  private chunks: Blob[] = [];
-  private stream: MediaStream | null = null;
-  private analyser: AnalyserNode | null = null;
-  private audioCtx: AudioContext | null = null;
+  private rec: SpeechRecLike | null = null;
+  private accumulated = "";
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
-  private onVolumeChange?: (v: number) => void;
-  private onAutoStop?: () => void;
+  private onAutoStopCb?: () => void;
+  private done = false;
+
+  // Visualización de volumen — capa separada, no bloquea STT si falla
+  private stream: MediaStream | null = null;
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
   private rafId: number | null = null;
 
   async start(opts?: {
@@ -20,98 +41,134 @@ export class VoiceRecorder {
     onAutoStop?: () => void;
     silenceMs?: number;
   }): Promise<void> {
-    this.onVolumeChange = opts?.onVolume;
-    this.onAutoStop = opts?.onAutoStop;
-    const silenceMs = opts?.silenceMs ?? 2000;
+    const Ctor = getSpeechCtor();
+    if (!Ctor) throw new Error("SpeechRecognition no disponible en este dispositivo");
 
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    this.audioCtx = new AudioContext();
-    const source = this.audioCtx.createMediaStreamSource(this.stream);
-    this.analyser = this.audioCtx.createAnalyser();
-    this.analyser.fftSize = 256;
-    source.connect(this.analyser);
+    this.onAutoStopCb = opts?.onAutoStop;
+    this.accumulated = "";
+    this.done = false;
+    const silenceMs = opts?.silenceMs ?? 3500;
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
+    // Visualización de volumen via getUserMedia + AnalyserNode (opcional)
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      this.audioCtx = new AudioContext();
+      if (this.audioCtx.state === "suspended") await this.audioCtx.resume();
+      const source = this.audioCtx.createMediaStreamSource(this.stream);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 256;
+      source.connect(this.analyser);
 
-    this.chunks = [];
-    this.mediaRecorder = new MediaRecorder(this.stream, { mimeType });
-    this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.chunks.push(e.data); };
-    this.mediaRecorder.start(100);
-
-    // Resume AudioContext if suspended (common on Android WebView)
-    if (this.audioCtx.state === "suspended") {
-      await this.audioCtx.resume();
+      const data = new Uint8Array(this.analyser.frequencyBinCount);
+      const tick = () => {
+        if (!this.analyser) return;
+        this.analyser.getByteFrequencyData(data);
+        const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length) / 128;
+        opts?.onVolume?.(rms);
+        this.rafId = requestAnimationFrame(tick);
+      };
+      this.rafId = requestAnimationFrame(tick);
+    } catch {
+      // Visualización es opcional — continúa sin ella
     }
 
-    // Silence detection loop — timer only fires after the user has spoken at least once
-    const data = new Uint8Array(this.analyser.frequencyBinCount);
-    let hasSpoken = false;
-    const tick = () => {
-      if (!this.analyser) return;
-      this.analyser.getByteFrequencyData(data);
-      const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length) / 128;
-      this.onVolumeChange?.(rms);
+    const rec = new Ctor();
+    rec.lang = "es-AR";
+    rec.continuous = true;       // sobrevive pausas cortas
+    rec.interimResults = false;  // solo resultados finales
+    this.rec = rec;
 
-      if (rms >= 0.04) {
-        hasSpoken = true;
-        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
-      } else if (hasSpoken) {
-        // Only start silence countdown after user has actually spoken
-        if (!this.silenceTimer) {
-          this.silenceTimer = setTimeout(() => { this.onAutoStop?.(); }, silenceMs);
+    const resetSilenceTimer = () => {
+      if (this.silenceTimer) clearTimeout(this.silenceTimer);
+      // Pausa de silencio → para automáticamente
+      this.silenceTimer = setTimeout(() => {
+        try { rec.stop(); } catch { /* noop */ }
+      }, silenceMs);
+    };
+
+    rec.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) {
+          this.accumulated += (this.accumulated ? " " : "") + (e.results[i][0].transcript as string);
         }
       }
-      this.rafId = requestAnimationFrame(tick);
+      resetSilenceTimer(); // cualquier actividad de voz reinicia el conteo
     };
-    this.rafId = requestAnimationFrame(tick);
+
+    rec.onerror = (e: any) => {
+      if (e?.error === "no-speech") return; // no es error — esperando que el usuario hable
+      this.cleanupVolume();
+      this.done = true;
+      this.onAutoStopCb?.();
+    };
+
+    rec.onend = () => {
+      this.cleanupVolume();
+      this.done = true;
+      this.onAutoStopCb?.();
+    };
+
+    rec.start();
+
+    // Seguridad: si el usuario no dice nada en 30s, para
+    this.silenceTimer = setTimeout(() => {
+      try { rec.stop(); } catch { /* noop */ }
+    }, 30000);
+  }
+
+  private cleanupVolume(): void {
+    if (this.rafId) cancelAnimationFrame(this.rafId);
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
+    this.analyser = null;
+    this.audioCtx?.close();
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.rafId = null;
+    this.silenceTimer = null;
   }
 
   stop(): Promise<Blob> {
+    if (this.done) {
+      // SpeechRecognition ya terminó — devuelve el texto acumulado inmediatamente
+      return Promise.resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
+    }
+
     return new Promise((resolve) => {
-      if (this.rafId) cancelAnimationFrame(this.rafId);
-      if (this.silenceTimer) clearTimeout(this.silenceTimer);
-      this.analyser = null;
-      this.audioCtx?.close();
-
-      const stopTracks = () => this.stream?.getTracks().forEach((t) => t.stop());
-
-      if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
-        stopTracks();
-        resolve(new Blob(this.chunks, { type: "audio/webm" }));
+      if (!this.rec) {
+        this.cleanupVolume();
+        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
         return;
       }
 
-      // Capture mimeType before stop() changes recorder state
-      const mimeType = this.mediaRecorder.mimeType;
-
-      // Safety timeout: if onstop never fires (Android bug), resolve anyway
-      const timeout = setTimeout(() => {
-        stopTracks();
-        resolve(new Blob(this.chunks, { type: mimeType }));
-      }, 2500);
-
-      this.mediaRecorder.onstop = () => {
-        clearTimeout(timeout);
-        // Stop tracks AFTER onstop — stopping before can prevent onstop from firing
-        stopTracks();
-        resolve(new Blob(this.chunks, { type: mimeType }));
+      // Reemplaza onend para capturar el texto al parar manualmente
+      this.rec.onend = () => {
+        this.cleanupVolume();
+        this.done = true;
+        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
       };
-      this.mediaRecorder.stop();
+
+      try {
+        this.rec.stop();
+      } catch {
+        this.cleanupVolume();
+        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
+      }
     });
   }
 
   cancel(): void {
-    if (this.rafId) cancelAnimationFrame(this.rafId);
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
-    this.mediaRecorder?.stop();
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.audioCtx?.close();
+    try { this.rec?.stop(); } catch { /* noop */ }
+    this.cleanupVolume();
   }
 }
 
+// transcribe() ahora soporta dos tipos de Blob:
+// - text/plain  → viene de SpeechRecognition, se decodifica directo
+// - audio/webm  → viene de MediaRecorder (fallback), se envía al backend Groq
 export async function transcribe(audioBlob: Blob): Promise<string> {
+  if (audioBlob.type === "text/plain") {
+    return audioBlob.text();
+  }
   const res = await fetch(`${API_BASE}/api/transcribe`, {
     method: "POST",
     headers: { "Content-Type": audioBlob.type || "audio/webm" },
