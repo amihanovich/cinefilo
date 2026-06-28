@@ -1,14 +1,42 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, ChevronLeft, ChevronRight, Send, Mic } from "lucide-react";
+import { Sparkles, ChevronLeft, ChevronRight, Send, Mic, User, Bookmark, ThumbsUp } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
+import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
+
+const WATCHLIST_KEY = "cinefilo:watchlist";
+const LIKED_KEY = "cinefilo:liked";
+
+type SavedItem = { title: string; platform: string; type: string };
+
+function loadSet(key: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as string[]); }
+  catch { return new Set(); }
+}
+
+function addToStore(key: string, item: SavedItem): void {
+  try {
+    const raw = localStorage.getItem(key);
+    const arr: SavedItem[] = raw ? JSON.parse(raw) as SavedItem[] : [];
+    if (!arr.find((i) => i.title === item.title)) arr.unshift(item);
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch { /* noop */ }
+}
+
+function removeFromStore(key: string, title: string): void {
+  try {
+    const raw = localStorage.getItem(key);
+    const arr: SavedItem[] = raw ? JSON.parse(raw) as SavedItem[] : [];
+    localStorage.setItem(key, JSON.stringify(arr.filter((i) => i.title !== title)));
+  } catch { /* noop */ }
+}
 
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 const COUNTRY_KEY = "cinefilo:country";
@@ -58,7 +86,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [cinephileNote, setCinephileNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [micRecording, setMicRecording] = useState(false);
+  const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
+  const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
   const touchStartX = useRef(0);
   const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
@@ -189,6 +220,30 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     void loadAvailability(allItems);
   };
 
+  const toggleWatchlist = (item: Recommendation) => {
+    const key = item.title;
+    const isIn = watchlisted.has(key);
+    setWatchlisted((prev) => {
+      const next = new Set(prev);
+      isIn ? next.delete(key) : next.add(key);
+      return next;
+    });
+    if (isIn) removeFromStore(WATCHLIST_KEY, key);
+    else addToStore(WATCHLIST_KEY, { title: item.title, platform: item.platform, type: item.type });
+  };
+
+  const toggleLike = (item: Recommendation) => {
+    const key = item.title;
+    const isIn = liked.has(key);
+    setLiked((prev) => {
+      const next = new Set(prev);
+      isIn ? next.delete(key) : next.add(key);
+      return next;
+    });
+    if (isIn) removeFromStore(LIKED_KEY, key);
+    else addToStore(LIKED_KEY, { title: item.title, platform: item.platform, type: item.type });
+  };
+
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
     if (onComplete) { onComplete(); return; }
@@ -278,6 +333,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
+        {/* Account sheet */}
+        <AccountSheet
+          open={accountOpen}
+          onClose={() => setAccountOpen(false)}
+          onPlatformsChange={setPlatforms}
+        />
+
         {/* Voice overlay (opt-in) */}
         {voiceMode && (
           <VoiceAgentOverlay
@@ -291,6 +353,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
+          <button
+            onClick={() => setAccountOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+            aria-label="Mi cuenta"
+          >
+            <User className="h-4 w-4" />
+          </button>
+
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
@@ -302,7 +372,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95 hover:bg-primary/10"
           >
             <Orb phase="idle" size="mini" />
-            <span className="text-[11px] font-semibold text-primary">Hablar con Cinéfilo</span>
+            <span className="text-[11px] font-semibold text-primary">Hablar</span>
           </button>
         </div>
 
@@ -425,6 +495,34 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 >
                   ▶ Ver ahora en {label}
                 </button>
+
+                {/* Acciones secundarias */}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => toggleLike(current)}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
+                      liked.has(current.title)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground"
+                    )}
+                  >
+                    <ThumbsUp className="h-3 w-3" />
+                    {liked.has(current.title) ? "¡Me gustó!" : "Me gustó"}
+                  </button>
+                  <button
+                    onClick={() => toggleWatchlist(current)}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
+                      watchlisted.has(current.title)
+                        ? "border-amber-500 bg-amber-500/10 text-amber-500"
+                        : "border-border text-muted-foreground"
+                    )}
+                  >
+                    <Bookmark className="h-3 w-3" />
+                    {watchlisted.has(current.title) ? "Guardado" : "Ver luego"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
