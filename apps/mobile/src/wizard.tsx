@@ -429,18 +429,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             </div>
           </div>
 
-          {/* Cinephile note */}
-          {(agentReply || cinephileNote) ? (
-            <div className="shrink-0 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
-              <p className="text-sm leading-snug text-foreground/90">
-                {agentReply ?? cinephileNote}
-              </p>
-            </div>
-          ) : (
-            <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
-              deslizá para ver alternativas
-            </p>
-          )}
+          <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
+            deslizá para ver alternativas
+          </p>
         </div>
 
         {/* Navigation */}
