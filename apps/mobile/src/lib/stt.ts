@@ -74,11 +74,29 @@ export class VoiceRecorder {
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
       this.analyser = null;
       this.audioCtx?.close();
-      this.stream?.getTracks().forEach((t) => t.stop());
 
-      if (!this.mediaRecorder) { resolve(new Blob()); return; }
+      const stopTracks = () => this.stream?.getTracks().forEach((t) => t.stop());
+
+      if (!this.mediaRecorder || this.mediaRecorder.state === "inactive") {
+        stopTracks();
+        resolve(new Blob(this.chunks, { type: "audio/webm" }));
+        return;
+      }
+
+      // Capture mimeType before stop() changes recorder state
+      const mimeType = this.mediaRecorder.mimeType;
+
+      // Safety timeout: if onstop never fires (Android bug), resolve anyway
+      const timeout = setTimeout(() => {
+        stopTracks();
+        resolve(new Blob(this.chunks, { type: mimeType }));
+      }, 2500);
+
       this.mediaRecorder.onstop = () => {
-        resolve(new Blob(this.chunks, { type: this.mediaRecorder!.mimeType }));
+        clearTimeout(timeout);
+        // Stop tracks AFTER onstop — stopping before can prevent onstop from firing
+        stopTracks();
+        resolve(new Blob(this.chunks, { type: mimeType }));
       };
       this.mediaRecorder.stop();
     });
