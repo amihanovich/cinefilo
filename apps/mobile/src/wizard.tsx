@@ -90,6 +90,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [accountOpen, setAccountOpen] = useState(false);
   const [micRecording, setMicRecording] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [filterConfirmed, setFilterConfirmed] = useState(false);
   const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
 
@@ -507,14 +508,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    const current = items[currentIndex];
-    const poster = posters[current.title];
-    const avail = availability[current.title];
-    const hasPrev = currentIndex > 0;
-    const hasNext = currentIndex < items.length - 1;
-    const isLastCard = currentIndex === items.length - 1;
-    const platformColor = colorForPlatform(current.platform);
-    const label = platformLabel(current.platform);
+    // Filtro de disponibilidad: solo muestra confirmados si está activo
+    const availabilityLoaded = Object.keys(availability).length > 0;
+    const displayItems = filterConfirmed
+      ? items.filter((i) => availability[i.title]?.confirmed === true)
+      : items;
+    const safeIndex = Math.min(currentIndex, Math.max(0, displayItems.length - 1));
+    const current = displayItems[safeIndex];
+    const poster = current ? posters[current.title] : undefined;
+    const avail = current ? availability[current.title] : undefined;
+    const hasPrev = safeIndex > 0;
+    const hasNext = safeIndex < displayItems.length - 1;
+    const isLastCard = safeIndex === displayItems.length - 1;
+    const platformColor = current ? colorForPlatform(current.platform) : "#888";
+    const label = current ? platformLabel(current.platform) : "";
 
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
@@ -555,7 +562,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95"
           >
             <Orb phase="idle" size="mini" />
-            <span className="text-[11px] font-semibold text-primary">Hablar</span>
+            <span className="text-[10px] font-semibold text-primary">Hablar con Cinéfilo</span>
           </button>
         </div>
 
@@ -593,14 +600,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         </div>
 
         {/* Hero card */}
-        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2">
+        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2" style={!current ? { visibility: "hidden" } : {}}>
           <div
             className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
             onTouchEnd={(e) => {
               const dx = e.changedTouches[0].clientX - touchStartX.current;
-              if (dx < -50 && hasNext) navigate(currentIndex + 1);
-              else if (dx > 50 && hasPrev) navigate(currentIndex - 1);
+              if (dx < -50 && hasNext) navigate(safeIndex + 1);
+              else if (dx > 50 && hasPrev) navigate(safeIndex - 1);
             }}
           >
             <div className="flex h-full">
@@ -695,52 +702,86 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </p>
         </div>
 
-        {/* Navegación + "Ver más" */}
+        {/* Navegación + filtro + "Ver más" */}
         <div className="shrink-0 px-5 pt-1 pb-8">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate(currentIndex - 1)}
-              disabled={!hasPrev}
-              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="text-sm">Anterior</span>
-            </button>
 
-            <div className="flex flex-col items-center gap-1.5 px-2">
-              <span className="text-sm font-bold text-foreground">
-                {currentIndex + 1}<span className="font-normal text-muted-foreground">/{items.length}</span>
-              </span>
-              <div className="flex gap-1">
-                {items.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => navigate(i)}
-                    className={cn("h-1.5 rounded-full transition-all", i === currentIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {isLastCard ? (
+          {/* Filtro de disponibilidad — solo visible cuando tenemos datos de JustWatch */}
+          {availabilityLoaded && (
+            <div className="mb-2 flex justify-center">
               <button
-                onClick={() => void loadGallery()}
-                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
+                onClick={() => { setFilterConfirmed((f) => !f); setCurrentIndex(0); }}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition-all active:scale-95",
+                  filterConfirmed
+                    ? "border-green-500/50 bg-green-500/10 text-green-400"
+                    : "border-border/50 text-muted-foreground/50"
+                )}
               >
-                <LayoutGrid className="h-4 w-4" />
-                <span className="text-sm">Ver más</span>
+                <span>{filterConfirmed ? "✓" : "○"}</span>
+                <span>{filterConfirmed ? "Solo confirmados en tu región" : "Todos los resultados"}</span>
               </button>
-            ) : (
+            </div>
+          )}
+
+          {/* Estado vacío cuando el filtro no tiene resultados */}
+          {filterConfirmed && displayItems.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                Ninguno confirmado disponible en tu región.
+              </p>
               <button
-                onClick={() => navigate(currentIndex + 1)}
-                disabled={!hasNext}
+                onClick={() => setFilterConfirmed(false)}
+                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground active:scale-95"
+              >
+                Ver todos
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate(safeIndex - 1)}
+                disabled={!hasPrev}
                 className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
               >
-                <span className="text-sm">Siguiente</span>
-                <ChevronRight className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4" />
+                <span className="text-sm">Anterior</span>
               </button>
-            )}
-          </div>
+
+              <div className="flex flex-col items-center gap-1.5 px-2">
+                <span className="text-sm font-bold text-foreground">
+                  {safeIndex + 1}<span className="font-normal text-muted-foreground">/{displayItems.length}</span>
+                </span>
+                <div className="flex gap-1">
+                  {displayItems.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => navigate(i)}
+                      className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {isLastCard ? (
+                <button
+                  onClick={() => void loadGallery()}
+                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  <span className="text-sm">Ver más</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate(safeIndex + 1)}
+                  disabled={!hasNext}
+                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
+                >
+                  <span className="text-sm">Siguiente</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
