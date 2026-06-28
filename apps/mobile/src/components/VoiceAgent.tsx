@@ -67,13 +67,14 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
       const updatedMessages: Message[] = [...newMessages, { role: "assistant", content: assistantSummary }];
 
-      // Cerrar overlay inmediatamente — las cards aparecen mientras el audio sigue en background
+      // Cerrar overlay — las cards aparecen mientras el audio sigue en background
       onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
       onDismiss();
 
-      if (data.cinephile_note) {
-        void speak(data.cinephile_note);
-      }
+      // Hablar en background: nota cinéfila si hay, sino el título principal
+      const speechText = data.cinephile_note
+        ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`;
+      void speak(speechText);
     } catch (e) {
       console.error("[VoiceAgent]", e);
       if (mountedRef.current) {
@@ -95,12 +96,15 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     try {
       await recorder.start({
         onVolume: setVolume,
+        onInterimText: (text) => {
+          if (mountedRef.current && text) setHint(`"${text}"`);
+        },
         onAutoStop: async () => {
           if (!mountedRef.current) return;
           const blob = await recorder.stop();
           recorderRef.current = null;
           setVolume(0);
-          if (blob.size < 1000) {
+          if (blob.size < 1) {
             if (mountedRef.current) {
               setState("idle");
               setHint("No te escuché. Tocá para hablar.");
@@ -109,7 +113,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
           }
           if (mountedRef.current) {
             setState("thinking");
-            setHint("Transcribiendo...");
+            setHint("Procesando...");
           }
           try {
             const text = await transcribe(blob);
@@ -120,16 +124,14 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
               }
               return;
             }
-            if (mountedRef.current) setHint(`"${text}"`);
             await runRecommendation(text);
           } catch {
             if (mountedRef.current) {
               setState("idle");
-              setHint("Error al transcribir. Intentá de nuevo.");
+              setHint("Algo salió mal. Tocá para intentar de nuevo.");
             }
           }
         },
-        silenceMs: 3500, // tiempo generoso para usuarios que hablan con pausas
       });
     } catch {
       recorderRef.current = null;

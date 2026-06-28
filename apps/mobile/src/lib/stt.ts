@@ -39,6 +39,7 @@ export class VoiceRecorder {
   async start(opts?: {
     onVolume?: (v: number) => void;
     onAutoStop?: () => void;
+    onInterimText?: (text: string) => void; // live transcript mientras el usuario habla
     silenceMs?: number;
   }): Promise<void> {
     const Ctor = getSpeechCtor();
@@ -47,7 +48,7 @@ export class VoiceRecorder {
     this.onAutoStopCb = opts?.onAutoStop;
     this.accumulated = "";
     this.done = false;
-    const silenceMs = opts?.silenceMs ?? 3500;
+    const silenceMs = opts?.silenceMs ?? 2800; // mismo valor que VoiceOrb.tsx original
 
     // Visualización de volumen via getUserMedia + AnalyserNode (opcional)
     try {
@@ -74,25 +75,33 @@ export class VoiceRecorder {
 
     const rec = new Ctor();
     rec.lang = "es-AR";
-    rec.continuous = true;       // sobrevive pausas cortas
-    rec.interimResults = false;  // solo resultados finales
+    rec.continuous = true;      // sobrevive pausas naturales entre oraciones
+    rec.interimResults = true;  // onresult dispara mid-word → silence timer reinicia agresivamente
     this.rec = rec;
 
     const resetSilenceTimer = () => {
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
-      // Pausa de silencio → para automáticamente
+      // Pausa real de silencio → para automáticamente (igual que VoiceOrb.tsx original)
       this.silenceTimer = setTimeout(() => {
         try { rec.stop(); } catch { /* noop */ }
       }, silenceMs);
     };
 
     rec.onresult = (e: any) => {
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) {
-          this.accumulated += (this.accumulated ? " " : "") + (e.results[i][0].transcript as string);
+        const r = e.results[i];
+        if (r.isFinal) {
+          this.accumulated += (this.accumulated ? " " : "") + (r[0].transcript as string).trim();
+        } else {
+          interim += r[0].transcript as string;
         }
       }
-      resetSilenceTimer(); // cualquier actividad de voz reinicia el conteo
+      // Mostrar texto en vivo (final acumulado + interim actual)
+      const live = this.accumulated + (interim ? " " + interim : "");
+      opts?.onInterimText?.(live.trim());
+      // Cada evento de voz (incluso interim) reinicia el contador de silencio
+      resetSilenceTimer();
     };
 
     rec.onerror = (e: any) => {
