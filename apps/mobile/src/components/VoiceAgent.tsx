@@ -27,7 +27,7 @@ interface VoiceAgentProps {
 
 const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 
-const GREETING = "¡Hola! Contame qué querés ver y te ayudo a encontrarlo.";
+const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar la mejor para ver hoy. ¿Empezamos? Simplemente decime qué tenés ganas de ver.";
 
 export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("speaking"); // starts speaking greeting

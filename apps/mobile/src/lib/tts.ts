@@ -40,9 +40,9 @@ export async function speak(
         text,
         model_id: MODEL,
         voice_settings: {
-          stability: 0.45,
-          similarity_boost: 0.80,
-          style: 0.25,
+          stability: 0.72,      // más alto = menos variación al inicio, elimina el "ehh"
+          similarity_boost: 0.82,
+          style: 0.0,           // 0 evita que la voz "improvise" pausas o rellenos
           use_speaker_boost: true,
         },
       }),
