@@ -1,7 +1,6 @@
 // Cliente REST para el backend de Cinéfilo (Railway).
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
-const CINEMETA = "https://v3-cinemeta.strem.io/catalog";
 
 export type Message = { role: "user" | "assistant"; content: string };
 
@@ -40,25 +39,4 @@ export async function fetchRecommendation(params: {
   return res.json() as Promise<RecoResponse>;
 }
 
-export async function fetchPosters(
-  items: { title: string; type: string; year?: string }[],
-): Promise<Record<string, string | null>> {
-  const result: Record<string, string | null> = {};
-  await Promise.allSettled(
-    items.map(async (item) => {
-      const kind = item.type === "Serie" ? "series" : "movie";
-      const q = encodeURIComponent(item.title);
-      try {
-        const res = await fetch(`${CINEMETA}/${kind}/top/search=${q}.json`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (!res.ok) { result[item.title] = null; return; }
-        const data = await res.json() as { metas?: { poster?: string }[] };
-        result[item.title] = data.metas?.[0]?.poster ?? null;
-      } catch {
-        result[item.title] = null;
-      }
-    }),
-  );
-  return result;
-}
+export { fetchPostersClient as fetchPosters } from "./posters";

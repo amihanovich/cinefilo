@@ -1,7 +1,7 @@
-// VoiceAgent: overlay de voz opt-in. Se monta sobre la pantalla de cards cuando el usuario
-// elige "Hablar con Cinéfilo". Escucha, piensa, habla, y devuelve las recomendaciones al padre.
+// VoiceAgent: overlay de voz opt-in. Se monta sobre la pantalla de cards.
+// Al montarse: saluda automáticamente y arranca escuchando sin que el usuario toque nada.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
@@ -27,11 +27,14 @@ interface VoiceAgentProps {
 
 const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 
+const GREETING = "¡Hola! Contame qué querés ver y te ayudo a encontrarlo.";
+
 export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss }: VoiceAgentProps) {
-  const [state, setState] = useState<AgentState>("idle");
+  const [state, setState] = useState<AgentState>("speaking"); // starts speaking greeting
   const [volume, setVolume] = useState(0);
-  const [hint, setHint] = useState("Tocá el orbe para hablar");
+  const [hint, setHint] = useState("...");
   const recorderRef = useRef<VoiceRecorder | null>(null);
+  const mountedRef = useRef(true);
 
   const orbPhase: OrbPhase =
     state === "listening" ? "listening"
@@ -40,6 +43,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     : "idle";
 
   const runRecommendation = useCallback(async (userQuery: string) => {
+    if (!mountedRef.current) return;
     setState("thinking");
     setHint("Pensando...");
 
@@ -63,28 +67,24 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
       const updatedMessages: Message[] = [...newMessages, { role: "assistant", content: assistantSummary }];
 
-      if (data.cinephile_note) {
-        setState("speaking");
-        setHint(data.cinephile_note);
-        await speak(data.cinephile_note, undefined, () => {
-          setState("done");
-          setHint("Listo — cerrá para ver las recomendaciones");
-        });
-      } else {
-        setState("done");
-        setHint("Listo — cerrá para ver las recomendaciones");
-      }
-
+      // Cerrar overlay inmediatamente — las cards aparecen mientras el audio sigue en background
       onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
+      onDismiss();
+
+      if (data.cinephile_note) {
+        void speak(data.cinephile_note);
+      }
     } catch (e) {
       console.error("[VoiceAgent]", e);
-      setState("idle");
-      setHint("Algo salió mal. Tocá para intentar de nuevo.");
+      if (mountedRef.current) {
+        setState("idle");
+        setHint("Algo salió mal. Tocá para intentar de nuevo.");
+      }
     }
-  }, [platforms, excludeTitles, history, onResult]);
+  }, [platforms, excludeTitles, history, onResult, onDismiss]);
 
   const startListening = useCallback(async () => {
-    if (state !== "idle" && state !== "done") return;
+    if (!mountedRef.current) return;
     stopSpeaking();
     setState("listening");
     setHint("Te escucho...");
@@ -96,81 +96,135 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       await recorder.start({
         onVolume: setVolume,
         onAutoStop: async () => {
+          if (!mountedRef.current) return;
           const blob = await recorder.stop();
           recorderRef.current = null;
           setVolume(0);
           if (blob.size < 1000) {
-            setState("idle");
-            setHint("No te escuché. Tocá para intentar de nuevo.");
+            if (mountedRef.current) {
+              setState("idle");
+              setHint("No te escuché. Tocá para hablar.");
+            }
             return;
           }
-          setState("thinking");
-          setHint("Transcribiendo...");
+          if (mountedRef.current) {
+            setState("thinking");
+            setHint("Transcribiendo...");
+          }
           try {
             const text = await transcribe(blob);
             if (!text.trim()) {
-              setState("idle");
-              setHint("No te escuché bien. Intentá de nuevo.");
+              if (mountedRef.current) {
+                setState("idle");
+                setHint("No te escuché bien. Intentá de nuevo.");
+              }
               return;
             }
-            setHint(`"${text}"`);
+            if (mountedRef.current) setHint(`"${text}"`);
             await runRecommendation(text);
           } catch {
-            setState("idle");
-            setHint("Error al transcribir. Intentá de nuevo.");
+            if (mountedRef.current) {
+              setState("idle");
+              setHint("Error al transcribir. Intentá de nuevo.");
+            }
           }
         },
-        silenceMs: 2000,
+        silenceMs: 3500, // tiempo generoso para usuarios que hablan con pausas
       });
     } catch {
       recorderRef.current = null;
-      setState("idle");
-      setHint("No se pudo acceder al micrófono.");
+      if (mountedRef.current) {
+        setState("idle");
+        setHint("No se pudo acceder al micrófono.");
+      }
     }
-  }, [state, runRecommendation]);
+  }, [runRecommendation]);
 
-  const stopListening = useCallback(async () => {
-    if (state !== "listening") return;
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    const blob = await recorder.stop();
-    recorderRef.current = null;
-    setVolume(0);
-    if (blob.size < 1000) {
-      setState("idle");
-      setHint("Tocá para hablar.");
-      return;
-    }
+  // Al montar: saluda y arranca escuchando automáticamente
+  useEffect(() => {
+    mountedRef.current = true;
+
+    const greet = async () => {
+      setState("speaking");
+      setHint("...");
+      await speak(GREETING);
+      if (mountedRef.current) {
+        await startListening();
+      }
+    };
+
+    void greet();
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const stopListeningManual = useCallback(async () => {
+    // Feedback visual inmediato
     setState("thinking");
     setHint("Transcribiendo...");
+    setVolume(0);
+
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (!recorder) return;
+
     try {
+      const blob = await recorder.stop();
+      if (blob.size < 1000) {
+        setState("idle");
+        setHint("Tocá para hablar.");
+        return;
+      }
       const text = await transcribe(blob);
-      if (!text.trim()) { setState("idle"); setHint("No te escuché. Intentá de nuevo."); return; }
+      if (!text.trim()) {
+        setState("idle");
+        setHint("No te escuché. Intentá de nuevo.");
+        return;
+      }
       setHint(`"${text}"`);
       await runRecommendation(text);
     } catch {
       setState("idle");
       setHint("Error al transcribir. Intentá de nuevo.");
     }
-  }, [state, runRecommendation]);
+  }, [runRecommendation]);
 
   const handleOrbClick = useCallback(() => {
-    if (state === "listening") void stopListening();
-    else if (state === "idle" || state === "done") void startListening();
-  }, [state, startListening, stopListening]);
+    if (state === "listening") {
+      void stopListeningManual();
+    } else if (state === "idle" || state === "done") {
+      void startListening();
+    } else if (state === "speaking") {
+      // Interrumpir saludo y escuchar ya
+      stopSpeaking();
+      void startListening();
+    }
+    // Si está en "thinking" no hacemos nada — ya está procesando
+  }, [state, startListening, stopListeningManual]);
 
   const handleDismiss = () => {
     stopSpeaking();
-    if (recorderRef.current) { recorderRef.current.cancel(); recorderRef.current = null; }
+    if (recorderRef.current) {
+      recorderRef.current.cancel();
+      recorderRef.current = null;
+    }
     onDismiss();
   };
 
+  const hintText =
+    state === "idle" ? "Tocá el orbe para hablar"
+    : state === "listening" ? "Escuchando... tocá para detener"
+    : state === "speaking" ? "Escuchame..."
+    : hint;
+
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
       {/* Cerrar */}
       <button
         onClick={handleDismiss}
-        className="absolute top-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+        className="absolute top-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 active:scale-90 transition-transform"
         aria-label="Cerrar"
       >
         <X className="h-5 w-5" />
@@ -179,30 +233,19 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       {/* Orbe */}
       <button
         onClick={handleOrbClick}
-        className="flex items-center justify-center active:scale-95 transition-transform"
+        className="flex items-center justify-center active:scale-95 transition-transform select-none"
         aria-label={state === "listening" ? "Detener" : "Hablar"}
+        style={{ WebkitTapHighlightColor: "transparent" }}
       >
         <Orb phase={orbPhase} size="full" volume={volume} />
       </button>
 
-      {/* Hint / texto */}
+      {/* Estado */}
       <div className="mt-10 max-w-xs px-6 text-center">
-        <p className="text-sm font-medium leading-snug text-foreground/80">
-          {state === "idle" && "Tocá el orbe y contame qué querés ver"}
-          {state === "listening" && "Escuchando... tocá para detener"}
-          {(state === "thinking" || state === "speaking" || state === "done") && hint}
+        <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">
+          {hintText}
         </p>
       </div>
-
-      {/* Instrucción secundaria */}
-      {state === "done" && (
-        <button
-          onClick={handleDismiss}
-          className="mt-8 rounded-full bg-foreground px-6 py-3 text-sm font-semibold text-background active:scale-95 transition-transform"
-        >
-          Ver recomendaciones →
-        </button>
-      )}
     </div>
   );
 }
