@@ -232,18 +232,23 @@ export function Orb({ phase, size, volume = 0, onClick }: OrbProps) {
   }, [phase, px, isMini]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={px}
-      height={px}
+    <div
       style={{
         width: px,
         height: px,
         borderRadius: "50%",
+        overflow: "hidden",
+        flexShrink: 0,
         cursor: onClick ? "pointer" : "default",
-        display: "block",
       }}
       onClick={onClick}
-    />
+    >
+      <canvas
+        ref={canvasRef}
+        width={px}
+        height={px}
+        style={{ width: px, height: px, display: "block" }}
+      />
+    </div>
   );
 }

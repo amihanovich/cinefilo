@@ -40,20 +40,28 @@ export class VoiceRecorder {
     this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.chunks.push(e.data); };
     this.mediaRecorder.start(100);
 
-    // Silence detection loop
+    // Resume AudioContext if suspended (common on Android WebView)
+    if (this.audioCtx.state === "suspended") {
+      await this.audioCtx.resume();
+    }
+
+    // Silence detection loop — timer only fires after the user has spoken at least once
     const data = new Uint8Array(this.analyser.frequencyBinCount);
+    let hasSpoken = false;
     const tick = () => {
       if (!this.analyser) return;
       this.analyser.getByteFrequencyData(data);
       const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length) / 128;
       this.onVolumeChange?.(rms);
 
-      if (rms < 0.04) {
+      if (rms >= 0.04) {
+        hasSpoken = true;
+        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
+      } else if (hasSpoken) {
+        // Only start silence countdown after user has actually spoken
         if (!this.silenceTimer) {
           this.silenceTimer = setTimeout(() => { this.onAutoStop?.(); }, silenceMs);
         }
-      } else {
-        if (this.silenceTimer) { clearTimeout(this.silenceTimer); this.silenceTimer = null; }
       }
       this.rafId = requestAnimationFrame(tick);
     };

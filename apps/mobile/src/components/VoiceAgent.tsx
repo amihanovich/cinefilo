@@ -215,7 +215,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
 
   const hintText =
     state === "idle" ? "Tocá el orbe para hablar"
-    : state === "listening" ? "Escuchando... tocá para detener"
+    : state === "listening" ? "Te escucho — hablá cuando quieras"
     : state === "speaking" ? "Escuchame..."
     : hint;
 
