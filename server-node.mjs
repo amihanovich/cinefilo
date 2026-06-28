@@ -122,6 +122,7 @@ http
           seasonHint: p.seasonHint || null,
           weatherHint: p.weatherHint || null,
           excludeTitles: p.excludeTitles || [],
+          alternativesCount: typeof p.alternativesCount === "number" ? p.alternativesCount : 4,
         }));
       });
       return;

@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { Sparkles, ChevronLeft, ChevronRight, Send, Mic, User, Bookmark, ThumbsUp } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Sparkles, ChevronLeft, ChevronRight, Send, Mic,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid,
+} from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
@@ -8,41 +11,38 @@ import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
+import { track } from "./lib/analytics";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
 
+// ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
-
-type SavedItem = { title: string; platform: string; type: string };
-
-function loadSet(key: string): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as string[]); }
-  catch { return new Set(); }
-}
-
-function addToStore(key: string, item: SavedItem): void {
-  try {
-    const raw = localStorage.getItem(key);
-    const arr: SavedItem[] = raw ? JSON.parse(raw) as SavedItem[] : [];
-    if (!arr.find((i) => i.title === item.title)) arr.unshift(item);
-    localStorage.setItem(key, JSON.stringify(arr));
-  } catch { /* noop */ }
-}
-
-function removeFromStore(key: string, title: string): void {
-  try {
-    const raw = localStorage.getItem(key);
-    const arr: SavedItem[] = raw ? JSON.parse(raw) as SavedItem[] : [];
-    localStorage.setItem(key, JSON.stringify(arr.filter((i) => i.title !== title)));
-  } catch { /* noop */ }
-}
-
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
 const COUNTRY_KEY = "cinefilo:country";
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 
-type Screen = "welcome" | "platforms" | "magic";
+type SavedItem = { title: string; platform: string; type: string };
+type Screen = "welcome" | "platforms" | "magic" | "gallery";
+
+// ── Helpers localStorage ─────────────────────────────────────────────────────
+function loadSet(key: string): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(key) ?? "[]") as string[]); }
+  catch { return new Set(); }
+}
+function addToStore(key: string, item: SavedItem): void {
+  try {
+    const arr: SavedItem[] = JSON.parse(localStorage.getItem(key) ?? "[]") as SavedItem[];
+    if (!arr.find((i) => i.title === item.title)) arr.unshift(item);
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch { /* noop */ }
+}
+function removeFromStore(key: string, title: string): void {
+  try {
+    const arr: SavedItem[] = JSON.parse(localStorage.getItem(key) ?? "[]") as SavedItem[];
+    localStorage.setItem(key, JSON.stringify(arr.filter((i) => i.title !== title)));
+  } catch { /* noop */ }
+}
 
 async function detectCountry(): Promise<void> {
   if (localStorage.getItem(COUNTRY_KEY)) return;
@@ -52,56 +52,60 @@ async function detectCountry(): Promise<void> {
       const code = (await res.text()).trim().toUpperCase();
       if (/^[A-Z]{2}$/.test(code)) localStorage.setItem(COUNTRY_KEY, code);
     }
-  } catch {
-    // silencioso
-  }
+  } catch { /* silencioso */ }
 }
-
-function getCountry(): string {
-  return localStorage.getItem(COUNTRY_KEY) ?? "AR";
-}
-
+function getCountry(): string { return localStorage.getItem(COUNTRY_KEY) ?? "AR"; }
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
+// ── Componente principal ─────────────────────────────────────────────────────
 export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(PLATFORMS_KEY);
-      return saved ? (JSON.parse(saved) as string[]) : [];
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[]; }
+    catch { return []; }
   });
 
+  // Cards
   const [items, setItems] = useState<Recommendation[]>([]);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Galería
+  const [galleryItems, setGalleryItems] = useState<Recommendation[]>([]);
+  const [galleryPosters, setGalleryPosters] = useState<Record<string, string | null>>({});
+  const [gallerySelected, setGallerySelected] = useState<Set<string>>(new Set());
+  const [galleryLoading, setGalleryLoading] = useState(false);
+
+  // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
-  const [agentReply, setAgentReply] = useState<string | null>(null);
   const [cinephileNote, setCinephileNote] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // UI states
   const [voiceMode, setVoiceMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [micRecording, setMicRecording] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
+
   const touchStartX = useRef(0);
   const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
-  // Auto-advance welcome → platforms after 2s
+  // Auto-advance welcome → platforms
   useEffect(() => {
     if (screen !== "welcome") return;
     void detectCountry();
-    const timer = setTimeout(() => setScreen("platforms"), 2000);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setScreen("platforms"), 2000);
+    return () => clearTimeout(t);
   }, [screen]);
 
-  const loadAvailability = async (allItems: Recommendation[]) => {
+  // ── Disponibilidad JustWatch ──────────────────────────────────────────────
+  const loadAvailability = useCallback(async (allItems: Recommendation[]) => {
     const country = getCountry();
     await Promise.allSettled(
       allItems.map(async (item) => {
@@ -109,10 +113,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         setAvailability((prev) => ({ ...prev, [item.title]: result }));
       })
     );
-  };
+  }, []);
 
-  const getReco = async (userQuery: string) => {
-    setAgentReply(null);
+  // ── Recomendación normal (5 cards) ───────────────────────────────────────
+  const getReco = async (userQuery: string, queryType: "auto" | "text" | "voice" = "text") => {
     setCinephileNote(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
@@ -127,6 +131,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: items.map((i) => i.title),
+        alternativesCount: 4,
       });
 
       if (!data?.main) throw new Error("Sin resultado");
@@ -143,6 +148,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setScreen("magic");
       setLoading(false);
 
+      track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
+
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
     } catch (e) {
@@ -151,19 +158,75 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   };
 
-  const navigate = (newIndex: number) => {
-    setCurrentIndex(newIndex);
-    setAgentReply(null);
+  // ── Galería: carga ~16 opciones ───────────────────────────────────────────
+  const loadGallery = async () => {
+    setGalleryLoading(true);
+    setGallerySelected(new Set());
+    setGalleryItems([]);
+    setGalleryPosters({});
+    setScreen("gallery");
+
+    const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
+    const ctx = inferContext();
+    const allExcluded = [...items.map((i) => i.title)];
+
+    try {
+      const data = await fetchRecommendation({
+        messages: [...messages, { role: "user", content: "Mostrame más opciones variadas" }],
+        platforms: effectivePlatforms,
+        contextHint: contextToPromptHint(ctx),
+        seasonHint: seasonHintShort(ctx),
+        weatherHint: null,
+        excludeTitles: allExcluded,
+        alternativesCount: 15,
+      });
+
+      if (!data?.main) throw new Error("Sin resultado");
+
+      const all = [data.main, ...(data.alternatives ?? [])];
+      setGalleryItems(all);
+      setGalleryLoading(false);
+      track("gallery_opened", { titles_shown: all.length });
+
+      void fetchPosters(all.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setGalleryPosters);
+    } catch {
+      setGalleryLoading(false);
+      setScreen("magic");
+    }
   };
 
+  const confirmGallerySelection = () => {
+    const selected = galleryItems.filter((i) => gallerySelected.has(i.title));
+    const toShow = selected.length > 0 ? selected : galleryItems;
+    track("gallery_selection", { selected_count: selected.length, total: galleryItems.length });
+    setItems(toShow);
+    setPosters(galleryPosters);
+    setAvailability({});
+    setCurrentIndex(0);
+    setScreen("magic");
+    void loadAvailability(toShow);
+  };
+
+  // ── Navegación ────────────────────────────────────────────────────────────
+  const navigate = (newIndex: number) => {
+    setCurrentIndex(newIndex);
+    track("card_viewed", {
+      card_index: newIndex,
+      title: items[newIndex]?.title,
+      platform: items[newIndex]?.platform,
+    });
+  };
+
+  // ── Chat ──────────────────────────────────────────────────────────────────
   const sendChat = async () => {
     const text = chatText.trim();
     if (!text || loading) return;
     setChatText("");
-    await getReco(text);
+    const turnNumber = messages.filter((m) => m.role === "user").length + 1;
+    track("refinement_made", { turn_number: turnNumber });
+    await getReco(text, "text");
   };
 
-  // Mic en el chat: graba → transcribe → pone el texto en el input (no auto-envía)
   const toggleMic = async () => {
     if (micRecording) {
       const recorder = micRecorderRef.current;
@@ -175,9 +238,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       try {
         const text = await transcribe(blob);
         if (text.trim()) setChatText(text.trim());
-      } catch {
-        // silencioso
-      }
+      } catch { /* silencioso */ }
     } else {
       const recorder = new VoiceRecorder();
       micRecorderRef.current = recorder;
@@ -192,9 +253,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             try {
               const text = await transcribe(blob);
               if (text.trim()) setChatText(text.trim());
-            } catch {
-              // silencioso
-            }
+            } catch { /* silencioso */ }
           },
           silenceMs: 2500,
         });
@@ -205,7 +264,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   };
 
-  // Callback del VoiceAgentOverlay: recibe items + nota y cierra el overlay
+  // ── Voice agent ───────────────────────────────────────────────────────────
   const handleVoiceResult = (result: VoiceResult) => {
     const allItems = result.items;
     setItems(allItems);
@@ -214,44 +273,71 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     setCurrentIndex(0);
     setMessages(result.messages);
     setCinephileNote(result.cinephileNote);
-    setAgentReply(null);
     setScreen("magic");
+    track("recommendation_received", { query_type: "voice" });
     void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
     void loadAvailability(allItems);
   };
 
+  // ── Acciones de cards ─────────────────────────────────────────────────────
   const toggleWatchlist = (item: Recommendation) => {
-    const key = item.title;
-    const isIn = watchlisted.has(key);
-    setWatchlisted((prev) => {
-      const next = new Set(prev);
-      isIn ? next.delete(key) : next.add(key);
-      return next;
-    });
-    if (isIn) removeFromStore(WATCHLIST_KEY, key);
-    else addToStore(WATCHLIST_KEY, { title: item.title, platform: item.platform, type: item.type });
+    const isIn = watchlisted.has(item.title);
+    setWatchlisted((prev) => { const n = new Set(prev); isIn ? n.delete(item.title) : n.add(item.title); return n; });
+    if (isIn) removeFromStore(WATCHLIST_KEY, item.title);
+    else { addToStore(WATCHLIST_KEY, { title: item.title, platform: item.platform, type: item.type }); track("saved", { title: item.title, platform: item.platform }); }
   };
 
   const toggleLike = (item: Recommendation) => {
-    const key = item.title;
-    const isIn = liked.has(key);
-    setLiked((prev) => {
-      const next = new Set(prev);
-      isIn ? next.delete(key) : next.add(key);
-      return next;
-    });
-    if (isIn) removeFromStore(LIKED_KEY, key);
-    else addToStore(LIKED_KEY, { title: item.title, platform: item.platform, type: item.type });
+    const isIn = liked.has(item.title);
+    setLiked((prev) => { const n = new Set(prev); isIn ? n.delete(item.title) : n.add(item.title); return n; });
+    if (isIn) removeFromStore(LIKED_KEY, item.title);
+    else { addToStore(LIKED_KEY, { title: item.title, platform: item.platform, type: item.type }); track("liked", { title: item.title, platform: item.platform }); }
   };
 
+  const copyTitle = (title: string, platform: string) => {
+    void navigator.clipboard.writeText(title).then(() => {
+      setCopied(true);
+      track("title_copied", { title, platform });
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const openStreaming = (current: Recommendation, avail: JwResult | undefined) => {
+    track("watch_now_tapped", {
+      title: current.title,
+      platform: current.platform,
+      availability_confirmed: !!avail?.confirmed,
+    });
+    if (avail?.confirmed) {
+      openNative(avail);
+    } else {
+      const q = encodeURIComponent(current.title);
+      const urls: Record<string, string> = {
+        Netflix: `https://www.netflix.com/search?q=${q}`,
+        "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
+        "Disney+": `https://www.disneyplus.com/search`,
+        "Star+": `https://www.disneyplus.com/search`,
+        Max: `https://play.max.com/search?q=${q}`,
+        "Apple TV+": `https://tv.apple.com/search?term=${q}`,
+        "Paramount+": `https://www.paramountplus.com/search/${q}/`,
+      };
+      // _system → el OS maneja la URL; puede abrir la app nativa via Universal Links
+      window.open(urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`, "_system");
+    }
+  };
+
+  // ── Inicio ────────────────────────────────────────────────────────────────
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
+    track("wizard_complete", { platforms_count: platforms.length, platforms });
     if (onComplete) { onComplete(); return; }
     const ctx = inferContext();
-    void getReco(`lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`);
+    void getReco(`lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`, "auto");
   };
 
-  // ── WELCOME ──────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  // PANTALLA: WELCOME
+  // ════════════════════════════════════════════════════════════════════════════
   if (screen === "welcome") {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
@@ -268,7 +354,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     );
   }
 
-  // ── PLATFORMS ────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  // PANTALLA: PLATFORMS
+  // ════════════════════════════════════════════════════════════════════════════
   if (screen === "platforms") {
     return (
       <div className="flex h-[100dvh] flex-col bg-background px-6 pt-16 pb-10 safe-top safe-bottom">
@@ -284,11 +372,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             return (
               <button
                 key={p}
-                onClick={() =>
-                  setPlatforms((prev) =>
-                    selected ? prev.filter((x) => x !== p) : [...prev, p]
-                  )
-                }
+                onClick={() => setPlatforms((prev) => selected ? prev.filter((x) => x !== p) : [...prev, p])}
                 className={cn(
                   "rounded-2xl border-2 px-4 py-5 text-left text-sm font-semibold transition-all active:scale-95",
                   selected ? "border-transparent text-white" : "border-border bg-background text-foreground"
@@ -320,27 +404,127 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     );
   }
 
-  // ── MAGIC MOMENT ─────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════════════════
+  // PANTALLA: GALERÍA
+  // ════════════════════════════════════════════════════════════════════════════
+  if (screen === "gallery") {
+    const selectedCount = gallerySelected.size;
+
+    return (
+      <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
+        {/* Header */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
+          <button
+            onClick={() => setScreen("magic")}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="flex-1">
+            <p className="text-base font-bold text-foreground">Más opciones</p>
+            <p className="text-[11px] text-muted-foreground">Tocá las que te interesan</p>
+          </div>
+          <button
+            onClick={confirmGallerySelection}
+            disabled={galleryLoading}
+            className="rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background active:scale-95 transition-transform disabled:opacity-40"
+          >
+            {selectedCount > 0 ? `Ver ${selectedCount} →` : "Ver todas →"}
+          </button>
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {galleryLoading ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3">
+              <Sparkles className="h-8 w-8 animate-pulse text-primary" />
+              <p className="text-sm text-muted-foreground">Buscando más opciones...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2.5">
+              {galleryItems.map((item) => {
+                const isSelected = gallerySelected.has(item.title);
+                const poster = galleryPosters[item.title];
+                const color = colorForPlatform(item.platform);
+                return (
+                  <button
+                    key={item.title}
+                    onClick={() => {
+                      setGallerySelected((prev) => {
+                        const n = new Set(prev);
+                        isSelected ? n.delete(item.title) : n.add(item.title);
+                        return n;
+                      });
+                    }}
+                    className="relative overflow-hidden rounded-xl active:scale-95 transition-transform"
+                    style={{ WebkitTapHighlightColor: "transparent" }}
+                  >
+                    {/* Poster */}
+                    <div className="relative h-32 w-full" style={!poster ? { backgroundColor: `${color}20` } : undefined}>
+                      {poster ? (
+                        <img src={poster} alt={item.title} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <span className="text-3xl font-black opacity-10" style={{ color }}>
+                            {item.title.charAt(0)}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Gradiente + título */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1.5 pt-4">
+                        <p className="line-clamp-2 text-[10px] font-semibold leading-tight text-white">
+                          {item.title}
+                        </p>
+                        <span
+                          className="mt-0.5 inline-block rounded-full px-1 py-px text-[8px] font-bold text-white"
+                          style={{ backgroundColor: color }}
+                        >
+                          {platformLabel(item.platform)}
+                        </span>
+                      </div>
+
+                      {/* Overlay de selección */}
+                      {isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-primary/50">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white">
+                            <Check className="h-4 w-4 text-primary" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // PANTALLA: MAGIC (cards)
+  // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
     const current = items[currentIndex];
     const poster = posters[current.title];
     const avail = availability[current.title];
     const hasPrev = currentIndex > 0;
     const hasNext = currentIndex < items.length - 1;
+    const isLastCard = currentIndex === items.length - 1;
     const platformColor = colorForPlatform(current.platform);
     const label = platformLabel(current.platform);
 
     return (
       <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
-        {/* Account sheet */}
         <AccountSheet
           open={accountOpen}
           onClose={() => setAccountOpen(false)}
           onPlatformsChange={setPlatforms}
         />
 
-        {/* Voice overlay (opt-in) */}
         {voiceMode && (
           <VoiceAgentOverlay
             platforms={platforms.length > 0 ? platforms : PLATFORMS}
@@ -366,20 +550,18 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
           </div>
 
-          {/* Botón "Hablar con Cinéfilo" */}
           <button
-            onClick={() => setVoiceMode(true)}
-            className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95 hover:bg-primary/10"
+            onClick={() => { track("voice_used"); setVoiceMode(true); }}
+            className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95"
           >
             <Orb phase="idle" size="mini" />
             <span className="text-[11px] font-semibold text-primary">Hablar</span>
           </button>
         </div>
 
-        {/* Chat input con mic de transcripción */}
+        {/* Chat */}
         <div className="shrink-0 px-5 pt-3 pb-3">
           <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "opacity-50 pointer-events-none")}>
-            {/* Mic de transcripción */}
             <button
               onClick={() => void toggleMic()}
               disabled={loading}
@@ -387,21 +569,16 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
                 micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
               )}
-              aria-label={micRecording ? "Detener grabación" : "Grabar voz"}
+              aria-label={micRecording ? "Detener" : "Grabar"}
             >
               <Mic className="h-4 w-4" />
             </button>
-
             <input
               type="text"
               value={chatText}
               onChange={(e) => setChatText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={
-                micRecording ? "Escuchando..." :
-                loading ? "Pensando..." :
-                "Más oscuro · ¿de qué trata? · nuevo set..."
-              }
+              placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
               disabled={loading || micRecording}
               className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
             />
@@ -416,7 +593,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         </div>
 
         {/* Hero card */}
-        <div className="flex-1 min-h-0 flex flex-col gap-3 px-5 pb-2">
+        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2">
           <div
             className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
             onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
@@ -438,18 +615,24 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
               {/* Info */}
               <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-                <h2 className="text-base font-bold leading-tight text-foreground">{current.title}</h2>
+                {/* Título + copiar */}
+                <div className="flex items-start gap-2">
+                  <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
+                  <button
+                    onClick={() => copyTitle(current.title, current.platform)}
+                    className="mt-0.5 shrink-0 text-muted-foreground/40 active:scale-90 transition-transform"
+                    aria-label="Copiar título"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                    style={{ backgroundColor: platformColor }}
-                  >
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>
                     {label}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {current.type} · {current.duration}
-                    {current.year && ` · ${current.year}`}
+                    {current.type} · {current.duration}{current.year && ` · ${current.year}`}
                   </span>
                   {current.ageRating && (
                     <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
@@ -473,38 +656,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 </p>
 
                 <button
-                  onClick={() => {
-                    if (avail?.confirmed) {
-                      openNative(avail);
-                    } else {
-                      const q = encodeURIComponent(current.title);
-                      const urls: Record<string, string> = {
-                        Netflix: `https://www.netflix.com/search?q=${q}`,
-                        "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
-                        "Disney+": `https://www.disneyplus.com/search`,
-                        "Star+": `https://www.disneyplus.com/search`,
-                        Max: `https://play.max.com/search?q=${q}`,
-                        "Apple TV+": `https://tv.apple.com/search?term=${q}`,
-                        "Paramount+": `https://www.paramountplus.com/search/${q}/`,
-                      };
-                      window.open(urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`, "_blank");
-                    }
-                  }}
+                  onClick={() => openStreaming(current, avail)}
                   className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
                   style={{ backgroundColor: platformColor }}
                 >
                   ▶ Ver ahora en {label}
                 </button>
 
-                {/* Acciones secundarias */}
+                {/* Like + Guardar */}
                 <div className="mt-2 flex gap-2">
                   <button
                     onClick={() => toggleLike(current)}
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                      liked.has(current.title)
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground"
+                      liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
                     )}
                   >
                     <ThumbsUp className="h-3 w-3" />
@@ -514,9 +679,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     onClick={() => toggleWatchlist(current)}
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                      watchlisted.has(current.title)
-                        ? "border-amber-500 bg-amber-500/10 text-amber-500"
-                        : "border-border text-muted-foreground"
+                      watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground"
                     )}
                   >
                     <Bookmark className="h-3 w-3" />
@@ -532,8 +695,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </p>
         </div>
 
-        {/* Navigation */}
-        <div className="shrink-0 px-5 pt-2 pb-8">
+        {/* Navegación + "Ver más" */}
+        <div className="shrink-0 px-5 pt-1 pb-8">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(currentIndex - 1)}
@@ -546,38 +709,44 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
             <div className="flex flex-col items-center gap-1.5 px-2">
               <span className="text-sm font-bold text-foreground">
-                {currentIndex + 1}
-                <span className="font-normal text-muted-foreground">/{items.length}</span>
+                {currentIndex + 1}<span className="font-normal text-muted-foreground">/{items.length}</span>
               </span>
               <div className="flex gap-1">
                 {items.map((_, i) => (
                   <button
                     key={i}
                     onClick={() => navigate(i)}
-                    className={cn(
-                      "h-1.5 rounded-full transition-all",
-                      i === currentIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20"
-                    )}
+                    className={cn("h-1.5 rounded-full transition-all", i === currentIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
                   />
                 ))}
               </div>
             </div>
 
-            <button
-              onClick={() => navigate(currentIndex + 1)}
-              disabled={!hasNext}
-              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
-            >
-              <span className="text-sm">Siguiente</span>
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            {isLastCard ? (
+              <button
+                onClick={() => void loadGallery()}
+                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span className="text-sm">Ver más</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate(currentIndex + 1)}
+                disabled={!hasNext}
+                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
+              >
+                <span className="text-sm">Siguiente</span>
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // Loading state
+  // Loading / fallback
   if (loading) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background">

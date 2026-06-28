@@ -29,6 +29,7 @@ export async function fetchRecommendation(params: {
   seasonHint: string | null;
   weatherHint: string | null;
   excludeTitles: string[];
+  alternativesCount?: number;
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",

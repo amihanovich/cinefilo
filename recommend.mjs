@@ -13,7 +13,7 @@ Reglas estrictas:
 - Sé específico — evitá blockbusters genéricos si hay algo más a medida.
 - "type" debe ser "Película" o "Serie".
 - "reason" entre 12 y 18 palabras, en español, sin emojis. Referenciá el factor clave del contexto que más pesó. Sé concreto y directo.
-- Devolvé 1 recomendación principal + exactamente 5 alternativas distintas entre sí (de plataformas distintas si es posible). Cada alternativa justifica brevemente por qué encaja.
+- Devolvé 1 recomendación principal + el número exacto de alternativas indicado en el pedido (de plataformas distintas si es posible). Cada alternativa justifica brevemente por qué encaja.
 - Tomá en cuenta la estación del año y el clima si están en el contexto — un domingo lluvioso de otoño pide algo distinto a un sábado soleado.
 - Si "atención" es "De fondo", priorizá contenido episódico, ligero, fácil de pausar; si es "Inmersivo", priorizá calidad cinematográfica; si es "Comfort watch", algo conocido o reconfortante.
 - Si "novedad" es "Algo conocido" o "Ya visto", priorizá clásicos/franquicias reconocibles; si es "Algo nuevo", priorizá estrenos recientes o títulos poco mainstream.
@@ -26,12 +26,20 @@ Reglas estrictas:
 - FAMILIA CON NIÑOS / CONTENIDO INFANTIL: Si compañía es "Familia con niños", o el pedido menciona palabras como niños, hijos, chicos, kids, infantil, familiar, "con los chicos", "con mis hijos", o pide una película para ver con menores de edad → es OBLIGATORIO que main Y TODAS las alternatives sean únicamente contenido ATP o PG como máximo. JAMÁS recomiendes contenido +13, +16, +18, R, PG-13 o equivalente en ese contexto. Sin excepciones.
 - INTRO DE VOZ ("cinephile_note"): Texto de 2-3 oraciones para ser HABLADO en voz alta por un experto cinematográfico cálido y apasionado. Arrancá con el contexto del pedido del usuario ("Para esta noche de finde...", "Si tenés ganas de algo intenso...", "Entiendo, querés más adrenalina..."). Presentá el título principal con una frase que enganche. Cerrá invitando a explorar las alternativas. Español rioplatense, tono conversacional y cálido, sin emojis, sin listas. Entre 45 y 65 palabras.
 
-FORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:
-{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""}],"clarification_needed":null,"cinephile_note":""}`;
+FORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido (sin markdown, sin texto extra). El array "alternatives" debe tener exactamente el número de elementos solicitado en el pedido.`;
 
-async function callAnthropic(messages) {
+function buildSystem(alternativesCount = 4) {
+  const altItem = `{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""}`;
+  const altsArray = Array.from({ length: alternativesCount }, () => altItem).join(",");
+  const format = `\n\nFORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:\n{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},"alternatives":[${altsArray}],"clarification_needed":null,"cinephile_note":""}`;
+  return SYSTEM_BASE + format;
+}
+
+async function callAnthropic(messages, alternativesCount = 4) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+  // Galería necesita más tokens de salida
+  const maxTokens = alternativesCount > 6 ? 3500 : 1200;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -41,8 +49,8 @@ async function callAnthropic(messages) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1200,
-      system: SYSTEM_BASE,
+      max_tokens: maxTokens,
+      system: buildSystem(alternativesCount),
       messages,
     }),
   });
@@ -66,8 +74,9 @@ async function callAnthropic(messages) {
  * @param {string|null} params.seasonHint
  * @param {string|null} params.weatherHint
  * @param {string[]} params.excludeTitles
+ * @param {number} [params.alternativesCount=4]
  */
-export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles }) {
+export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4 }) {
   const effectivePlatforms = (platforms && platforms.length > 0) ? platforms : PLATFORMS;
   const excludeLine = excludeTitles && excludeTitles.length > 0
     ? `\n\nTítulos a excluir (ya vistos o mostrados — NO los recomiendes):\n- ${excludeTitles.join("\n- ")}`
@@ -85,13 +94,14 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
         envLine || null,
         `Plataformas disponibles: ${effectivePlatforms.join(", ")}`,
         excludeLine || null,
+        `Alternativas requeridas: ${alternativesCount}`,
       ].filter(Boolean).join("\n");
       return { role: "user", content: `${contextBlock}\n\nPedido del usuario: ${m.content}` };
     }
     return m;
   });
 
-  const parsed = await callAnthropic(builtMessages);
+  const parsed = await callAnthropic(builtMessages, alternativesCount);
 
   // Normalize output
   const normalize = (r) => ({
@@ -107,7 +117,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   return {
     filters: parsed.filters || {},
     main: normalize(parsed.main || {}),
-    alternatives: (parsed.alternatives || []).slice(0, 5).map(normalize),
+    alternatives: (parsed.alternatives || []).slice(0, alternativesCount).map(normalize),
     clarification_needed: parsed.clarification_needed || null,
     cinephile_note: parsed.cinephile_note || null,
   };
