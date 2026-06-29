@@ -519,7 +519,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const avail = current ? availability[current.title] : undefined;
     const hasPrev = safeIndex > 0;
     const hasNext = safeIndex < displayItems.length - 1;
-    const isLastCard = safeIndex === displayItems.length - 1;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
 
@@ -716,8 +715,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 </div>
               </div>
 
-              <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
-                deslizá para ver alternativas
+              <p className="shrink-0 text-center text-[11px] font-medium text-muted-foreground">
+                ← deslizá para ver alternativas →
               </p>
             </>
           ) : null}
@@ -744,50 +743,48 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           {/* Navegación — oculta cuando el filtro activo no tiene resultados */}
           {!(filterConfirmed && displayItems.length === 0) && (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => navigate(safeIndex - 1)}
-                disabled={!hasPrev}
-                className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
-              >
-                <ChevronLeft className="h-4 w-4" />
-                <span className="text-sm">Anterior</span>
-              </button>
-
-              <div className="flex flex-col items-center gap-1.5 px-2">
-                <span className="text-sm font-bold text-foreground">
-                  {safeIndex + 1}<span className="font-normal text-muted-foreground">/{displayItems.length}</span>
-                </span>
-                <div className="flex gap-1">
-                  {displayItems.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => navigate(i)}
-                      className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
-                    />
-                  ))}
-                </div>
+            <>
+              {/* Dots de posición (reemplazan al contador numérico) */}
+              <div className="mb-2 flex items-center justify-center gap-1">
+                {displayItems.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => navigate(i)}
+                    aria-label={`Ir a ${i + 1}`}
+                    className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
+                  />
+                ))}
               </div>
 
-              {isLastCard ? (
+              {/* Anterior · Ver más (siempre) · Siguiente */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate(safeIndex - 1)}
+                  disabled={!hasPrev}
+                  aria-label="Anterior"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+
                 <button
                   onClick={() => void loadGallery()}
                   className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
                 >
                   <LayoutGrid className="h-4 w-4" />
-                  <span className="text-sm">Ver más</span>
+                  <span className="text-sm">Ver más opciones</span>
                 </button>
-              ) : (
+
                 <button
                   onClick={() => navigate(safeIndex + 1)}
                   disabled={!hasNext}
-                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl border-2 border-border font-semibold transition-transform active:scale-95 disabled:opacity-20"
+                  aria-label="Siguiente"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
                 >
-                  <span className="text-sm">Siguiente</span>
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-5 w-5" />
                 </button>
-              )}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
