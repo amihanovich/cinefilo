@@ -725,18 +725,30 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {/* Navegación + filtro + "Ver más" */}
         <div className="shrink-0 px-5 pt-1 pb-8">
 
-          {/* Filtro de disponibilidad — toggle discreto, solo cuando hay datos de JustWatch */}
+          {/* Filtro de disponibilidad — toggle on/off, solo cuando hay datos de JustWatch */}
           {availabilityLoaded && (
             <div className="mb-3 flex justify-center">
               <button
                 onClick={() => { setFilterConfirmed((f) => !f); setCurrentIndex(0); }}
+                role="switch"
+                aria-checked={filterConfirmed}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-medium transition-all active:scale-95",
-                  filterConfirmed ? "bg-green-500/10 text-green-400" : "text-muted-foreground/40"
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all active:scale-95",
+                  filterConfirmed ? "border-green-500/40 bg-green-500/10 text-green-400" : "border-border text-muted-foreground"
                 )}
               >
-                <Globe2 className="h-3 w-3" />
-                <span>{filterConfirmed ? "Solo disponibles en tu región" : "Mostrando todo"}</span>
+                <Globe2 className="h-3.5 w-3.5" />
+                <span>Solo disponibles en mi región</span>
+                {/* Switch visual */}
+                <span className={cn(
+                  "relative ml-0.5 h-4 w-7 shrink-0 rounded-full transition-colors",
+                  filterConfirmed ? "bg-green-500" : "bg-muted-foreground/30"
+                )}>
+                  <span className={cn(
+                    "absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all",
+                    filterConfirmed ? "left-3.5" : "left-0.5"
+                  )} />
+                </span>
               </button>
             </div>
           )}
