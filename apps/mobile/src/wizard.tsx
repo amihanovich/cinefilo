@@ -6,7 +6,7 @@ import {
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
-import { jwSearch, openNative } from "./lib/justwatch";
+import { jwSearch, openNative, openInApp } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
@@ -322,8 +322,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         "Apple TV+": `https://tv.apple.com/search?term=${q}`,
         "Paramount+": `https://www.paramountplus.com/search/${q}/`,
       };
-      // _system → el OS maneja la URL; puede abrir la app nativa via Universal Links
-      window.open(urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`, "_system");
+      const webUrl = urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`;
+      // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
+      openInApp(current.platform, webUrl, current.title);
     }
   };
 

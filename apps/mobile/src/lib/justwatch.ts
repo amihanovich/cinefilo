@@ -88,13 +88,51 @@ function isAndroid(): boolean {
   return /android/i.test(navigator.userAgent);
 }
 
+// Esquemas custom de las apps de streaming. Android los resuelve vía ACTION_VIEW
+// (compatible con Capacitor) y abren la app nativa si está instalada.
+// Solo incluimos los que tienen un scheme público confiable; el resto cae a la
+// URL web (que en muchas apps está registrada como App Link y abre la app igual).
+const ANDROID_SCHEME: Record<string, string> = {
+  Netflix: "nflx://www.netflix.com/search?q=",
+  "Disney+": "disneyplus://",
+  "Star+": "disneyplus://",
+};
+
+// Abre el contenido en la app nativa si está instalada.
+// Prioridad: deeplink nativo de JustWatch → scheme custom de la plataforma → web.
+// Las URLs https de título suelen ser App Links y abren la app igual.
+export function openInApp(platform: string, webUrl: string, title?: string): void {
+  if (isAndroid()) {
+    const scheme = ANDROID_SCHEME[platform];
+    if (scheme) {
+      const url = scheme.endsWith("=") && title ? scheme + encodeURIComponent(title) : scheme;
+      window.open(url, "_system");
+      return;
+    }
+  }
+  // '_system' → ACTION_VIEW; si la app registró App Links para esta URL, abre la app
+  window.open(webUrl, "_system");
+}
+
 export function openNative(result: JwResult): void {
-  const nativeUrl = isAndroid() ? result.deeplinkAndroid : result.deeplinkIos;
-  const fallback = result.standardWebURL;
-  const url = nativeUrl ?? fallback;
-  if (!url) return;
-  // '_system' hace que Capacitor pase la URL al OS handler → abre la app nativa si está instalada
-  window.open(url, "_system");
+  // Para títulos confirmados, JustWatch da la URL exacta del título. Esa URL
+  // suele estar registrada como App Link y abre la app directo en ese título
+  // (mejor que un scheme de búsqueda, que perdería el título exacto).
+  if (isAndroid()) {
+    // Deeplink nativo exacto de JustWatch (scheme custom → app, no http)
+    if (result.deeplinkAndroid && !/^https?:/i.test(result.deeplinkAndroid)) {
+      window.open(result.deeplinkAndroid, "_system");
+      return;
+    }
+    if (result.standardWebURL) {
+      window.open(result.standardWebURL, "_system");
+      return;
+    }
+    return;
+  }
+  // iOS: los Universal Links abren la app desde la URL https
+  const url = result.deeplinkIos ?? result.standardWebURL;
+  if (url) window.open(url, "_system");
 }
 
 export async function jwSearch(
