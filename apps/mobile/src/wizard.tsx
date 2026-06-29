@@ -640,10 +640,16 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                       <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
                       <button
                         onClick={() => copyTitle(current.title, current.platform)}
-                        className="mt-0.5 shrink-0 text-muted-foreground/40 active:scale-90 transition-transform"
+                        className={cn(
+                          "mt-0.5 flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all active:scale-90",
+                          copied
+                            ? "border-green-500/40 bg-green-500/10 text-green-400"
+                            : "border-border text-muted-foreground/50"
+                        )}
                         aria-label="Copiar título"
                       >
-                        {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                        <span>{copied ? "¡Copiado!" : "Copiar"}</span>
                       </button>
                     </div>
 
