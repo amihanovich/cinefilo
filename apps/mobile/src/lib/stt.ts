@@ -1,150 +1,181 @@
-// STT usando Web Speech API (SpeechRecognition), igual que la versión web original.
-// API pública idéntica: VoiceRecorder class + transcribe() function.
+// STT para Android (Capacitor WebView).
+//
+// IMPORTANTE: La Web Speech API (SpeechRecognition) NO funciona dentro del
+// WebView de Android — necesita el servicio de reconocimiento de Google que el
+// WebView no expone, por eso fallaba al instante y el orbe caía a "idle".
+//
+// Acá grabamos con MediaRecorder y detectamos el silencio midiendo el volumen
+// con AudioContext (un solo stream compartido, sin conflicto de micrófono).
+// El audio se transcribe en el backend con Groq Whisper.
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
 
 export type RecordingState = "idle" | "recording" | "processing";
 
-type SpeechRecLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  onresult: ((e: any) => void) | null;
-  onerror: ((e: any) => void) | null;
-  onend: (() => void) | null;
-};
-
-function getSpeechCtor(): (new () => SpeechRecLike) | null {
-  if (typeof window === "undefined") return null;
-  const w = window as any;
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-}
+// Umbral de volumen (RMS normalizado 0-1) por encima del cual consideramos que
+// hay voz. Por debajo, silencio.
+const SPEAK_THRESHOLD = 0.045;
+// Cuánto silencio esperar tras la última voz antes de cortar y buscar.
+const DEFAULT_SILENCE_MS = 2000;
+// Tope duro de grabación por seguridad.
+const MAX_RECORD_MS = 20000;
 
 export class VoiceRecorder {
-  private rec: SpeechRecLike | null = null;
-  private accumulated = "";
-  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private stream: MediaStream | null = null;
+  private rec: MediaRecorder | null = null;
+  private chunks: Blob[] = [];
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private rafId: number | null = null;
+  private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private onAutoStopCb?: () => void;
-  private done = false;
+  private autoStopped = false;
+  private hasSpoken = false;
+  private lastLoudTime = 0;
 
   async start(opts?: {
     onVolume?: (v: number) => void;
     onAutoStop?: () => void;
-    onInterimText?: (text: string) => void;
+    onInterimText?: (text: string) => void; // no aplica con MediaRecorder, se ignora
     silenceMs?: number;
   }): Promise<void> {
-    const Ctor = getSpeechCtor();
-    if (!Ctor) throw new Error("SpeechRecognition no disponible en este dispositivo");
-
     this.onAutoStopCb = opts?.onAutoStop;
-    this.accumulated = "";
-    this.done = false;
-    const silenceMs = opts?.silenceMs ?? 2800;
+    this.autoStopped = false;
+    this.hasSpoken = false;
+    this.chunks = [];
+    const silenceMs = opts?.silenceMs ?? DEFAULT_SILENCE_MS;
 
-    // IMPORTANTE: no usamos getUserMedia aquí.
-    // En Android, getUserMedia + SpeechRecognition compiten por el micrófono
-    // y SpeechRecognition falla inmediatamente. SpeechRecognition maneja el
-    // micrófono internamente — el volumen se anima con onda estática en el orbe.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    this.stream = stream;
 
-    const rec = new Ctor();
-    rec.lang = "es-AR";
-    rec.continuous = true;
-    rec.interimResults = true;
+    const rec = new MediaRecorder(stream);
     this.rec = rec;
-
-    const resetSilenceTimer = () => {
-      if (this.silenceTimer) clearTimeout(this.silenceTimer);
-      this.silenceTimer = setTimeout(() => {
-        try { rec.stop(); } catch { /* noop */ }
-      }, silenceMs);
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) this.chunks.push(e.data);
     };
-
-    rec.onresult = (e: any) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) {
-          this.accumulated += (this.accumulated ? " " : "") + (r[0].transcript as string).trim();
-        } else {
-          interim += r[0].transcript as string;
-        }
-      }
-      const live = this.accumulated + (interim ? " " + interim : "");
-      opts?.onInterimText?.(live.trim());
-      resetSilenceTimer(); // cualquier actividad de voz reinicia el contador
-    };
-
-    rec.onerror = (e: any) => {
-      if (e?.error === "no-speech") return;
-      this.cleanup();
-      this.done = true;
-      this.onAutoStopCb?.();
-    };
-
-    rec.onend = () => {
-      this.cleanup();
-      this.done = true;
-      this.onAutoStopCb?.();
-    };
-
     rec.start();
 
-    // Seguridad: para después de 30s si el usuario no habla nada
-    this.silenceTimer = setTimeout(() => {
-      try { rec.stop(); } catch { /* noop */ }
-    }, 30000);
-  }
+    // Análisis de volumen para detectar silencio.
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const audioCtx = new AC();
+    this.audioCtx = audioCtx;
+    const source = audioCtx.createMediaStreamSource(stream);
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    this.analyser = analyser;
 
-  private cleanup(): void {
-    if (this.silenceTimer) clearTimeout(this.silenceTimer);
-    this.silenceTimer = null;
-  }
+    const data = new Uint8Array(analyser.fftSize);
+    this.lastLoudTime = performance.now();
 
-  stop(): Promise<Blob> {
-    if (this.done) {
-      return Promise.resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
-    }
+    const tick = () => {
+      if (!this.analyser) return;
+      this.analyser.getByteTimeDomainData(data);
+      // RMS normalizado: 128 es el centro (silencio).
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      opts?.onVolume?.(rms);
 
-    return new Promise((resolve) => {
-      if (!this.rec) {
-        this.cleanup();
-        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
+      const now = performance.now();
+      if (rms > SPEAK_THRESHOLD) {
+        this.hasSpoken = true;
+        this.lastLoudTime = now;
+      }
+
+      // Solo cortamos por silencio una vez que el usuario habló de verdad.
+      if (this.hasSpoken && now - this.lastLoudTime > silenceMs && !this.autoStopped) {
+        this.autoStopped = true;
+        this.stopMonitoring();
+        this.onAutoStopCb?.();
         return;
       }
 
-      this.rec.onend = () => {
-        this.cleanup();
-        this.done = true;
-        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
+      this.rafId = requestAnimationFrame(tick);
+    };
+    this.rafId = requestAnimationFrame(tick);
+
+    // Tope de seguridad: corta a los MAX_RECORD_MS hablado o no.
+    this.maxTimer = setTimeout(() => {
+      if (!this.autoStopped) {
+        this.autoStopped = true;
+        this.stopMonitoring();
+        this.onAutoStopCb?.();
+      }
+    }, MAX_RECORD_MS);
+  }
+
+  private stopMonitoring(): void {
+    if (this.rafId !== null) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+    if (this.maxTimer) { clearTimeout(this.maxTimer); this.maxTimer = null; }
+    this.analyser = null;
+    if (this.audioCtx) {
+      try { void this.audioCtx.close(); } catch { /* noop */ }
+      this.audioCtx = null;
+    }
+  }
+
+  private releaseStream(): void {
+    if (this.stream) {
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+    }
+  }
+
+  stop(): Promise<Blob> {
+    this.stopMonitoring();
+    const rec = this.rec;
+
+    if (!rec || rec.state === "inactive") {
+      this.releaseStream();
+      return Promise.resolve(new Blob(this.chunks, { type: "audio/webm" }));
+    }
+
+    return new Promise((resolve) => {
+      // Seguridad: si onstop no dispara (bug de Android), resolvemos igual.
+      const safety = setTimeout(() => {
+        this.releaseStream();
+        resolve(new Blob(this.chunks, { type: rec.mimeType || "audio/webm" }));
+      }, 2500);
+
+      rec.onstop = () => {
+        clearTimeout(safety);
+        this.releaseStream();
+        resolve(new Blob(this.chunks, { type: rec.mimeType || "audio/webm" }));
       };
 
       try {
-        this.rec.stop();
+        rec.stop();
       } catch {
-        this.cleanup();
-        resolve(new Blob([this.accumulated.trim()], { type: "text/plain" }));
+        clearTimeout(safety);
+        this.releaseStream();
+        resolve(new Blob(this.chunks, { type: "audio/webm" }));
       }
     });
   }
 
   cancel(): void {
-    this.cleanup();
-    try { this.rec?.stop(); } catch { /* noop */ }
+    this.stopMonitoring();
+    try {
+      if (this.rec && this.rec.state !== "inactive") this.rec.stop();
+    } catch { /* noop */ }
+    this.rec = null;
+    this.releaseStream();
+    this.chunks = [];
   }
 }
 
 export async function transcribe(audioBlob: Blob): Promise<string> {
-  if (audioBlob.type === "text/plain") {
-    return audioBlob.text();
-  }
+  if (audioBlob.size < 1) return "";
   const res = await fetch(`${API_BASE}/api/transcribe`, {
     method: "POST",
     headers: { "Content-Type": audioBlob.type || "audio/webm" },
     body: audioBlob,
   });
   if (!res.ok) throw new Error(`Transcripción fallida: ${res.status}`);
-  const data = await res.json() as { text: string };
+  const data = (await res.json()) as { text: string };
   return data.text ?? "";
 }
