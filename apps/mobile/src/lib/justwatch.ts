@@ -84,47 +84,65 @@ export type JwResult = {
   deeplinkIos: string | null;
 };
 
+import { AppLauncher } from "@capacitor/app-launcher";
+
 function isAndroid(): boolean {
   return /android/i.test(navigator.userAgent);
 }
 
-// Esquemas custom de las apps de streaming. Android los resuelve vía ACTION_VIEW
-// (compatible con Capacitor) y abren la app nativa si está instalada.
-// Solo incluimos los que tienen un scheme público confiable; el resto cae a la
-// URL web (que en muchas apps está registrada como App Link y abre la app igual).
-const ANDROID_SCHEME: Record<string, string> = {
-  Netflix: "nflx://www.netflix.com/search?q=",
-  "Disney+": "disneyplus://",
-  "Star+": "disneyplus://",
+// Esquema custom de cada app de streaming para detectar/abrir la app nativa.
+// `probe`: URL mínima para preguntar si la app está instalada (canOpenUrl).
+// `open`: a dónde llevar dentro de la app (búsqueda del título si se puede).
+// Para los packages sin scheme público confiable caemos a la URL web (App Link).
+type Scheme = { probe: string; open: (title: string) => string };
+const SCHEMES: Record<string, Scheme> = {
+  Netflix: { probe: "nflx://", open: (t) => `nflx://www.netflix.com/search?q=${encodeURIComponent(t)}` },
+  "Disney+": { probe: "disneyplus://", open: () => "disneyplus://" },
+  "Star+": { probe: "disneyplus://", open: () => "disneyplus://" },
 };
 
-// Abre el contenido en la app nativa si está instalada.
-// Prioridad: deeplink nativo de JustWatch → scheme custom de la plataforma → web.
-// Las URLs https de título suelen ser App Links y abren la app igual.
-export function openInApp(platform: string, webUrl: string, title?: string): void {
+async function launch(url: string): Promise<boolean> {
+  try {
+    await AppLauncher.openUrl({ url });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function appInstalled(probe: string): Promise<boolean> {
+  try {
+    const { value } = await AppLauncher.canOpenUrl({ url: probe });
+    return value;
+  } catch {
+    return false;
+  }
+}
+
+// Abre el contenido en la app nativa si está instalada; si no, la web.
+// Usa @capacitor/app-launcher para detectar (canOpenUrl) y abrir (openUrl).
+export async function openInApp(platform: string, webUrl: string, title?: string): Promise<void> {
   if (isAndroid()) {
-    const scheme = ANDROID_SCHEME[platform];
-    if (scheme) {
-      const url = scheme.endsWith("=") && title ? scheme + encodeURIComponent(title) : scheme;
-      window.open(url, "_system");
-      return;
+    const s = SCHEMES[platform];
+    if (s && title && (await appInstalled(s.probe))) {
+      if (await launch(s.open(title))) return;
     }
   }
-  // '_system' → ACTION_VIEW; si la app registró App Links para esta URL, abre la app
+  // Fallback: '_system' → ACTION_VIEW; si la app registró App Links, abre la app igual
   window.open(webUrl, "_system");
 }
 
-export function openNative(result: JwResult): void {
+export async function openNative(result: JwResult): Promise<void> {
   // Para títulos confirmados, JustWatch da la URL exacta del título. Esa URL
-  // suele estar registrada como App Link y abre la app directo en ese título
-  // (mejor que un scheme de búsqueda, que perdería el título exacto).
+  // suele estar registrada como App Link y abre la app directo en ese título.
   if (isAndroid()) {
-    // Deeplink nativo exacto de JustWatch (scheme custom → app, no http)
+    // 1) Deeplink nativo exacto de JustWatch (scheme custom → app, no http)
     if (result.deeplinkAndroid && !/^https?:/i.test(result.deeplinkAndroid)) {
-      window.open(result.deeplinkAndroid, "_system");
-      return;
+      if (await launch(result.deeplinkAndroid)) return;
     }
+    // 2) URL de título (App Link) → abre la app en ese título si está instalada
     if (result.standardWebURL) {
+      if (await launch(result.standardWebURL)) return;
       window.open(result.standardWebURL, "_system");
       return;
     }

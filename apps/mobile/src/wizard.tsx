@@ -310,7 +310,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       availability_confirmed: !!avail?.confirmed,
     });
     if (avail?.confirmed) {
-      openNative(avail);
+      void openNative(avail);
     } else {
       const q = encodeURIComponent(current.title);
       const urls: Record<string, string> = {
@@ -324,7 +324,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       };
       const webUrl = urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`;
       // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
-      openInApp(current.platform, webUrl, current.title);
+      void openInApp(current.platform, webUrl, current.title);
     }
   };
 
