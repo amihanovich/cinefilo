@@ -95,7 +95,6 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
 
     try {
       await recorder.start({
-        onVolume: setVolume,
         onInterimText: (text) => {
           if (mountedRef.current && text) setHint(`"${text}"`);
         },
