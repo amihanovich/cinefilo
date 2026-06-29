@@ -2,7 +2,7 @@
 // Modo guest: todo en localStorage. Sin Supabase auth por ahora.
 
 import { useEffect, useState } from "react";
-import { X, ChevronLeft, ChevronDown, ExternalLink } from "lucide-react";
+import { X, ChevronLeft, ChevronDown, ExternalLink, Tv } from "lucide-react";
 import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { fetchPostersClient } from "../lib/posters";
 
@@ -247,6 +247,24 @@ function MainSection({
           <p className="mt-0.5 text-xs text-muted-foreground/60">
             Usada para verificar disponibilidad. Se detecta sola, pero podés corregirla.
           </p>
+        </div>
+      </section>
+
+      {/* Cinéfilo TV (placeholder — próximamente) */}
+      <section>
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Cinéfilo TV
+        </h3>
+        <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 to-purple-500/10 px-4 py-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
+            <Tv className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Descargate Cinéfilo para TV</p>
+            <p className="mt-0.5 text-xs text-muted-foreground/70">
+              Viví la experiencia directo en tu televisor. Próximamente.
+            </p>
+          </div>
         </div>
       </section>
     </div>
