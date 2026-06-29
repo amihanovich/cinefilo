@@ -529,6 +529,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           open={accountOpen}
           onClose={() => setAccountOpen(false)}
           onPlatformsChange={setPlatforms}
+          onCountryChange={() => { setAvailability({}); void loadAvailability(items); }}
         />
 
         {voiceMode && (

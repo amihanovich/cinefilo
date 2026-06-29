@@ -2,7 +2,7 @@
 // Modo guest: todo en localStorage. Sin Supabase auth por ahora.
 
 import { useEffect, useState } from "react";
-import { X, ChevronLeft, ExternalLink } from "lucide-react";
+import { X, ChevronLeft, ChevronDown, ExternalLink } from "lucide-react";
 import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { fetchPostersClient } from "../lib/posters";
 
@@ -11,6 +11,19 @@ const PLATFORMS_KEY = "queveo:guest:default_platforms";
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
 const COUNTRY_KEY = "cinefilo:country";
+
+// Países soportados para verificar disponibilidad (códigos JustWatch/ISO).
+const COUNTRIES: { code: string; label: string }[] = [
+  { code: "AR", label: "🇦🇷 Argentina" },
+  { code: "MX", label: "🇲🇽 México" },
+  { code: "ES", label: "🇪🇸 España" },
+  { code: "CL", label: "🇨🇱 Chile" },
+  { code: "CO", label: "🇨🇴 Colombia" },
+  { code: "PE", label: "🇵🇪 Perú" },
+  { code: "UY", label: "🇺🇾 Uruguay" },
+  { code: "BR", label: "🇧🇷 Brasil" },
+  { code: "US", label: "🇺🇸 Estados Unidos" },
+];
 
 type WatchlistItem = { title: string; platform: string; type?: string };
 type LikedItem = { title: string; platform: string; type?: string };
@@ -40,14 +53,21 @@ interface AccountSheetProps {
   open: boolean;
   onClose: () => void;
   onPlatformsChange?: (platforms: string[]) => void;
+  onCountryChange?: (country: string) => void;
 }
 
-export function AccountSheet({ open, onClose, onPlatformsChange }: AccountSheetProps) {
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange }: AccountSheetProps) {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [liked, setLiked] = useState<LikedItem[]>([]);
-  const country = localStorage.getItem(COUNTRY_KEY) ?? "AR";
+  const [country, setCountry] = useState<string>(() => localStorage.getItem(COUNTRY_KEY) ?? "AR");
+
+  const changeCountry = (code: string) => {
+    setCountry(code);
+    localStorage.setItem(COUNTRY_KEY, code);
+    onCountryChange?.(code);
+  };
 
   useEffect(() => {
     if (open) {
@@ -109,6 +129,7 @@ export function AccountSheet({ open, onClose, onPlatformsChange }: AccountSheetP
               watchlistCount={watchlist.length}
               likedCount={liked.length}
               country={country}
+              onCountryChange={changeCountry}
               onOpenWatchlist={() => setSection("watchlist")}
               onOpenLiked={() => setSection("liked")}
             />
@@ -129,6 +150,7 @@ function MainSection({
   watchlistCount,
   likedCount,
   country,
+  onCountryChange,
   onOpenWatchlist,
   onOpenLiked,
 }: {
@@ -137,6 +159,7 @@ function MainSection({
   watchlistCount: number;
   likedCount: number;
   country: string;
+  onCountryChange: (code: string) => void;
   onOpenWatchlist: () => void;
   onOpenLiked: () => void;
 }) {
@@ -208,12 +231,21 @@ function MainSection({
       {/* Región */}
       <section>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Región detectada
+          Mi región
         </h3>
-        <div className="rounded-2xl bg-muted px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">{country}</span>
+        <div className="relative rounded-2xl bg-muted px-4 py-3">
+          <select
+            value={COUNTRIES.some((c) => c.code === country) ? country : "AR"}
+            onChange={(e) => onCountryChange(e.target.value)}
+            className="w-full appearance-none bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+          >
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-3.5 h-4 w-4 text-muted-foreground/60" />
           <p className="mt-0.5 text-xs text-muted-foreground/60">
-            Usada para verificar disponibilidad
+            Usada para verificar disponibilidad. Se detecta sola, pero podés corregirla.
           </p>
         </div>
       </section>
