@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Globe2,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Globe2, Loader2,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
@@ -568,7 +568,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {/* Chat */}
         <div className="shrink-0 px-5 pt-3 pb-3">
-          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "opacity-50 pointer-events-none")}>
+          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "pointer-events-none")}>
             <button
               onClick={() => void toggleMic()}
               disabled={loading}
@@ -594,7 +594,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               disabled={!chatText.trim() || loading}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
             >
-              <Send className="h-3.5 w-3.5" />
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
           </div>
         </div>
