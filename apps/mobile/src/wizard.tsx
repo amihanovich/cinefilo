@@ -438,7 +438,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {galleryLoading ? (
             <div className="flex h-full flex-col items-center justify-center gap-3">
-              <Sparkles className="h-8 w-8 animate-pulse text-primary" />
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Buscando más opciones...</p>
             </div>
           ) : (
@@ -798,7 +798,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   if (loading) {
     return (
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-background">
-        <Sparkles className="h-8 w-8 animate-pulse text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
       </div>
     );
