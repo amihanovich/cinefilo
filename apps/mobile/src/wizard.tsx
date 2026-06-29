@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Globe2,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters } from "./lib/api";
@@ -600,143 +600,144 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         </div>
 
         {/* Hero card */}
-        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2" style={!current ? { visibility: "hidden" } : {}}>
-          <div
-            className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
-            onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
-            onTouchEnd={(e) => {
-              const dx = e.changedTouches[0].clientX - touchStartX.current;
-              if (dx < -50 && hasNext) navigate(safeIndex + 1);
-              else if (dx > 50 && hasPrev) navigate(safeIndex - 1);
-            }}
-          >
-            <div className="flex h-full">
-              {/* Poster */}
-              <div className="w-28 shrink-0 overflow-hidden">
-                {poster ? (
-                  <img src={poster} alt={current.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="h-full w-full animate-pulse bg-muted" />
-                )}
-              </div>
-
-              {/* Info */}
-              <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-                {/* Título + copiar */}
-                <div className="flex items-start gap-2">
-                  <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
-                  <button
-                    onClick={() => copyTitle(current.title, current.platform)}
-                    className="mt-0.5 shrink-0 text-muted-foreground/40 active:scale-90 transition-transform"
-                    aria-label="Copiar título"
-                  >
-                    {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>
-                    {label}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {current.type} · {current.duration}{current.year && ` · ${current.year}`}
-                  </span>
-                  {current.ageRating && (
-                    <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
-                      {current.ageRating}
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-0.5">
-                  {avail === undefined ? (
-                    <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
-                  ) : avail.confirmed ? (
-                    <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/50">⚠ No confirmado en tu región</span>
-                  )}
-                </div>
-
-                <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
-                  {current.reason}
-                </p>
-
-                <button
-                  onClick={() => openStreaming(current, avail)}
-                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
-                  style={{ backgroundColor: platformColor }}
-                >
-                  ▶ Ver ahora en {label}
-                </button>
-
-                {/* Like + Guardar */}
-                <div className="mt-2 flex gap-2">
-                  <button
-                    onClick={() => toggleLike(current)}
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                      liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                    )}
-                  >
-                    <ThumbsUp className="h-3 w-3" />
-                    {liked.has(current.title) ? "¡Me gustó!" : "Me gustó"}
-                  </button>
-                  <button
-                    onClick={() => toggleWatchlist(current)}
-                    className={cn(
-                      "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                      watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground"
-                    )}
-                  >
-                    <Bookmark className="h-3 w-3" />
-                    {watchlisted.has(current.title) ? "Guardado" : "Ver luego"}
-                  </button>
-                </div>
-              </div>
+        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2">
+          {filterConfirmed && displayItems.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+              <Globe2 className="h-8 w-8 text-muted-foreground/20" />
+              <p className="text-sm text-muted-foreground">Ninguno confirmado disponible en tu región.</p>
+              <button
+                onClick={() => { setFilterConfirmed(false); setCurrentIndex(0); }}
+                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground active:scale-95 transition-transform"
+              >
+                Ver todos
+              </button>
             </div>
-          </div>
+          ) : current ? (
+            <>
+              <div
+                className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+                onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+                onTouchEnd={(e) => {
+                  const dx = e.changedTouches[0].clientX - touchStartX.current;
+                  if (dx < -50 && hasNext) navigate(safeIndex + 1);
+                  else if (dx > 50 && hasPrev) navigate(safeIndex - 1);
+                }}
+              >
+                <div className="flex h-full">
+                  {/* Poster */}
+                  <div className="w-28 shrink-0 overflow-hidden">
+                    {poster ? (
+                      <img src={poster} alt={current.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full animate-pulse bg-muted" />
+                    )}
+                  </div>
 
-          <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
-            deslizá para ver alternativas
-          </p>
+                  {/* Info */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+                    {/* Título + copiar */}
+                    <div className="flex items-start gap-2">
+                      <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
+                      <button
+                        onClick={() => copyTitle(current.title, current.platform)}
+                        className="mt-0.5 shrink-0 text-muted-foreground/40 active:scale-90 transition-transform"
+                        aria-label="Copiar título"
+                      >
+                        {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>
+                        {label}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {current.type} · {current.duration}{current.year && ` · ${current.year}`}
+                      </span>
+                      {current.ageRating && (
+                        <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
+                          {current.ageRating}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mt-0.5">
+                      {avail === undefined ? (
+                        <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
+                      ) : avail.confirmed ? (
+                        <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/50">⚠ No confirmado en tu región</span>
+                      )}
+                    </div>
+
+                    <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
+                      {current.reason}
+                    </p>
+
+                    <button
+                      onClick={() => openStreaming(current, avail)}
+                      className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
+                      style={{ backgroundColor: platformColor }}
+                    >
+                      ▶ Ver ahora en {label}
+                    </button>
+
+                    {/* Like + Guardar */}
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={() => toggleLike(current)}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
+                          liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                        )}
+                      >
+                        <ThumbsUp className="h-3 w-3" />
+                        {liked.has(current.title) ? "¡Me gustó!" : "Me gustó"}
+                      </button>
+                      <button
+                        onClick={() => toggleWatchlist(current)}
+                        className={cn(
+                          "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
+                          watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground"
+                        )}
+                      >
+                        <Bookmark className="h-3 w-3" />
+                        {watchlisted.has(current.title) ? "Guardado" : "Ver luego"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="shrink-0 text-center text-[10px] text-muted-foreground/40">
+                deslizá para ver alternativas
+              </p>
+            </>
+          ) : null}
         </div>
 
         {/* Navegación + filtro + "Ver más" */}
         <div className="shrink-0 px-5 pt-1 pb-8">
 
-          {/* Filtro de disponibilidad — solo visible cuando tenemos datos de JustWatch */}
+          {/* Filtro de disponibilidad — toggle discreto, solo cuando hay datos de JustWatch */}
           {availabilityLoaded && (
-            <div className="mb-2 flex justify-center">
+            <div className="mb-3 flex justify-center">
               <button
                 onClick={() => { setFilterConfirmed((f) => !f); setCurrentIndex(0); }}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold transition-all active:scale-95",
-                  filterConfirmed
-                    ? "border-green-500/50 bg-green-500/10 text-green-400"
-                    : "border-border/50 text-muted-foreground/50"
+                  "flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-medium transition-all active:scale-95",
+                  filterConfirmed ? "bg-green-500/10 text-green-400" : "text-muted-foreground/40"
                 )}
               >
-                <span>{filterConfirmed ? "✓" : "○"}</span>
-                <span>{filterConfirmed ? "Solo confirmados en tu región" : "Todos los resultados"}</span>
+                <Globe2 className="h-3 w-3" />
+                <span>{filterConfirmed ? "Solo disponibles en tu región" : "Mostrando todo"}</span>
               </button>
             </div>
           )}
 
-          {/* Estado vacío cuando el filtro no tiene resultados */}
-          {filterConfirmed && displayItems.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                Ninguno confirmado disponible en tu región.
-              </p>
-              <button
-                onClick={() => setFilterConfirmed(false)}
-                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground active:scale-95"
-              >
-                Ver todos
-              </button>
-            </div>
-          ) : (
+          {/* Navegación — oculta cuando el filtro activo no tiene resultados */}
+          {!(filterConfirmed && displayItems.length === 0) && (
             <div className="flex items-center gap-3">
               <button
                 onClick={() => navigate(safeIndex - 1)}
