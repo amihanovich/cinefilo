@@ -25,9 +25,12 @@ interface VoiceAgentProps {
   onDismiss: () => void;
 }
 
-const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 
 const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa peli o serie que querés ver hoy. ¿Empezamos? Simplemente decime qué tenés ganas de ver.";
+// Aperturas siguientes en la misma sesión: saludo corto (menos costo TTS, menos espera).
+const GREETING_SHORT = "Decime qué tenés ganas de ver.";
+let greetedThisSession = false;
 
 export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>("speaking"); // starts speaking greeting
@@ -149,7 +152,9 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     const greet = async () => {
       setState("speaking");
       setHint("...");
-      await speak(GREETING);
+      const text = greetedThisSession ? GREETING_SHORT : GREETING;
+      greetedThisSession = true;
+      await speak(text);
       if (mountedRef.current) {
         await startListening();
       }

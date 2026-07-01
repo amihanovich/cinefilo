@@ -122,3 +122,50 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
     cinephile_note: parsed.cinephile_note || null,
   };
 }
+
+const ASK_SYSTEM = `Sos Cinéfilo: un experto cinematográfico apasionado, como esos críticos de los programas de TV de los 60/70/80 que con una frase te abrían un mundo. El usuario está mirando la ficha de un título y te hace una pregunta sobre él (de qué trata, si vale la pena, el director, con qué compararla, etc.).
+
+Reglas:
+- Respondé en español rioplatense, tono conversacional y cálido, sin emojis ni listas.
+- Máximo 70 palabras. Directo al punto, con criterio propio.
+- NO spoilees giros ni finales.
+- Si preguntan si vale la pena, jugátela con una opinión clara.
+- Devolvé SOLO el texto de la respuesta, sin JSON ni formato.`;
+
+/**
+ * Pregunta conversacional sobre un título puntual (no re-recomienda).
+ * @param {object} params
+ * @param {string} params.title - título sobre el que pregunta
+ * @param {string} params.platform
+ * @param {string} params.question - la pregunta del usuario
+ * @returns {Promise<{answer: string}>}
+ */
+export async function askAboutTitle({ title, platform, question }) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      system: ASK_SYSTEM,
+      messages: [{
+        role: "user",
+        content: `Título en pantalla: "${String(title)}" (en ${String(platform)}).\n\nPregunta del usuario: ${String(question)}`,
+      }],
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
+  }
+  const data = await res.json();
+  const text = (data.content && data.content[0] && data.content[0].text) || "";
+  return { answer: text.trim() };
+}

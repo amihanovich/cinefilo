@@ -189,28 +189,51 @@ export async function jwSearch(
     return { confirmed: false, standardWebURL: null, deeplinkAndroid: null, deeplinkIos: null };
   }
 
+  type JwNode = { content?: { title?: string }; offers?: JwOffer[] };
   const edges =
-    (data as { data?: { popularTitles?: { edges?: { node?: {
-      offers?: JwOffer[];
-    } }[] } } })
+    (data as { data?: { popularTitles?: { edges?: { node?: JwNode }[] } } })
     ?.data?.popularTitles?.edges ?? [];
 
+  // IMPORTANTE: la búsqueda de JustWatch devuelve varios títulos "populares" que
+  // matchean el texto — el primero puede ser OTRA película. Scoreamos el título
+  // de cada resultado contra el pedido y solo confirmamos si realmente coincide.
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const scoreTitle = (result: string, expected: string): number => {
+    const r = norm(result);
+    const e = norm(expected);
+    if (!r || !e) return 0;
+    if (r === e) return 3;
+    if (r.startsWith(e) || e.startsWith(r)) return 2;
+    if (r.includes(e) || e.includes(r)) return 1;
+    return 0;
+  };
+
+  let best: { score: number; offer: JwOffer } | null = null;
   for (const edge of edges) {
-    const offers: JwOffer[] = (edge?.node as { offers?: JwOffer[] })?.offers ?? [];
-    // Filtrar solo streaming por suscripción (FLATRATE) en la plataforma pedida
+    const node = edge?.node;
+    if (!node) continue;
+    const offers: JwOffer[] = node.offers ?? [];
+    // Solo streaming por suscripción (FLATRATE) en la plataforma pedida
     const match = offers.find(
       (o) =>
         o.monetizationType === "FLATRATE" &&
         wantedPackages.includes(o.package.technicalName),
     );
-    if (match) {
-      return {
-        confirmed: true,
-        standardWebURL: match.standardWebURL,
-        deeplinkAndroid: match.deeplinkAndroid,
-        deeplinkIos: match.deeplinkIos,
-      };
-    }
+    if (!match) continue;
+
+    const score = scoreTitle(node.content?.title ?? "", title);
+    if (score === 0) continue; // título distinto → no es lo que buscamos
+    if (!best || score > best.score) best = { score, offer: match };
+    if (best.score === 3) break; // match exacto, no hace falta seguir
+  }
+
+  if (best) {
+    return {
+      confirmed: true,
+      standardWebURL: best.offer.standardWebURL,
+      deeplinkAndroid: best.offer.deeplinkAndroid,
+      deeplinkIos: best.offer.deeplinkIos,
+    };
   }
 
   return { confirmed: false, standardWebURL: null, deeplinkAndroid: null, deeplinkIos: null };

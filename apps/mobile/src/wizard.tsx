@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Globe2, Loader2, Tv, X,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, Tv, X,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters } from "./lib/api";
+import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
@@ -18,7 +18,9 @@ import type { JwResult } from "./lib/justwatch";
 // ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable,
+// pero los mapeos internos (color, label, deeplink) se mantienen para datos viejos.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 const COUNTRY_KEY = "cinefilo:country";
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 const TV_BANNER_KEY = "cinefilo:tvBannerDismissed";
@@ -45,19 +47,49 @@ function removeFromStore(key: string, title: string): void {
   } catch { /* noop */ }
 }
 
+// Fallback offline: deduce el país desde la timezone del dispositivo.
+function countryFromTimezone(): string | null {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    if (tz.startsWith("America/Argentina")) return "AR";
+    const map: Record<string, string> = {
+      "America/Montevideo": "UY",
+      "America/Santiago": "CL",
+      "America/Mexico_City": "MX",
+      "America/Bogota": "CO",
+      "America/Lima": "PE",
+      "America/Sao_Paulo": "BR",
+      "Europe/Madrid": "ES",
+    };
+    return map[tz] ?? null;
+  } catch { return null; }
+}
+
 async function detectCountry(): Promise<void> {
   if (localStorage.getItem(COUNTRY_KEY)) return;
   try {
     const res = await fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const code = (await res.text()).trim().toUpperCase();
-      if (/^[A-Z]{2}$/.test(code)) localStorage.setItem(COUNTRY_KEY, code);
+      if (/^[A-Z]{2}$/.test(code)) {
+        localStorage.setItem(COUNTRY_KEY, code);
+        return;
+      }
     }
   } catch { /* silencioso */ }
+  // ipapi falló (rate limit / sin red): timezone del dispositivo como fallback
+  const tzCountry = countryFromTimezone();
+  if (tzCountry) localStorage.setItem(COUNTRY_KEY, tzCountry);
 }
 function getCountry(): string { return localStorage.getItem(COUNTRY_KEY) ?? "AR"; }
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
+}
+
+// ¿Es una pregunta sobre el título en pantalla (y no un pedido de recomendaciones nuevas)?
+function isDetailQuery(q: string): boolean {
+  const t = q.toLowerCase();
+  return /contame|explicame|explicá|por qu[eé]|de qu[eé] trata|sinopsis|argumento|director|reparto|elenco|cast|qui[eé]n|cu[aá]ndo sali[oó]|vale la pena|es buena|es mala|opini[oó]n|m[aá]s info|final|se parece|similar a|c[oó]mo termina|d[oó]nde se film[oó]|actores|actriz|protagonista/.test(t);
 }
 
 // ── Componente principal ─────────────────────────────────────────────────────
@@ -83,15 +115,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
-  const [cinephileNote, setCinephileNote] = useState<string | null>(null);
+  const [agentReply, setAgentReply] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Todos los títulos ya mostrados en la sesión — evita que la IA repita
+  // recomendaciones de búsquedas anteriores (no solo del deck actual).
+  const shownTitlesRef = useRef<Set<string>>(new Set());
+  const rememberShown = (recos: Recommendation[]) => {
+    for (const r of recos) shownTitlesRef.current.add(r.title);
+  };
+  const excludeList = () => [...shownTitlesRef.current].slice(-40); // cap para no inflar el prompt
+
+  const showError = (msg: string) => {
+    setError(msg);
+    setTimeout(() => setError(null), 4000);
+  };
 
   // UI states
   const [voiceMode, setVoiceMode] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [micRecording, setMicRecording] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [filterConfirmed, setFilterConfirmed] = useState(false);
   const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
   const [tvBanner, setTvBanner] = useState(() => localStorage.getItem(TV_BANNER_KEY) !== "1");
@@ -108,6 +153,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   useEffect(() => {
     if (screen !== "welcome") return;
     void detectCountry();
+    warmupBackend(); // despierta Railway mientras el usuario mira el welcome
     const t = setTimeout(() => setScreen("platforms"), 2000);
     return () => clearTimeout(t);
   }, [screen]);
@@ -125,7 +171,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
   // ── Recomendación normal (5 cards) ───────────────────────────────────────
   const getReco = async (userQuery: string, queryType: "auto" | "text" | "voice" = "text") => {
-    setCinephileNote(null);
+    setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     const ctx = inferContext();
@@ -138,7 +184,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         contextHint: contextToPromptHint(ctx),
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
-        excludeTitles: items.map((i) => i.title),
+        excludeTitles: excludeList(),
         alternativesCount: 4,
       });
 
@@ -147,12 +193,12 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       const allItems = [data.main, ...(data.alternatives ?? []).slice(0, 4)];
       const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
 
+      rememberShown(allItems);
       setMessages([...newMessages, { role: "assistant", content: assistantSummary }]);
       setItems(allItems);
       setPosters({});
       setAvailability({});
       setCurrentIndex(0);
-      setCinephileNote(data.cinephile_note ?? null);
       setScreen("magic");
       setLoading(false);
 
@@ -163,6 +209,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
+      showError("No pudimos buscar. Revisá tu conexión e intentá de nuevo.");
     }
   };
 
@@ -176,7 +223,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     const ctx = inferContext();
-    const allExcluded = [...items.map((i) => i.title)];
 
     try {
       const data = await fetchRecommendation({
@@ -185,13 +231,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         contextHint: contextToPromptHint(ctx),
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
-        excludeTitles: allExcluded,
+        excludeTitles: excludeList(),
         alternativesCount: 15,
       });
 
       if (!data?.main) throw new Error("Sin resultado");
 
       const all = [data.main, ...(data.alternatives ?? [])];
+      rememberShown(all);
       setGalleryItems(all);
       setGalleryLoading(false);
       track("gallery_opened", { titles_shown: all.length });
@@ -200,6 +247,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     } catch {
       setGalleryLoading(false);
       setScreen("magic");
+      showError("No pudimos cargar más opciones. Intentá de nuevo.");
     }
   };
 
@@ -218,6 +266,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // ── Navegación ────────────────────────────────────────────────────────────
   const navigate = (newIndex: number) => {
     setCurrentIndex(newIndex);
+    setAgentReply(null); // la respuesta era sobre la card anterior
     track("card_viewed", {
       card_index: newIndex,
       title: items[newIndex]?.title,
@@ -230,6 +279,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const text = chatText.trim();
     if (!text || loading) return;
     setChatText("");
+
+    // Pregunta sobre el título en pantalla → respuesta conversacional,
+    // SIN pisar el deck actual con recomendaciones nuevas.
+    const currentItem = items[currentIndex];
+    if (screen === "magic" && currentItem && isDetailQuery(text)) {
+      setLoading(true);
+      track("detail_question", { title: currentItem.title });
+      try {
+        const { answer } = await fetchAsk({
+          title: currentItem.title,
+          platform: currentItem.platform,
+          question: text,
+        });
+        setAgentReply(answer || null);
+      } catch {
+        showError("No pude responder eso. Intentá de nuevo.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     const turnNumber = messages.filter((m) => m.role === "user").length + 1;
     track("refinement_made", { turn_number: turnNumber });
     await getReco(text, "text");
@@ -275,12 +346,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // ── Voice agent ───────────────────────────────────────────────────────────
   const handleVoiceResult = (result: VoiceResult) => {
     const allItems = result.items;
+    rememberShown(allItems);
+    setAgentReply(null);
     setItems(allItems);
     setPosters({});
     setAvailability({});
     setCurrentIndex(0);
     setMessages(result.messages);
-    setCinephileNote(result.cinephileNote);
     setScreen("magic");
     track("recommendation_received", { query_type: "voice" });
     void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
@@ -395,6 +467,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         </div>
 
         <div className="mt-auto pt-8">
+          {error && (
+            <p className="mb-3 text-center text-xs font-semibold text-red-400">{error}</p>
+          )}
           {loading ? (
             <div className="flex flex-col items-center gap-3">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
@@ -516,21 +591,26 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    // Filtro de disponibilidad: solo muestra confirmados si está activo
-    const displayItems = filterConfirmed
-      ? items.filter((i) => availability[i.title]?.confirmed === true)
-      : items;
-    const safeIndex = Math.min(currentIndex, Math.max(0, displayItems.length - 1));
-    const current = displayItems[safeIndex];
+    const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
+    const current = items[safeIndex];
     const poster = current ? posters[current.title] : undefined;
     const avail = current ? availability[current.title] : undefined;
     const hasPrev = safeIndex > 0;
-    const hasNext = safeIndex < displayItems.length - 1;
+    const hasNext = safeIndex < items.length - 1;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
 
     return (
       <div className="relative flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
+
+        {/* Barra de error (auto-desaparece) */}
+        {error && (
+          <div className="absolute inset-x-0 top-14 z-40 flex justify-center px-5">
+            <div className="rounded-full bg-red-500/90 px-4 py-2 text-[11px] font-semibold text-white shadow-lg">
+              {error}
+            </div>
+          </div>
+        )}
 
         <AccountSheet
           open={accountOpen}
@@ -620,7 +700,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               value={chatText}
               onChange={(e) => setChatText(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · nuevo set..."}
+              placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
               disabled={loading || micRecording}
               className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
             />
@@ -632,22 +712,26 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
             </button>
           </div>
+
+          {/* Respuesta del Cinéfilo sobre el título en pantalla */}
+          {agentReply && (
+            <div className="mt-2 flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p className="flex-1 text-[12px] leading-relaxed text-foreground/85">{agentReply}</p>
+              <button
+                onClick={() => setAgentReply(null)}
+                aria-label="Cerrar respuesta"
+                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Hero card */}
         <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2">
-          {filterConfirmed && displayItems.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-              <Globe2 className="h-8 w-8 text-muted-foreground/20" />
-              <p className="text-sm text-muted-foreground">Ninguno confirmado disponible en tu región.</p>
-              <button
-                onClick={() => { setFilterConfirmed(false); setCurrentIndex(0); }}
-                className="rounded-full border border-border px-4 py-2 text-xs font-semibold text-foreground active:scale-95 transition-transform"
-              >
-                Ver todos
-              </button>
-            </div>
-          ) : current ? (
+          {current ? (
             <>
               <div
                 className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
@@ -757,52 +841,46 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {/* Navegación + "Ver más" */}
         <div className="shrink-0 px-5 pt-1 pb-8">
+          {/* Dots de posición */}
+          <div className="mb-2 flex items-center justify-center gap-1">
+            {items.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => navigate(i)}
+                aria-label={`Ir a ${i + 1}`}
+                className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
+              />
+            ))}
+          </div>
 
-          {/* Navegación — oculta cuando el filtro activo no tiene resultados */}
-          {!(filterConfirmed && displayItems.length === 0) && (
-            <>
-              {/* Dots de posición (reemplazan al contador numérico) */}
-              <div className="mb-2 flex items-center justify-center gap-1">
-                {displayItems.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => navigate(i)}
-                    aria-label={`Ir a ${i + 1}`}
-                    className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
-                  />
-                ))}
-              </div>
+          {/* Anterior · Ver más (siempre) · Siguiente */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(safeIndex - 1)}
+              disabled={!hasPrev}
+              aria-label="Anterior"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
 
-              {/* Anterior · Ver más (siempre) · Siguiente */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate(safeIndex - 1)}
-                  disabled={!hasPrev}
-                  aria-label="Anterior"
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
+            <button
+              onClick={() => void loadGallery()}
+              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span className="text-sm">Ver más opciones</span>
+            </button>
 
-                <button
-                  onClick={() => void loadGallery()}
-                  className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  <span className="text-sm">Ver más opciones</span>
-                </button>
-
-                <button
-                  onClick={() => navigate(safeIndex + 1)}
-                  disabled={!hasNext}
-                  aria-label="Siguiente"
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </>
-          )}
+            <button
+              onClick={() => navigate(safeIndex + 1)}
+              disabled={!hasNext}
+              aria-label="Siguiente"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
     );

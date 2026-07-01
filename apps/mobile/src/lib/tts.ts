@@ -1,9 +1,9 @@
-// Text-to-speech via ElevenLabs. Devuelve una Promise que resuelve cuando el audio termina.
-// Modelo: eleven_multilingual_v2 — entiende español rioplatense con naturalidad.
+// Text-to-speech proxied por el backend (/api/tts → ElevenLabs).
+// La API key de ElevenLabs vive SOLO en el servidor — nunca en el bundle del
+// APK, de donde se podría extraer descompilando.
+// Devuelve una Promise que resuelve cuando el audio termina.
 
-// Antoni: voz multilingual cálida y clara. Cambiable por cualquier voice_id de ElevenLabs.
-const VOICE_ID = import.meta.env.VITE_ELEVENLABS_VOICE_ID ?? "ErXwobaYiN019PkySvjV";
-const MODEL = "eleven_multilingual_v2";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
 
 let currentAudio: HTMLAudioElement | null = null;
 
@@ -20,8 +20,7 @@ export async function speak(
   onStart?: () => void,
   onEnd?: () => void,
 ): Promise<void> {
-  const apiKey = import.meta.env.VITE_ELEVENLABS_KEY as string;
-  if (!apiKey || !text.trim()) {
+  if (!text.trim()) {
     onEnd?.();
     return;
   }
@@ -29,26 +28,14 @@ export async function speak(
   stopSpeaking();
 
   try {
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`, {
+    const res = await fetch(`${API_BASE}/api/tts`, {
       method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: MODEL,
-        voice_settings: {
-          stability: 0.72,      // más alto = menos variación al inicio, elimina el "ehh"
-          similarity_boost: 0.82,
-          style: 0.0,           // 0 evita que la voz "improvise" pausas o rellenos
-          use_speaker_boost: true,
-        },
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(20000),
     });
 
-    if (!res.ok) throw new Error(`ElevenLabs ${res.status}`);
+    if (!res.ok) throw new Error(`TTS ${res.status}`);
 
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -62,6 +49,8 @@ export async function speak(
       audio.play().catch(() => resolve());
     });
   } catch (e) {
+    // Modo silencioso: si el server no tiene ELEVENLABS_API_KEY o falla la red,
+    // la app sigue funcionando sin voz.
     console.warn("[tts]", e);
   } finally {
     onEnd?.();

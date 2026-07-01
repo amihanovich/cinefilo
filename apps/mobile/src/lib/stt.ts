@@ -17,6 +17,9 @@ export type RecordingState = "idle" | "recording" | "processing";
 const SPEAK_THRESHOLD = 0.045;
 // Cuánto silencio esperar tras la última voz antes de cortar y buscar.
 const DEFAULT_SILENCE_MS = 2000;
+// Si el usuario no habló nada en este tiempo, cortamos sin transcribir
+// (evita mandar segundos de silencio a Groq: costo + espera inútil).
+const NO_SPEECH_MS = 8000;
 // Tope duro de grabación por seguridad.
 const MAX_RECORD_MS = 20000;
 
@@ -31,6 +34,7 @@ export class VoiceRecorder {
   private onAutoStopCb?: () => void;
   private autoStopped = false;
   private hasSpoken = false;
+  private noSpeech = false; // cortó sin que el usuario hablara → no transcribir
   private lastLoudTime = 0;
 
   async start(opts?: {
@@ -42,6 +46,7 @@ export class VoiceRecorder {
     this.onAutoStopCb = opts?.onAutoStop;
     this.autoStopped = false;
     this.hasSpoken = false;
+    this.noSpeech = false;
     this.chunks = [];
     const silenceMs = opts?.silenceMs ?? DEFAULT_SILENCE_MS;
 
@@ -94,6 +99,15 @@ export class VoiceRecorder {
         return;
       }
 
+      // Si nunca habló, cortamos temprano y marcamos noSpeech (no se transcribe).
+      if (!this.hasSpoken && now - this.lastLoudTime > NO_SPEECH_MS && !this.autoStopped) {
+        this.autoStopped = true;
+        this.noSpeech = true;
+        this.stopMonitoring();
+        this.onAutoStopCb?.();
+        return;
+      }
+
       this.rafId = requestAnimationFrame(tick);
     };
     this.rafId = requestAnimationFrame(tick);
@@ -128,6 +142,15 @@ export class VoiceRecorder {
   stop(): Promise<Blob> {
     this.stopMonitoring();
     const rec = this.rec;
+
+    // Corte por no-speech: descartamos el audio (es silencio) y devolvemos
+    // un blob vacío — los callers muestran "No te escuché" sin llamar a Groq.
+    if (this.noSpeech) {
+      try { if (rec && rec.state !== "inactive") rec.stop(); } catch { /* noop */ }
+      this.releaseStream();
+      this.chunks = [];
+      return Promise.resolve(new Blob([], { type: "audio/webm" }));
+    }
 
     if (!rec || rec.state === "inactive") {
       this.releaseStream();

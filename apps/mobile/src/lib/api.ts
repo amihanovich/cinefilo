@@ -35,9 +35,32 @@ export async function fetchRecommendation(params: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
+    // Timeout duro: sin esto, si Railway cuelga el spinner queda infinito.
+    signal: AbortSignal.timeout(45000),
   });
   if (!res.ok) throw new Error(`/api/recommend ${res.status}`);
   return res.json() as Promise<RecoResponse>;
+}
+
+// Pregunta conversacional sobre el título en pantalla (no re-recomienda).
+export async function fetchAsk(params: {
+  title: string;
+  platform: string;
+  question: string;
+}): Promise<{ answer: string }> {
+  const res = await fetch(`${API_BASE}/api/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`/api/ask ${res.status}`);
+  return res.json() as Promise<{ answer: string }>;
+}
+
+// Warmup: despierta el server de Railway (cold start) sin bloquear nada.
+export function warmupBackend(): void {
+  void fetch(`${API_BASE}/api/ping`, { signal: AbortSignal.timeout(10000) }).catch(() => { /* silencioso */ });
 }
 
 export { fetchPostersClient as fetchPosters } from "./posters";

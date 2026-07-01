@@ -5,8 +5,9 @@ import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
-import { recommend } from "./recommend.mjs";
+import { recommend, askAboutTitle } from "./recommend.mjs";
 import { transcribeAudio } from "./transcribe.mjs";
+import { ttsAudio } from "./tts.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -86,11 +87,16 @@ http
       return;
     }
 
-    // Transcripción de voz via Groq Whisper (recibe audio binario).
+    // Transcripción de voz via Groq Whisper (recibe audio binario, máx 10MB).
     if (urlPath === "/api/transcribe" && req.method === "POST") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       const chunks = [];
-      req.on("data", (c) => chunks.push(c));
+      let size = 0;
+      req.on("data", (c) => {
+        size += c.length;
+        if (size > 10 * 1024 * 1024) { req.destroy(); return; }
+        chunks.push(c);
+      });
       req.on("end", () => {
         const buffer = Buffer.concat(chunks);
         const mimeType = req.headers["content-type"] || "audio/webm";
@@ -104,6 +110,70 @@ http
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // TTS via ElevenLabs, proxied (la API key vive solo en el servidor).
+    if (urlPath === "/api/tts" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (c) => { body += c; if (body.length > 16384) req.destroy(); });
+      req.on("end", () => {
+        let p = {};
+        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+        ttsAudio(p.text || "")
+          .then((buffer) => {
+            res.setHeader("Content-Type", "audio/mpeg");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(buffer);
+          })
+          .catch((e) => {
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ error: String((e && e.message) || e) }));
+          });
+      });
+      return;
+    }
+    if (urlPath === "/api/tts" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Pregunta conversacional sobre un título (no re-recomienda).
+    if (urlPath === "/api/ask" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (c) => { body += c; if (body.length > 65536) req.destroy(); });
+      req.on("end", () => {
+        let p = {};
+        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+        sendJson(askAboutTitle({
+          title: p.title || "",
+          platform: p.platform || "",
+          question: p.question || "",
+        }));
+      });
+      return;
+    }
+    if (urlPath === "/api/ask" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Warmup: ping barato para despertar el server (Railway cold start).
+    if (urlPath === "/api/ping") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "application/json");
+      res.end('{"ok":true}');
       return;
     }
 

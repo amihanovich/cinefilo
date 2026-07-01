@@ -4,9 +4,11 @@
 import { useEffect, useState } from "react";
 import { X, ChevronLeft, ChevronDown, ExternalLink, Tv } from "lucide-react";
 import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
+import { openInApp } from "../lib/justwatch";
 import { fetchPostersClient } from "../lib/posters";
 
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
@@ -342,16 +344,15 @@ function ItemGallery({ items, emptyText }: { items: (WatchlistItem | LikedItem)[
                   <span className="text-[10px] text-muted-foreground/60">{platformLabel(item.platform)}</span>
                 </div>
               )}
-              <a
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 flex items-center gap-1 text-[10px] font-semibold"
+              {/* openInApp: <a target=_blank> no funciona en el WebView de Capacitor */}
+              <button
+                onClick={() => void openInApp(item.platform, link, item.title)}
+                className="mt-2 flex items-center gap-1 text-[10px] font-semibold active:scale-95 transition-transform"
                 style={{ color }}
               >
                 <ExternalLink className="h-2.5 w-2.5" />
                 Ver ahora
-              </a>
+              </button>
             </div>
           </div>
         );
