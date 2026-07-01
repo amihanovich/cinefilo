@@ -1,26 +1,26 @@
-// Analytics wrapper liviano.
-// Por defecto loguea en console.debug.
-// Para activar PostHog: instalá posthog-js, descomentá el bloque de init,
-// y agregá VITE_POSTHOG_KEY al .env.local.
+// Analytics via PostHog.
+// Se activa solo si VITE_POSTHOG_KEY está seteada al momento del build;
+// sin key, los eventos van a console.debug (modo desarrollo).
 
-type Tracker = { capture: (event: string, props?: Record<string, unknown>) => void };
+import posthog from "posthog-js";
 
-let tracker: Tracker | null = null;
+let active = false;
 
 export function initAnalytics(): void {
-  // Posthog opcional — solo se activa si está disponible como global.
-  // Para habilitarlo: npm install posthog-js en apps/mobile y descomentar:
-  //
-  // import posthog from "posthog-js";
-  // const key = import.meta.env.VITE_POSTHOG_KEY;
-  // if (key) { posthog.init(key, { api_host: "https://app.posthog.com", autocapture: false }); tracker = posthog; }
-  //
-  // Mientras tanto, los eventos se muestran en console.debug para desarrollo.
+  const key = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
+  if (!key) return;
+  posthog.init(key, {
+    api_host: "https://us.i.posthog.com",
+    autocapture: false,        // solo eventos explícitos via track()
+    capture_pageview: false,   // es una SPA de una sola pantalla
+    persistence: "localStorage",
+  });
+  active = true;
 }
 
 export function track(event: string, props?: Record<string, unknown>): void {
-  if (tracker) {
-    tracker.capture(event, props);
+  if (active) {
+    posthog.capture(event, props);
   } else {
     console.debug("[analytics]", event, props);
   }

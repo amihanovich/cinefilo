@@ -140,6 +140,18 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
   const [tvBanner, setTvBanner] = useState(() => localStorage.getItem(TV_BANNER_KEY) !== "1");
+  const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
+
+  useEffect(() => {
+    const goOffline = () => setOffline(true);
+    const goOnline = () => setOffline(false);
+    window.addEventListener("offline", goOffline);
+    window.addEventListener("online", goOnline);
+    return () => {
+      window.removeEventListener("offline", goOffline);
+      window.removeEventListener("online", goOnline);
+    };
+  }, []);
 
   const dismissTvBanner = () => {
     localStorage.setItem(TV_BANNER_KEY, "1");
@@ -467,6 +479,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         </div>
 
         <div className="mt-auto pt-8">
+          {offline && (
+            <p className="mb-3 text-center text-xs font-semibold text-amber-500">Sin conexión — conectate para buscar</p>
+          )}
           {error && (
             <p className="mb-3 text-center text-xs font-semibold text-red-400">{error}</p>
           )}
@@ -603,6 +618,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     return (
       <div className="relative flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
 
+        {/* Sin conexión (persistente mientras dure) */}
+        {offline && (
+          <div className="absolute inset-x-0 top-2 z-40 flex justify-center px-5">
+            <div className="rounded-full bg-amber-500/90 px-4 py-1.5 text-[11px] font-semibold text-black shadow-lg">
+              Sin conexión — algunas funciones no van a andar
+            </div>
+          </div>
+        )}
+
         {/* Barra de error (auto-desaparece) */}
         {error && (
           <div className="absolute inset-x-0 top-14 z-40 flex justify-center px-5">
@@ -688,12 +712,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               onClick={() => void toggleMic()}
               disabled={loading}
               className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
                 micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
               )}
               aria-label={micRecording ? "Detener" : "Grabar"}
             >
               <Mic className="h-4 w-4" />
+              {micRecording && (
+                <span className="pointer-events-none absolute inset-0 rounded-full bg-primary/40 animate-ping" />
+              )}
             </button>
             <input
               type="text"
@@ -789,7 +816,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                       ) : avail.confirmed ? (
                         <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
                       ) : (
-                        <span className="text-[10px] text-muted-foreground/50">⚠ No confirmado en tu región</span>
+                        <span className="text-[10px] text-muted-foreground/50">Verificalo al abrir la app</span>
                       )}
                     </div>
 
