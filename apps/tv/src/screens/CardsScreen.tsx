@@ -1,12 +1,18 @@
-// Hero card + fila de alternativas a escala 10-pies.
-// TODO(useDpad): navegación por control remoto físico — por ahora responde a
-// clicks (browser) y a los comandos del teléfono (FOCUS/NAVIGATE/PLAY).
+// Hero card + fila de alternativas a escala 10-pies, navegable con D-pad
+// (control físico) y con el teléfono (mismos comandos vía el bridge).
+//
+// Filas del dpad:
+//   - overlay de fallback abierto → [dismiss]
+//   - normal → [actions: "Ver ahora"] arriba, [alts: N posters] abajo
+// Enfocar una alternativa la vuelve el hero (preview en vivo, estilo Netflix).
 
+import { useEffect, type MutableRefObject } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Smartphone, X } from "lucide-react";
 import type { JwResult } from "../lib/justwatch";
 import type { DeckItem } from "../lib/media";
 import { colorForPlatform, platformLabel } from "../lib/deeplink";
 import { getCountry, cn } from "../lib/tv-utils";
+import { useDpad, type DpadBridge } from "../hooks/useDpad";
 
 interface CardsScreenProps {
   items: DeckItem[];
@@ -20,6 +26,8 @@ interface CardsScreenProps {
   paired: boolean;
   launchHint: { title: string; platform: string } | null;
   onDismissHint: () => void;
+  onBack: () => void;
+  bridgeRef: MutableRefObject<DpadBridge | null>;
 }
 
 export function CardsScreen({
@@ -34,7 +42,50 @@ export function CardsScreen({
   paired,
   launchHint,
   onDismissHint,
+  onBack,
+  bridgeRef,
 }: CardsScreenProps) {
+  const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
+  const current = items[safeIndex];
+
+  // Filas del dpad según haya overlay o no.
+  const rows = launchHint
+    ? [{ id: "dismiss", count: 1 }]
+    : [
+        { id: "actions", count: current?.platform ? 1 : 0 },
+        { id: "alts", count: items.length },
+      ];
+
+  const dpad = useDpad({
+    rows,
+    enabled: !(loading && items.length === 0),
+    onFocusChange: (rowId, col) => {
+      // Enfocar una alternativa la vuelve el hero.
+      if (rowId === "alts") onNavigate(col);
+    },
+    onSelect: (rowId, col) => {
+      if (rowId === "dismiss") {
+        onDismissHint();
+      } else if (rowId === "alts") {
+        const it = items[col];
+        if (it) onPlay(it);
+      } else if (rowId === "actions") {
+        if (current) onPlay(current);
+      }
+    },
+    onBack: () => {
+      if (launchHint) onDismissHint();
+      else onBack();
+    },
+  });
+
+  useEffect(() => {
+    bridgeRef.current = { move: dpad.move, select: dpad.select, setFocus: dpad.setFocus };
+    return () => {
+      bridgeRef.current = null;
+    };
+  }, [bridgeRef, dpad.move, dpad.select, dpad.setFocus]);
+
   if (loading && items.length === 0) {
     return (
       <div className="tv-safe flex h-screen w-screen flex-col items-center justify-center gap-4 bg-background">
@@ -43,9 +94,6 @@ export function CardsScreen({
       </div>
     );
   }
-
-  const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
-  const current = items[safeIndex];
 
   if (!current) {
     return (
@@ -64,7 +112,6 @@ export function CardsScreen({
 
   return (
     <div className="tv-safe relative flex h-screen w-screen flex-col gap-6 bg-background">
-      {/* Estado de conexión del teléfono */}
       <div className="flex items-center justify-between">
         <div />
         {paired && (
@@ -125,7 +172,10 @@ export function CardsScreen({
           {current.platform && (
             <button
               onClick={() => onPlay(current)}
-              className="tv-focus mt-4 w-fit rounded-full px-10 py-4 text-2xl font-bold text-white transition-transform"
+              className={cn(
+                "mt-4 w-fit rounded-full px-10 py-4 text-2xl font-bold text-white transition-transform",
+                dpad.isFocused("actions", 0) && "tv-focus",
+              )}
               style={{ backgroundColor: platformColor }}
             >
               ▶ Ver ahora en {label}
@@ -139,7 +189,7 @@ export function CardsScreen({
         <button
           onClick={() => onNavigate(safeIndex - 1)}
           disabled={!hasPrev}
-          className="tv-focus flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform disabled:opacity-20"
+          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform disabled:opacity-20"
         >
           <ChevronLeft className="h-8 w-8" />
         </button>
@@ -147,6 +197,7 @@ export function CardsScreen({
         <div className="flex flex-1 gap-4 overflow-hidden">
           {items.map((item, i) => {
             const p = posters[item.title];
+            const isFocused = dpad.isFocused("alts", i);
             const isCurrent = i === safeIndex;
             return (
               <button
@@ -154,7 +205,7 @@ export function CardsScreen({
                 onClick={() => onNavigate(i)}
                 className={cn(
                   "h-28 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
-                  isCurrent ? "border-primary opacity-100" : "border-transparent opacity-60",
+                  isFocused ? "tv-focus border-primary opacity-100" : isCurrent ? "border-primary opacity-100" : "border-transparent opacity-60",
                 )}
               >
                 {p ? (
@@ -172,19 +223,16 @@ export function CardsScreen({
         <button
           onClick={() => onNavigate(safeIndex + 1)}
           disabled={!hasNext}
-          className="tv-focus flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform disabled:opacity-20"
+          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform disabled:opacity-20"
         >
           <ChevronRight className="h-8 w-8" />
         </button>
       </div>
 
-      {/* Fallback manual de lanzamiento: cuando no se pudo abrir la app en la TV */}
+      {/* Fallback manual de lanzamiento */}
       {launchHint && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onDismissHint}>
-          <div
-            className="flex max-w-2xl flex-col items-center gap-4 rounded-3xl border-2 border-border bg-background px-16 py-12 text-center"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="flex max-w-2xl flex-col items-center gap-4 rounded-3xl border-2 border-border bg-background px-16 py-12 text-center">
             <span
               className="rounded-full px-5 py-2 text-2xl font-bold text-white"
               style={{ backgroundColor: colorForPlatform(launchHint.platform) }}
@@ -199,7 +247,10 @@ export function CardsScreen({
             </p>
             <button
               onClick={onDismissHint}
-              className="tv-focus mt-4 flex items-center gap-2 rounded-full border-2 border-border px-8 py-3 text-xl font-semibold text-foreground transition-transform"
+              className={cn(
+                "mt-4 flex items-center gap-2 rounded-full border-2 border-border px-8 py-3 text-xl font-semibold text-foreground transition-transform",
+                dpad.isFocused("dismiss", 0) && "tv-focus",
+              )}
             >
               <X className="h-5 w-5" /> Entendido
             </button>

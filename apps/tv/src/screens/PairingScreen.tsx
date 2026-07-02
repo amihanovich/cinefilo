@@ -1,21 +1,37 @@
-// Pantalla de emparejamiento: QR (renderizado local, sin depender de un
-// servicio externo de imágenes) para que el teléfono abra /control?session=<id>
-// y funcione como control remoto. También se puede continuar con el control
-// remoto físico de la TV (botón "Empezar").
+// Pantalla de emparejamiento: QR (renderizado local) para que el teléfono abra
+// /control?session=<id> y funcione como control remoto. También se puede
+// continuar con el control remoto físico de la TV (D-pad → OK en "Empezar").
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MutableRefObject } from "react";
 import { Sparkles, Check } from "lucide-react";
 import QRCode from "qrcode";
+import { useDpad, type DpadBridge } from "../hooks/useDpad";
+import { cn } from "../lib/tv-utils";
 
 interface PairingScreenProps {
   qrUrl: string;
   paired: boolean;
   connecting: boolean;
   onContinue: () => void;
+  onBack: () => void;
+  bridgeRef: MutableRefObject<DpadBridge | null>;
 }
 
-export function PairingScreen({ qrUrl, paired, connecting, onContinue }: PairingScreenProps) {
+export function PairingScreen({ qrUrl, paired, connecting, onContinue, onBack, bridgeRef }: PairingScreenProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  const dpad = useDpad({
+    rows: [{ id: "empezar", count: 1 }],
+    onSelect: onContinue,
+    onBack,
+  });
+
+  useEffect(() => {
+    bridgeRef.current = { move: dpad.move, select: dpad.select, setFocus: dpad.setFocus };
+    return () => {
+      bridgeRef.current = null;
+    };
+  }, [bridgeRef, dpad.move, dpad.select, dpad.setFocus]);
 
   useEffect(() => {
     let alive = true;
@@ -24,7 +40,7 @@ export function PairingScreen({ qrUrl, paired, connecting, onContinue }: Pairing
         if (alive) setQrDataUrl(url);
       })
       .catch(() => {
-        /* si falla, la pantalla igual permite continuar con el control remoto */
+        /* si falla, igual se puede continuar con el control remoto */
       });
     return () => {
       alive = false;
@@ -67,8 +83,10 @@ export function PairingScreen({ qrUrl, paired, connecting, onContinue }: Pairing
 
       <button
         onClick={onContinue}
-        autoFocus
-        className="tv-focus rounded-full bg-foreground px-10 py-4 text-2xl font-semibold text-background transition-transform"
+        className={cn(
+          "rounded-full bg-foreground px-10 py-4 text-2xl font-semibold text-background transition-transform",
+          dpad.isFocused("empezar", 0) && "tv-focus",
+        )}
       >
         Empezar con el control remoto →
       </button>

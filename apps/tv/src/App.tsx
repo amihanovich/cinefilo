@@ -6,6 +6,8 @@ import { detectCountry, getCountry } from "./lib/tv-utils";
 import { track } from "./lib/analytics";
 import { recoToDeck, mediaToDeck, deckToMedia, type DeckItem } from "./lib/media";
 import { useTvSession } from "./hooks/useTvSession";
+import type { DpadBridge } from "./hooks/useDpad";
+import { App as CapacitorApp } from "@capacitor/app";
 import type { MediaItem } from "./lib/tv-protocol";
 import { PairingScreen } from "./screens/PairingScreen";
 import { PlatformsScreen } from "./screens/PlatformsScreen";
@@ -45,6 +47,18 @@ export default function App() {
   screenRef.current = screen;
   const indexRef = useRef(currentIndex);
   indexRef.current = currentIndex;
+
+  // Bridge hacia el dpad de la pantalla activa: App reenvía acá los comandos
+  // del teléfono (NAVIGATE/FOCUS/SELECT) para que compartan camino con el
+  // control remoto físico. Cada pantalla escribe su API al montarse.
+  const bridgeRef = useRef<DpadBridge | null>(null);
+
+  // Back unificado (teléfono BACK + control físico): cards→platforms→pairing→salir.
+  const goBack = () => {
+    if (screenRef.current === "cards") setScreen("platforms");
+    else if (screenRef.current === "platforms") setScreen("pairing");
+    else void CapacitorApp.exitApp();
+  };
 
   const shownTitlesRef = useRef<Set<string>>(new Set());
   const rememberShown = (recos: DeckItem[]) => {
@@ -165,16 +179,16 @@ export default function App() {
         (disliked.length ? ` (evitá parecidas a: ${disliked.slice(0, 8).join(", ")})` : "");
       void getReco(query + hints, exclude);
     },
-    onNavigate: (direction) => {
-      if (screenRef.current !== "cards") return;
-      const n = itemsRef.current.length;
-      if (n === 0) return;
-      if (direction === "left") setCurrentIndex((i) => Math.max(0, i - 1));
-      else if (direction === "right") setCurrentIndex((i) => Math.min(n - 1, i + 1));
-    },
+    // NAVIGATE / SELECT / FOCUS del teléfono se reenvían al MISMO dpad que usa
+    // el control remoto físico (bridge) → un solo camino de código para ambos.
+    onNavigate: (direction) => bridgeRef.current?.move(direction),
     onSelect: (mediaId) => {
-      const item = mediaId ? findById(mediaId) : itemsRef.current[indexRef.current];
-      if (item) void launch(item);
+      if (mediaId) {
+        const item = findById(mediaId);
+        if (item) void launch(item);
+      } else {
+        bridgeRef.current?.select();
+      }
     },
     onPlay: (mediaId) => {
       const item = findById(mediaId);
@@ -182,7 +196,7 @@ export default function App() {
     },
     onFocus: (mediaId) => {
       const idx = itemsRef.current.findIndex((d) => d.id === mediaId);
-      if (idx >= 0) setCurrentIndex(idx);
+      if (idx >= 0) bridgeRef.current?.setFocus("alts", idx);
     },
     onLoadMore: () => void loadMore(),
     onRemove: (mediaId) => {
@@ -202,9 +216,7 @@ export default function App() {
       setScreen("cards");
       void loadAvailability(deck);
     },
-    onBack: () => {
-      setScreen((s) => (s === "cards" ? "platforms" : s === "platforms" ? "pairing" : s));
-    },
+    onBack: goBack,
   });
 
   // Mantener al teléfono en sync: emitir SCREEN cuando cambia el deck / foco /
@@ -231,6 +243,8 @@ export default function App() {
         paired={session.paired}
         connecting={session.connecting}
         onContinue={() => setScreen("platforms")}
+        onBack={goBack}
+        bridgeRef={bridgeRef}
       />
     );
   }
@@ -246,6 +260,8 @@ export default function App() {
           setPlatforms((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]))
         }
         onStart={handleStartReco}
+        onBack={goBack}
+        bridgeRef={bridgeRef}
       />
     );
   }
@@ -263,6 +279,8 @@ export default function App() {
       paired={session.paired}
       launchHint={launchHint}
       onDismissHint={() => setLaunchHint(null)}
+      onBack={goBack}
+      bridgeRef={bridgeRef}
     />
   );
 }
