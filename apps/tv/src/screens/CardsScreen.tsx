@@ -1,22 +1,25 @@
 // Hero card + fila de alternativas a escala 10-pies.
-// TODO(fase 3, Opus): wirear con useDpad para navegación por control remoto físico.
-// TODO(fase 5, Opus): "Ver ahora" debe usar tv-launcher.ts (packages de TV,
-// no los del móvil) — por ahora es un placeholder sin acción real.
+// TODO(useDpad): navegación por control remoto físico — por ahora responde a
+// clicks (browser) y a los comandos del teléfono (FOCUS/NAVIGATE/PLAY).
 
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import type { Recommendation } from "../lib/api";
+import { ChevronLeft, ChevronRight, Loader2, Smartphone, X } from "lucide-react";
 import type { JwResult } from "../lib/justwatch";
+import type { DeckItem } from "../lib/media";
 import { colorForPlatform, platformLabel } from "../lib/deeplink";
 import { getCountry, cn } from "../lib/tv-utils";
 
 interface CardsScreenProps {
-  items: Recommendation[];
+  items: DeckItem[];
   posters: Record<string, string | null>;
   availability: Record<string, JwResult>;
   currentIndex: number;
   onNavigate: (index: number) => void;
+  onPlay: (item: DeckItem) => void;
   loading: boolean;
   error: string | null;
+  paired: boolean;
+  launchHint: { title: string; platform: string } | null;
+  onDismissHint: () => void;
 }
 
 export function CardsScreen({
@@ -25,8 +28,12 @@ export function CardsScreen({
   availability,
   currentIndex,
   onNavigate,
+  onPlay,
   loading,
   error,
+  paired,
+  launchHint,
+  onDismissHint,
 }: CardsScreenProps) {
   if (loading && items.length === 0) {
     return (
@@ -39,12 +46,6 @@ export function CardsScreen({
 
   const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
   const current = items[safeIndex];
-  const poster = current ? posters[current.title] : undefined;
-  const avail = current ? availability[current.title] : undefined;
-  const hasPrev = safeIndex > 0;
-  const hasNext = safeIndex < items.length - 1;
-  const platformColor = current ? colorForPlatform(current.platform) : "#888";
-  const label = current ? platformLabel(current.platform) : "";
 
   if (!current) {
     return (
@@ -54,8 +55,25 @@ export function CardsScreen({
     );
   }
 
+  const poster = posters[current.title];
+  const avail = availability[current.title];
+  const hasPrev = safeIndex > 0;
+  const hasNext = safeIndex < items.length - 1;
+  const platformColor = colorForPlatform(current.platform);
+  const label = platformLabel(current.platform);
+
   return (
-    <div className="tv-safe flex h-screen w-screen flex-col gap-6 bg-background">
+    <div className="tv-safe relative flex h-screen w-screen flex-col gap-6 bg-background">
+      {/* Estado de conexión del teléfono */}
+      <div className="flex items-center justify-between">
+        <div />
+        {paired && (
+          <span className="flex items-center gap-2 rounded-full border border-border bg-muted/40 px-4 py-1.5 text-base text-muted-foreground">
+            <Smartphone className="h-4 w-4 text-green-400" /> Teléfono conectado
+          </span>
+        )}
+      </div>
+
       {error && (
         <div className="flex justify-center">
           <div className="rounded-full bg-red-500/90 px-6 py-2 text-lg font-semibold text-white">{error}</div>
@@ -64,7 +82,6 @@ export function CardsScreen({
 
       {/* Hero */}
       <div className="flex flex-1 gap-8 overflow-hidden rounded-3xl border border-border bg-muted/20">
-        {/* Poster */}
         <div className="h-full w-[28%] shrink-0 overflow-hidden">
           {poster ? (
             <img src={poster} alt={current.title} className="h-full w-full object-cover" />
@@ -73,7 +90,6 @@ export function CardsScreen({
           )}
         </div>
 
-        {/* Info */}
         <div className="flex min-w-0 flex-1 flex-col gap-3 py-8 pr-10">
           <h2 className="text-5xl font-bold leading-tight text-foreground">{current.title}</h2>
 
@@ -85,8 +101,7 @@ export function CardsScreen({
               {label}
             </span>
             <span className="text-xl text-muted-foreground">
-              {current.type} · {current.duration}
-              {current.year && ` · ${current.year}`}
+              {[current.type, current.duration, current.year].filter(Boolean).join(" · ")}
             </span>
             {current.ageRating && (
               <span className="rounded border border-muted-foreground/30 px-2 py-1 text-lg font-semibold text-muted-foreground">
@@ -96,7 +111,7 @@ export function CardsScreen({
           </div>
 
           <div>
-            {avail === undefined ? (
+            {!current.platform ? null : avail === undefined ? (
               <span className="text-lg text-muted-foreground/50">Verificando disponibilidad...</span>
             ) : avail.confirmed ? (
               <span className="text-lg font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
@@ -107,12 +122,15 @@ export function CardsScreen({
 
           <p className="mt-2 max-w-2xl text-2xl leading-relaxed text-foreground/80">{current.reason}</p>
 
-          <button
-            className="tv-focus mt-4 w-fit rounded-full px-10 py-4 text-2xl font-bold text-white transition-transform"
-            style={{ backgroundColor: platformColor }}
-          >
-            ▶ Ver ahora en {label}
-          </button>
+          {current.platform && (
+            <button
+              onClick={() => onPlay(current)}
+              className="tv-focus mt-4 w-fit rounded-full px-10 py-4 text-2xl font-bold text-white transition-transform"
+              style={{ backgroundColor: platformColor }}
+            >
+              ▶ Ver ahora en {label}
+            </button>
+          )}
         </div>
       </div>
 
@@ -132,17 +150,19 @@ export function CardsScreen({
             const isCurrent = i === safeIndex;
             return (
               <button
-                key={item.title}
+                key={item.id}
                 onClick={() => onNavigate(i)}
                 className={cn(
-                  "tv-focus h-28 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
-                  isCurrent ? "border-primary" : "border-transparent opacity-60",
+                  "h-28 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-all",
+                  isCurrent ? "border-primary opacity-100" : "border-transparent opacity-60",
                 )}
               >
                 {p ? (
                   <img src={p} alt={item.title} className="h-full w-full object-cover" />
                 ) : (
-                  <div className="h-full w-full animate-pulse bg-muted" />
+                  <div className="flex h-full w-full items-center justify-center bg-muted p-1 text-center text-[9px] text-muted-foreground">
+                    {item.title}
+                  </div>
                 )}
               </button>
             );
@@ -157,6 +177,35 @@ export function CardsScreen({
           <ChevronRight className="h-8 w-8" />
         </button>
       </div>
+
+      {/* Fallback manual de lanzamiento: cuando no se pudo abrir la app en la TV */}
+      {launchHint && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70" onClick={onDismissHint}>
+          <div
+            className="flex max-w-2xl flex-col items-center gap-4 rounded-3xl border-2 border-border bg-background px-16 py-12 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span
+              className="rounded-full px-5 py-2 text-2xl font-bold text-white"
+              style={{ backgroundColor: colorForPlatform(launchHint.platform) }}
+            >
+              {platformLabel(launchHint.platform)}
+            </span>
+            <p className="text-3xl font-semibold text-foreground">
+              Abrí {platformLabel(launchHint.platform)} en tu TV
+            </p>
+            <p className="text-2xl text-muted-foreground">
+              y buscá <span className="font-semibold text-foreground">«{launchHint.title}»</span>
+            </p>
+            <button
+              onClick={onDismissHint}
+              className="tv-focus mt-4 flex items-center gap-2 rounded-full border-2 border-border px-8 py-3 text-xl font-semibold text-foreground transition-transform"
+            >
+              <X className="h-5 w-5" /> Entendido
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
