@@ -1,0 +1,13 @@
+{
+  "name": "cinefilo-landing",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Landing page standalone de Cinéfilo con los accesos de descarga de las apps de móvil y TV.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
