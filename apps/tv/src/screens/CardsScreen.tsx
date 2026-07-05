@@ -1,13 +1,12 @@
-// Hero card + fila de alternativas a escala 10-pies, navegable con D-pad
-// (control físico) y con el teléfono (mismos comandos vía el bridge).
+// Resultados IA (chips / búsqueda del teléfono / "Más como esta"): hero card +
+// fila de alternativas, navegable con D-pad y teléfono. El overlay de fallback
+// de lanzamiento lo maneja App a nivel global (LaunchHintOverlay).
 //
-// Filas del dpad:
-//   - overlay de fallback abierto → [dismiss]
-//   - normal → [actions: "Ver ahora"] arriba, [alts: N posters] abajo
+// Filas del dpad: [actions: "Ver ahora"] arriba, [alts: N posters] abajo.
 // Enfocar una alternativa la vuelve el hero (preview en vivo, estilo Netflix).
 
 import { useEffect, type MutableRefObject } from "react";
-import { ChevronLeft, ChevronRight, Loader2, Smartphone, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Smartphone } from "lucide-react";
 import type { JwResult } from "../lib/justwatch";
 import type { DeckItem } from "../lib/media";
 import { colorForPlatform, platformLabel } from "../lib/deeplink";
@@ -24,8 +23,6 @@ interface CardsScreenProps {
   loading: boolean;
   error: string | null;
   paired: boolean;
-  launchHint: { title: string; platform: string } | null;
-  onDismissHint: () => void;
   onBack: () => void;
   bridgeRef: MutableRefObject<DpadBridge | null>;
 }
@@ -40,21 +37,16 @@ export function CardsScreen({
   loading,
   error,
   paired,
-  launchHint,
-  onDismissHint,
   onBack,
   bridgeRef,
 }: CardsScreenProps) {
   const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
   const current = items[safeIndex];
 
-  // Filas del dpad según haya overlay o no.
-  const rows = launchHint
-    ? [{ id: "dismiss", count: 1 }]
-    : [
-        { id: "actions", count: current?.platform ? 1 : 0 },
-        { id: "alts", count: items.length },
-      ];
+  const rows = [
+    { id: "actions", count: current?.platform ? 1 : 0 },
+    { id: "alts", count: items.length },
+  ];
 
   const dpad = useDpad({
     rows,
@@ -64,19 +56,14 @@ export function CardsScreen({
       if (rowId === "alts") onNavigate(col);
     },
     onSelect: (rowId, col) => {
-      if (rowId === "dismiss") {
-        onDismissHint();
-      } else if (rowId === "alts") {
+      if (rowId === "alts") {
         const it = items[col];
         if (it) onPlay(it);
       } else if (rowId === "actions") {
         if (current) onPlay(current);
       }
     },
-    onBack: () => {
-      if (launchHint) onDismissHint();
-      else onBack();
-    },
+    onBack,
   });
 
   useEffect(() => {
@@ -228,35 +215,6 @@ export function CardsScreen({
           <ChevronRight className="h-8 w-8" />
         </button>
       </div>
-
-      {/* Fallback manual de lanzamiento */}
-      {launchHint && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
-          <div className="flex max-w-2xl flex-col items-center gap-4 rounded-3xl border-2 border-border bg-background px-16 py-12 text-center">
-            <span
-              className="rounded-full px-5 py-2 text-2xl font-bold text-white"
-              style={{ backgroundColor: colorForPlatform(launchHint.platform) }}
-            >
-              {platformLabel(launchHint.platform)}
-            </span>
-            <p className="text-3xl font-semibold text-foreground">
-              Abrí {platformLabel(launchHint.platform)} en tu TV
-            </p>
-            <p className="text-2xl text-muted-foreground">
-              y buscá <span className="font-semibold text-foreground">«{launchHint.title}»</span>
-            </p>
-            <button
-              onClick={onDismissHint}
-              className={cn(
-                "mt-4 flex items-center gap-2 rounded-full border-2 border-border px-8 py-3 text-xl font-semibold text-foreground transition-transform",
-                dpad.isFocused("dismiss", 0) && "tv-focus",
-              )}
-            >
-              <X className="h-5 w-5" /> Entendido
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

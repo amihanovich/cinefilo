@@ -34,6 +34,9 @@ export interface DpadBridge {
   move: (dir: Direction) => void;
   select: () => void;
   setFocus: (rowId: string, col: number) => void;
+  /** Foco por id de ítem — solo la pantalla que conoce su layout puede mapearlo
+   *  (p. ej. HomeScreen con rails). Opcional: CardsScreen no lo provee. */
+  focusById?: (id: string) => void;
 }
 
 interface Options {
@@ -43,11 +46,14 @@ interface Options {
   onFocusChange?: (rowId: string, col: number) => void;
   /** Cuando es false, ignora las teclas (p. ej. mientras carga). */
   enabled?: boolean;
+  /** Cada fila recuerda su columna: al bajar/subir aterrizás donde estabas en
+   *  esa fila (estilo Netflix), no en la columna global. */
+  rememberColumns?: boolean;
 }
 
 type Pos = { row: number; col: number };
 
-export function useDpad({ rows, onSelect, onBack, onFocusChange, enabled = true }: Options): DpadApi {
+export function useDpad({ rows, onSelect, onBack, onFocusChange, enabled = true, rememberColumns = false }: Options): DpadApi {
   const [pos, setPos] = useState<Pos>({ row: 0, col: 0 });
 
   // Refs para que el listener de teclado (montado una sola vez) lea siempre lo
@@ -62,15 +68,18 @@ export function useDpad({ rows, onSelect, onBack, onFocusChange, enabled = true 
   onFocusChangeRef.current = onFocusChange;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+  const rememberColumnsRef = useRef(rememberColumns);
+  rememberColumnsRef.current = rememberColumns;
   const posRef = useRef(pos);
+  // Columna recordada por fila (id → col), para la navegación estilo rails.
+  const colsByRowRef = useRef<Record<string, number>>({});
 
   const applyFocus = useCallback((row: number, col: number, notify = true) => {
     posRef.current = { row, col };
     setPos({ row, col });
-    if (notify) {
-      const r = rowsRef.current[row];
-      if (r) onFocusChangeRef.current?.(r.id, col);
-    }
+    const r = rowsRef.current[row];
+    if (r) colsByRowRef.current[r.id] = col;
+    if (notify && r) onFocusChangeRef.current?.(r.id, col);
   }, []);
 
   const move = useCallback(
@@ -90,7 +99,12 @@ export function useDpad({ rows, onSelect, onBack, onFocusChange, enabled = true 
         while (r >= 0 && r < rowsNow.length && rowsNow[r].count === 0) r += step;
         if (r >= 0 && r < rowsNow.length) {
           row = r;
-          col = Math.min(col, rowsNow[r].count - 1);
+          // Con rememberColumns, aterrizás en la columna recordada de esa fila;
+          // sino, preservás la columna global (comportamiento original).
+          const target = rememberColumnsRef.current
+            ? (colsByRowRef.current[rowsNow[r].id] ?? 0)
+            : col;
+          col = Math.min(target, rowsNow[r].count - 1);
         }
       }
 

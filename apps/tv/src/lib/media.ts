@@ -6,6 +6,7 @@
 
 import type { Recommendation } from "./api";
 import type { MediaItem } from "./tv-protocol";
+import type { TvHomeItem } from "./tv-home";
 
 export type DeckItem = {
   id: string;
@@ -16,7 +17,9 @@ export type DeckItem = {
   year?: string;
   ageRating?: string;
   reason: string;
-  /** Presente solo para listas propias del teléfono (p. ej. "Mi lista"). */
+  /** De qué trata (1 frase) — viene de tv-home o del teléfono. */
+  synopsis?: string;
+  /** Presente solo para listas/secciones (p. ej. "Mi lista", "Recomendadas para vos"). */
   section?: string;
 };
 
@@ -54,8 +57,24 @@ export function mediaToDeck(m: MediaItem): DeckItem {
     duration: "",
     type: "Película",
     year: m.year ? String(m.year) : undefined,
-    reason: m.reason ?? m.synopsis ?? "",
+    reason: m.reason ?? "",
+    synopsis: m.synopsis,
     section: m.section,
+  };
+}
+
+/** Item del home de la TV (/api/tv-home) → DeckItem. */
+export function tvHomeToDeck(i: TvHomeItem): DeckItem {
+  return {
+    id: slugId(i.title),
+    title: i.title,
+    platform: i.platform,
+    duration: "",
+    type: i.type,
+    year: i.year ? String(i.year) : undefined,
+    reason: i.reason ?? "",
+    synopsis: i.synopsis,
+    section: i.section,
   };
 }
 
@@ -69,6 +88,7 @@ export function deckToMedia(d: DeckItem, poster?: string | null): MediaItem {
   const item: MediaItem = { id: d.id, title: d.title };
   if (d.platform) item.platform = d.platform;
   if (d.reason) item.reason = d.reason;
+  if (d.synopsis) item.synopsis = d.synopsis;
   if (d.section) item.section = d.section;
 
   const y = d.year ? parseInt(d.year, 10) : NaN;

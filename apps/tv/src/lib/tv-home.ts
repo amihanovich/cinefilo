@@ -24,3 +24,20 @@ export async function fetchTvHome(): Promise<TvHomeItem[]> {
     return [];
   }
 }
+
+// Carga infinita del rail "Más para explorar" (POST /api/tv-home-more).
+export async function fetchTvHomeMore(exclude: string[]): Promise<TvHomeItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/tv-home-more`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ exclude }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { items?: TvHomeItem[] };
+    return data.items ?? [];
+  } catch {
+    return [];
+  }
+}
