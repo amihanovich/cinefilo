@@ -57,10 +57,32 @@ const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },
 });
 
+// Crea el bucket público si todavía no existe (idempotente). Así no hace falta
+// aplicar la migración ni tocar el dashboard: el primer publish lo deja listo.
+async function ensureBucket() {
+  const { data, error } = await supabase.storage.getBucket(BUCKET);
+  if (data) {
+    if (!data.public) {
+      const { error: updErr } = await supabase.storage.updateBucket(BUCKET, { public: true });
+      if (updErr) fail(`El bucket "${BUCKET}" existe pero es privado y no se pudo hacer público: ${updErr.message}`);
+      console.log(`✓ Bucket "${BUCKET}" pasado a público.`);
+    }
+    return;
+  }
+  // getBucket falla si no existe → intentamos crearlo.
+  const { error: createErr } = await supabase.storage.createBucket(BUCKET, { public: true });
+  if (createErr) fail(`No se pudo crear el bucket "${BUCKET}": ${createErr.message}`);
+  console.log(`✓ Bucket público "${BUCKET}" creado.`);
+  void error;
+}
+
 async function main() {
   const fileBuffer = fs.readFileSync(filePath);
   const size = fileBuffer.byteLength;
   const objectPath = `${app}/cinefilo-${app}-${version}.apk`;
+
+  // 0. Asegurar que el bucket público exista.
+  await ensureBucket();
 
   // 1. Subir el APK (upsert para poder re-publicar la misma versión).
   console.log(`↑ Subiendo ${filePath} → ${BUCKET}/${objectPath} (${(size / 1048576).toFixed(1)} MB)…`);

@@ -52,12 +52,16 @@ npm run publish -- --app=tv --version=1.2.0 ./cinefilo-tv.apk
 `manifest.json` y te imprime el link público de descarga. La landing lo repunta
 solo (sin redeploy).
 
-## Setup inicial de Supabase (una sola vez)
+## Setup inicial de Supabase
 
-Aplicá la migración que crea el bucket público:
-`supabase/migrations/20260705000000_app_builds_bucket.sql` (o creá a mano un
-bucket **público** llamado `app-builds` desde el dashboard de Supabase). Los
-buckets públicos permiten descarga anónima; la subida la hace el service role.
+**No hace falta ningún paso manual:** la primera vez que corrés `npm run publish`,
+el script crea el bucket público `app-builds` si no existe (usa el service role
+key). Los buckets públicos permiten descarga anónima; la subida la hace el
+service role.
+
+Si preferís crearlo aparte, están la migración
+`supabase/migrations/20260705000000_app_builds_bucket.sql` o el dashboard de
+Supabase (bucket **público** llamado `app-builds`).
 
 ## Deploy en Railway (servicio aparte)
 
