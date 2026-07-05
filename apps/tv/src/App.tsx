@@ -323,6 +323,13 @@ export default function App() {
     // detail: no se emite (el teléfono conserva su última lista).
   }, [session.paired, session.emitScreen, screen, items, currentIndex, posters, homeItems, homeFocusedId]);
 
+  // Al emparejar el teléfono desde la pantalla del QR, avanzar solo al home
+  // (un usuario que controla con el teléfono no puede pasar el QR con el remoto).
+  useEffect(() => {
+    if (session.paired && screen === "pairing") setScreen("home");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.paired]);
+
   const handleContinueToHome = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
     track("wizard_complete", { platforms_count: platforms.length, platforms });
