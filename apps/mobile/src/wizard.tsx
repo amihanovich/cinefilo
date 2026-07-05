@@ -740,9 +740,12 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           <button
             onClick={() => { track("voice_used"); setVoiceMode(true); }}
-            className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1.5 transition-all active:scale-95"
+            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 py-1 pl-1 pr-2.5 transition-all active:scale-95"
           >
-            <Orb phase="idle" size="mini" />
+            {/* Orbe reducido (~24px) para no apretar el header con el ícono de TV */}
+            <span className="-m-3 scale-50">
+              <Orb phase="idle" size="mini" />
+            </span>
             <span className="text-[10px] font-semibold text-primary">Hablar con Cinéfilo</span>
           </button>
         </div>
