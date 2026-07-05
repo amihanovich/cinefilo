@@ -56,9 +56,10 @@ interface AccountSheetProps {
   onClose: () => void;
   onPlatformsChange?: (platforms: string[]) => void;
   onCountryChange?: (country: string) => void;
+  onOpenTvRemote?: () => void;
 }
 
-export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange }: AccountSheetProps) {
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote }: AccountSheetProps) {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -134,6 +135,7 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
               onCountryChange={changeCountry}
               onOpenWatchlist={() => setSection("watchlist")}
               onOpenLiked={() => setSection("liked")}
+              onOpenTvRemote={onOpenTvRemote ? () => { onClose(); onOpenTvRemote(); } : undefined}
             />
           )}
           {section === "watchlist" && <ItemGallery items={watchlist} emptyText="Nada guardado todavía." />}
@@ -155,6 +157,7 @@ function MainSection({
   onCountryChange,
   onOpenWatchlist,
   onOpenLiked,
+  onOpenTvRemote,
 }: {
   platforms: string[];
   onToggle: (p: string) => void;
@@ -164,6 +167,7 @@ function MainSection({
   onCountryChange: (code: string) => void;
   onOpenWatchlist: () => void;
   onOpenLiked: () => void;
+  onOpenTvRemote?: () => void;
 }) {
   return (
     <div className="space-y-8">
@@ -252,22 +256,26 @@ function MainSection({
         </div>
       </section>
 
-      {/* Cinéfilo TV (placeholder — próximamente) */}
+      {/* Cinéfilo TV — controlar la TV desde el teléfono */}
       <section>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
           Cinéfilo TV
         </h3>
-        <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 to-purple-500/10 px-4 py-3.5">
+        <button
+          onClick={onOpenTvRemote}
+          disabled={!onOpenTvRemote}
+          className="flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 to-purple-500/10 px-4 py-3.5 text-left active:scale-[0.98] transition-transform disabled:opacity-70"
+        >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
             <Tv className="h-5 w-5 text-primary" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground">Descargate Cinéfilo para TV</p>
+            <p className="text-sm font-semibold text-foreground">Controlar la TV</p>
             <p className="mt-0.5 text-xs text-muted-foreground/70">
-              Viví la experiencia directo en tu televisor. Próximamente.
+              Escaneá el QR de tu TV y usá el teléfono como control.
             </p>
           </div>
-        </div>
+        </button>
       </section>
     </div>
   );

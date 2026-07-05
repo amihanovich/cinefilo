@@ -55,3 +55,28 @@ npx cap open ios       # abre Xcode → Archive → Distribute
 ## Deep links a streaming
 
 El botón "Ver ahora" usa Universal Links (URLs HTTPS). En iOS/Android, si la app de streaming está instalada, el SO la abre directamente. Si no, abre el browser.
+
+## Control remoto de la TV (escaneo de QR)
+
+El ícono de TV en el header (y la sección "Cinéfilo TV" en Mi cuenta) abre la
+cámara para escanear el QR de la app de Cinéfilo TV y usar el teléfono como
+control remoto (`src/screens/ControlScreen.tsx`). Usa el plugin
+`@capacitor-mlkit/barcode-scanning`.
+
+Tras `npx cap sync android`, agregá a mano al `AndroidManifest.xml`
+(`android/app/src/main/AndroidManifest.xml`):
+
+```xml
+<!-- hijo directo de <manifest> -->
+<uses-permission android:name="android.permission.CAMERA" />
+
+<!-- dentro de <application> — para que Play Services pre-baje el escáner -->
+<meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
+```
+
+Notas:
+- El escáner (`scan()`) necesita Google Play Services. Si no está disponible, la
+  app cae automáticamente a "ingresar el código a mano" (el hex que aparece
+  bajo el QR en la TV).
+- En el browser de desarrollo el plugin nativo no existe: probá el control con
+  `http://localhost:5173/?tvsession=<id>` (el id de sesión de la TV).

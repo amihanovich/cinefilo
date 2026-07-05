@@ -11,6 +11,8 @@ import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
+import { ControlScreen } from "./screens/ControlScreen";
+import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
@@ -141,6 +143,31 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
   const [tvBanner, setTvBanner] = useState(() => localStorage.getItem(TV_BANNER_KEY) !== "1");
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
+  const [controlSession, setControlSession] = useState<string | null>(null);
+
+  // Abre el control remoto de la TV: escanea el QR; si no hay cámara/plugin
+  // (browser dev), cae a ingresar el código a mano.
+  const openTvRemote = useCallback(async () => {
+    track("tv_remote_open");
+    const scanned = await scanTvQr();
+    if (scanned) { saveSession(scanned); setControlSession(scanned); return; }
+    const recent = recentSession();
+    const typed = window.prompt(
+      recent
+        ? `Ingresá el código de la TV, o dejá vacío para reconectar (${recent}):`
+        : "Ingresá el código que aparece debajo del QR en la TV:",
+    );
+    const id = typed?.trim() ? parseSession(typed) : recent;
+    if (id) { saveSession(id); setControlSession(id); }
+    else if (typed) showError("Código inválido.");
+  }, []);
+
+  // Testeo en browser: ?tvsession=<id> abre el control directo.
+  useEffect(() => {
+    const s = new URLSearchParams(window.location.search).get("tvsession");
+    const id = s ? parseSession(s) : null;
+    if (id) setControlSession(id);
+  }, []);
 
   useEffect(() => {
     const goOffline = () => setOffline(true);
@@ -428,6 +455,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     void getReco(`lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`, "auto");
   };
 
+  // Control remoto de la TV (full-screen sobre cualquier pantalla).
+  if (controlSession) {
+    return <ControlScreen session={controlSession} onClose={() => setControlSession(null)} />;
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // PANTALLA: WELCOME
   // ════════════════════════════════════════════════════════════════════════════
@@ -641,6 +673,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           onClose={() => setAccountOpen(false)}
           onPlatformsChange={setPlatforms}
           onCountryChange={() => { setAvailability({}); void loadAvailability(items); }}
+          onOpenTvRemote={() => void openTvRemote()}
         />
 
         {/* Banner promo Cinéfilo TV (dummy, descartable) */}
@@ -683,13 +716,22 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
-          <button
-            onClick={() => setAccountOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
-            aria-label="Mi cuenta"
-          >
-            <User className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAccountOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+              aria-label="Mi cuenta"
+            >
+              <User className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => void openTvRemote()}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+              aria-label="Controlar la TV"
+            >
+              <Tv className="h-4 w-4" />
+            </button>
+          </div>
 
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
