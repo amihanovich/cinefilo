@@ -12,6 +12,8 @@ import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
 import { colorForPlatform } from "../lib/deeplink";
 import { VoiceRecorder, transcribe } from "../lib/stt";
+import { ControlVoiceAgent } from "../components/ControlVoiceAgent";
+import { Orb } from "../components/Orb";
 
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
@@ -57,6 +59,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const [myList, setMyList] = useState<SavedItem[]>(() => readArr(WATCHLIST_KEY));
   const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const loadReqLenRef = useRef(0);
   const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -314,7 +317,23 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             <p>{paired ? "Buscá algo arriba y deslizá para elegir." : "Conectando con la TV…"}</p>
           </div>
         ) : (
-          <ul className="space-y-2.5 pb-2">
+          <>
+            {/* Orbe: seguir iterando con Cinéfilo (más recomendaciones o
+                preguntar sobre la película centrada). */}
+            <button
+              onClick={() => setVoiceOpen(true)}
+              disabled={!paired}
+              className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/20 px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-40"
+            >
+              <Orb phase="idle" size="mini" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-foreground">Hablar con Cinéfilo</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {centered ? `Pedile más o preguntá sobre ${centered.title}` : "Pedile más recomendaciones"}
+                </span>
+              </span>
+            </button>
+            <ul className="space-y-2.5 pb-2">
             {items.map((item) => (
               <li key={item.id} ref={registerCard(item.id)}>
                 <MovieCard
@@ -332,7 +351,8 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
               </li>
             )}
             <li aria-hidden style={{ height: "40vh" }} />
-          </ul>
+            </ul>
+          </>
         )}
       </div>
 
@@ -393,6 +413,16 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Orbe de voz: iterar con Cinéfilo (buscar más / preguntar sobre la centrada) */}
+      {voiceOpen && (
+        <ControlVoiceAgent
+          centeredTitle={centered?.title ?? null}
+          centeredPlatform={centered?.platform ?? null}
+          onSearch={runSearch}
+          onDismiss={() => setVoiceOpen(false)}
+        />
       )}
     </div>
   );

@@ -174,13 +174,17 @@ export function HomeScreen({
 
       {/* Hero destacado */}
       {heroItem && (
-        <div className="relative mx-[4vw] mt-2 h-[42vh] overflow-hidden rounded-3xl border border-border bg-muted/20">
+        <div className="relative mx-[4vw] mt-2 h-[48vh] overflow-hidden rounded-3xl border border-border bg-muted/20">
           {heroPoster && (
             <img src={heroPoster} alt={heroItem.title} className="absolute inset-0 h-full w-full object-cover" />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-transparent" />
-          <div className="relative flex h-full max-w-2xl flex-col justify-center gap-4 p-10">
-            <div className="flex items-center gap-3">
+          <div className="relative flex h-full max-w-2xl flex-col justify-center gap-3 p-10">
+            <h1 className="text-4xl font-bold leading-tight text-foreground">{heroItem.title}</h1>
+
+            {/* Metadata (misma info que la App Móvil): plataforma, tipo, duración,
+                año y clasificación. Los campos vacíos se descartan solos. */}
+            <div className="flex flex-wrap items-center gap-3">
               <span
                 className="rounded-full px-3 py-1 text-sm font-bold text-white"
                 style={{ backgroundColor: heroColor }}
@@ -188,45 +192,57 @@ export function HomeScreen({
                 {platformLabel(heroItem.platform)}
               </span>
               <span className="text-base text-muted-foreground">
-                {[heroItem.type, heroItem.year].filter(Boolean).join(" · ")}
+                {[heroItem.type, heroItem.duration, heroItem.year].filter(Boolean).join(" · ")}
               </span>
+              {heroItem.ageRating && (
+                <span className="rounded border border-muted-foreground/30 px-2 py-0.5 text-sm font-semibold text-muted-foreground">
+                  {heroItem.ageRating}
+                </span>
+              )}
+              {heroAvail === undefined ? (
+                <span className="text-sm text-muted-foreground/50">Verificando disponibilidad...</span>
+              ) : heroAvail.confirmed ? (
+                <span className="text-sm font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
+              ) : (
+                <span className="text-sm text-muted-foreground/50">Verificalo al abrir la app</span>
+              )}
             </div>
-            <h1 className="text-5xl font-bold leading-tight text-foreground">{heroItem.title}</h1>
+
             {heroItem.synopsis && (
-              <p className="max-w-xl text-xl leading-relaxed text-foreground/80 line-clamp-2">
+              <p className="max-w-xl text-lg leading-relaxed text-foreground/80 line-clamp-2">
                 {heroItem.synopsis}
               </p>
             )}
-            <div className="mt-1 text-base">
-              {heroAvail === undefined ? (
-                <span className="text-muted-foreground/50">Verificando disponibilidad...</span>
-              ) : heroAvail.confirmed ? (
-                <span className="font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-              ) : (
-                <span className="text-muted-foreground/50">Verificalo al abrir la app</span>
-              )}
-            </div>
+
+            {/* Por qué te la sugerimos */}
+            {heroItem.reason && (
+              <p className="max-w-xl text-base leading-relaxed text-foreground/70 line-clamp-2">
+                <span className="font-semibold text-primary">✦ Por qué: </span>
+                {heroItem.reason}
+              </p>
+            )}
+
             <div className="mt-2 flex gap-3">
               <button
                 ref={setRef("hero:0")}
                 onClick={() => onPlayHero(heroItem)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-8 py-3 text-lg font-bold text-white transition-transform",
+                  "flex items-center gap-2 rounded-full px-6 py-2.5 text-base font-bold text-white transition-transform",
                   dpad.isFocused("hero", 0) && "tv-focus",
                 )}
                 style={{ backgroundColor: heroColor }}
               >
-                <Play className="h-5 w-5" /> Ver ahora
+                <Play className="h-4 w-4" /> Ver ahora
               </button>
               <button
                 ref={setRef("hero:1")}
                 onClick={() => onOpenDetail(heroItem)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full border-2 border-border bg-background/60 px-8 py-3 text-lg font-semibold text-foreground transition-transform",
+                  "flex items-center gap-2 rounded-full border-2 border-border bg-background/60 px-6 py-2.5 text-base font-semibold text-foreground transition-transform",
                   dpad.isFocused("hero", 1) && "tv-focus",
                 )}
               >
-                <Info className="h-5 w-5" /> Más info
+                <Info className="h-4 w-4" /> Más info
               </button>
             </div>
           </div>
