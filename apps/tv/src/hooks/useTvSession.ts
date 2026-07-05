@@ -7,9 +7,13 @@ import { useCallback, useMemo, useRef } from "react";
 import { useTvChannel } from "./use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
 
+// Dominio propio de la web-control (apps/web-control, servicio Railway aparte).
+// El QR abre <CONTROL_BASE>/control?session=<id>. Se puede overridear con
+// VITE_CONTROL_BASE_URL en el build. NOTA: NO es el backend de la API
+// (cinefilo-production) — es la página del control remoto.
 const CONTROL_BASE =
   (import.meta.env.VITE_CONTROL_BASE_URL as string | undefined) ??
-  "https://cinefilo-production.up.railway.app";
+  "https://cinefilo-copy-production.up.railway.app";
 
 // sessionId de 6 bytes en hex, igual que public/tv-lite.html.
 function makeSessionId(): string {
