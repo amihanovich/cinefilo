@@ -97,7 +97,7 @@ export function PairingScreen({ qrUrl, paired, connecting, onContinue, onBack, b
   return (
     <div className="flex h-screen w-screen bg-background">
       {/* Panel izquierdo: branding + QR + copy */}
-      <div className="tv-safe flex w-[38%] shrink-0 flex-col justify-center gap-6 border-r border-border bg-muted/10">
+      <div className="tv-safe flex w-1/2 shrink-0 flex-col justify-center gap-6 border-r border-border bg-muted/10">
         <div className="flex items-center gap-3">
           <Sparkles className="h-9 w-9 text-primary" />
           <div>
