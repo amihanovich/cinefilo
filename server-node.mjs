@@ -42,6 +42,21 @@ http
     const reqUrl = new URL(req.url, "http://localhost");
     const urlPath = reqUrl.pathname;
 
+    // CORS: las apps Capacitor (móvil y TV) sirven desde el origen virtual
+    // https://localhost, así que TODOS los /api/* necesitan permitir el origen.
+    // La API es pública y sin cookies/credenciales → "*" es seguro. Preflight
+    // (OPTIONS) global para los POST con Content-Type application/json.
+    if (urlPath.startsWith("/api/")) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (req.method === "OPTIONS") {
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+    }
+
     // APIs JSON para la TV liviana (navegadores viejos).
     function sendJson(promise) {
       promise
