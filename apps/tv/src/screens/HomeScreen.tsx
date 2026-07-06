@@ -163,7 +163,7 @@ export function HomeScreen({
   const carouselFocused = dpad.focusedRowId === "carousel";
 
   return (
-    <div className="relative h-screen w-screen overflow-y-auto bg-background">
+    <div className="relative h-screen w-screen overflow-y-auto scroll-pt-24 bg-background">
       {/* Barra superior: marca + chips + estado teléfono */}
       <div className="sticky top-0 z-20 flex items-center gap-4 bg-background/95 px-[4vw] pt-6 pb-3 backdrop-blur">
         <div className="flex shrink-0 items-center gap-2">
@@ -199,7 +199,7 @@ export function HomeScreen({
         <div
           ref={setRef(`carousel:${activeIndex}`)}
           className={cn(
-            "relative mx-[4vw] mt-2 h-[48vh] overflow-hidden rounded-3xl border bg-muted/20 transition-all",
+            "relative mx-[4vw] mt-2 h-[48vh] scroll-mt-24 overflow-hidden rounded-3xl border bg-muted/20 transition-all",
             carouselFocused ? "tv-focus border-primary" : "border-border",
           )}
         >
