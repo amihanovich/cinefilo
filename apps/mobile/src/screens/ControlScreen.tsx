@@ -391,16 +391,20 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       {/* Barra inferior */}
       {items.length > 0 && (
         <div className="relative shrink-0 border-t border-border bg-muted/20 px-4 py-3">
-          {/* Cinéfilo como chat flotante: círculo con el orbe, anclado JUSTO arriba
-              de esta barra (bottom-full) a la derecha. Así nunca tapa Reproducir/
-              Volver y queda fijo mientras se deslizan las tarjetas. */}
+          {/* Cinéfilo como chat flotante: píldora con el orbe + texto "Hablar con
+              Cinéfilo", anclada JUSTO arriba de esta barra (bottom-full) a la
+              derecha. Así nunca tapa Reproducir/Volver, queda fija mientras se
+              deslizan las tarjetas, y el label deja claro que es un CTA de voz. */}
           <button
             onClick={() => setVoiceOpen(true)}
             disabled={!paired}
             aria-label="Hablar con Cinéfilo"
-            className="absolute bottom-full right-4 z-20 mb-3 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-border bg-background/90 shadow-lg shadow-black/40 backdrop-blur transition-transform active:scale-95 disabled:opacity-40"
+            className="absolute bottom-full right-4 z-20 mb-3 flex h-14 items-center gap-2.5 rounded-full border border-primary/30 bg-background/90 pl-1 pr-4 shadow-lg shadow-black/40 backdrop-blur transition-transform active:scale-95 disabled:opacity-40"
           >
-            <Orb phase="idle" size="mini" />
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
+              <Orb phase="idle" size="mini" />
+            </span>
+            <span className="whitespace-nowrap text-sm font-semibold text-primary">Hablar con Cinéfilo</span>
           </button>
           <div className="mb-2 truncate text-center text-sm text-muted-foreground">
             {nowPlaying ? (
