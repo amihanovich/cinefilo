@@ -58,6 +58,27 @@ export async function fetchAsk(params: {
   return res.json() as Promise<{ answer: string }>;
 }
 
+// Orbe del control: manda lo que dijo el usuario + el título centrado, y el
+// backend infiere si es una pregunta sobre ese título o un pedido de búsqueda.
+export type OrbResult =
+  | { mode: "ask"; answer: string }
+  | { mode: "search"; query: string };
+
+export async function fetchOrb(params: {
+  transcript: string;
+  title: string;
+  platform: string;
+}): Promise<OrbResult> {
+  const res = await fetch(`${API_BASE}/api/orb`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`/api/orb ${res.status}`);
+  return res.json() as Promise<OrbResult>;
+}
+
 // Warmup: despierta el server de Railway (cold start) sin bloquear nada.
 export function warmupBackend(): void {
   void fetch(`${API_BASE}/api/ping`, { signal: AbortSignal.timeout(10000) }).catch(() => { /* silencioso */ });

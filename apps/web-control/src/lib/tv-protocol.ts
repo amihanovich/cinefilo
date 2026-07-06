@@ -32,6 +32,7 @@ export const ControlCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("FOCUS"), mediaId: z.string() }),
   z.object({ type: z.literal("LOAD_MORE") }),
   z.object({ type: z.literal("REMOVE"), mediaId: z.string() }),
+  z.object({ type: z.literal("SET_PLATFORMS"), platforms: z.array(z.string()) }),
   z.object({ type: z.literal("SHOW_LIST"), items: z.array(mediaItemSchema) }),
   z.object({
     type: z.literal("NAVIGATE"),

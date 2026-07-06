@@ -38,6 +38,9 @@ export const ControlCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("LOAD_MORE") }),
   // REMOVE: sacar un ítem de la lista (p. ej. "Ya la vi" desde el teléfono).
   z.object({ type: z.literal("REMOVE"), mediaId: z.string() }),
+  // SET_PLATFORMS: el teléfono comparte las plataformas del usuario (las que ya
+  // usa en la app móvil) para que la TV las herede sin selección manual.
+  z.object({ type: z.literal("SET_PLATFORMS"), platforms: z.array(z.string()) }),
   // SHOW_LIST: el teléfono pide mostrar una lista propia (p. ej. "Mi lista") en la TV.
   z.object({ type: z.literal("SHOW_LIST"), items: z.array(mediaItemSchema) }),
   z.object({

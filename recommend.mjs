@@ -169,3 +169,58 @@ export async function askAboutTitle({ title, platform, question }) {
   const text = (data.content && data.content[0] && data.content[0].text) || "";
   return { answer: text.trim() };
 }
+
+const ORB_SYSTEM = `Sos Cinéfilo: un experto cinematográfico apasionado, como esos críticos de los programas de TV de los 60/70/80 que con una frase te abrían un mundo. El usuario está mirando en la TV la ficha de un título y te habla por voz. Puede querer dos cosas:
+  (A) preguntarte algo SOBRE ese título (de qué trata, si vale la pena, el director, con qué compararlo, reparto, etc.), o
+  (B) que le busques o recomiendes algo NUEVO o distinto (otra cosa, más opciones, un género o clima puntual, algo parecido pero diferente).
+
+Decidí qué quiere y respondé EXACTAMENTE en uno de estos dos formatos, sin nada más:
+- Si es (A): respondé la pregunta como experto. Español rioplatense, tono cálido y conversacional, sin emojis ni listas, máximo 70 palabras, sin spoilear giros ni finales. Si preguntan si vale la pena, jugátela con una opinión clara.
+- Si es (B): respondé con UNA sola línea con el prefijo literal "BUSCAR: " seguido de una consulta breve y clara en español para el recomendador (ej: "BUSCAR: un thriller psicológico corto para esta noche"). Nada más que esa línea.
+
+Ante la duda, si el usuario menciona explícitamente querer ver, buscar o que le recomienden algo distinto/nuevo/otra cosa → es (B).`;
+
+/**
+ * Orbe del control: infiere si el usuario quiere PREGUNTAR sobre el título que
+ * está viendo o BUSCAR algo nuevo, y responde en consecuencia (una sola llamada).
+ * @param {object} params
+ * @param {string} params.transcript - lo que dijo el usuario (voz transcripta)
+ * @param {string} params.title - título centrado en la TV (puede venir vacío)
+ * @param {string} params.platform
+ * @returns {Promise<{mode:"ask", answer:string} | {mode:"search", query:string}>}
+ */
+export async function orbRespond({ transcript, title, platform }) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+  const q = String(transcript || "").trim();
+  if (!q) return { mode: "search", query: "" };
+  // Sin título en pantalla no hay nada sobre qué preguntar → siempre es búsqueda.
+  if (!String(title || "").trim()) return { mode: "search", query: q };
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 320,
+      system: ORB_SYSTEM,
+      messages: [{
+        role: "user",
+        content: `Título en pantalla: "${String(title)}"${platform ? ` (en ${String(platform)})` : ""}.\n\nEl usuario dijo: ${q}`,
+      }],
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
+  }
+  const data = await res.json();
+  const text = ((data.content && data.content[0] && data.content[0].text) || "").trim();
+  const m = text.match(/^\s*BUSCAR:\s*([\s\S]+)$/i);
+  if (m) return { mode: "search", query: m[1].trim() || q };
+  return { mode: "ask", answer: text };
+}

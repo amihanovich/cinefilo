@@ -299,6 +299,17 @@ export default function App() {
       setHomeExplore((prev) => prev.filter((d) => d.id !== mediaId));
       setCurrentIndex((i) => Math.max(0, Math.min(i, itemsRef.current.length - 2)));
     },
+    onSetPlatforms: (incoming) => {
+      // El teléfono comparte las plataformas del usuario (las que ya usa en la
+      // app móvil) → las adoptamos para sesgar las búsquedas, sin selección manual.
+      if (!incoming || incoming.length === 0) return;
+      setPlatforms(incoming);
+      try {
+        localStorage.setItem(PLATFORMS_KEY, JSON.stringify(incoming));
+      } catch {
+        /* noop */
+      }
+    },
     onShowList: (mediaItems: MediaItem[]) => {
       const deck = mediaItems.map(mediaToDeck);
       const seededPosters: Record<string, string | null> = {};

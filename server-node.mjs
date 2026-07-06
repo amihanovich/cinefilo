@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
-import { recommend, askAboutTitle } from "./recommend.mjs";
+import { recommend, askAboutTitle, orbRespond } from "./recommend.mjs";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsAudio } from "./tts.mjs";
 
@@ -176,6 +176,32 @@ http
       return;
     }
     if (urlPath === "/api/ask" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Orbe del control: infiere si el usuario quiere preguntar sobre el título
+    // centrado o buscar algo nuevo, y responde en consecuencia (una llamada).
+    if (urlPath === "/api/orb" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (c) => { body += c; if (body.length > 65536) req.destroy(); });
+      req.on("end", () => {
+        let p = {};
+        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+        sendJson(orbRespond({
+          transcript: p.transcript || "",
+          title: p.title || "",
+          platform: p.platform || "",
+        }));
+      });
+      return;
+    }
+    if (urlPath === "/api/orb" && req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");

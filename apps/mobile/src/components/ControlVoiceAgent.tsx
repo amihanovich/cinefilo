@@ -1,19 +1,17 @@
 // Orbe de voz para la pantalla de control remoto (ControlScreen). Igual look &
-// feel que el VoiceAgent de la home, pero acá el objetivo no es mostrar cards
-// localmente sino seguir iterando con Cinéfilo sobre lo que se ve en la TV:
-//   1) "Buscar" → pedirle más recomendaciones (dispara una búsqueda en la TV).
-//   2) "Sobre esta" → preguntar sobre la película que estás mirando y que
-//      Cinéfilo te asesore como experto (vía /api/ask, sin re-recomendar).
+// feel que el VoiceAgent de la home, pero acá el objetivo es seguir iterando con
+// Cinéfilo sobre lo que se ve en la TV. Ya NO hay que elegir modo: el backend
+// (/api/orb) INFIERE de lo que dice el usuario si quiere PREGUNTAR sobre el
+// título centrado o BUSCAR algo nuevo, y ruteamos según su respuesta.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
-import { fetchAsk } from "../lib/api";
-import { X, Search, MessageCircle } from "lucide-react";
+import { fetchOrb } from "../lib/api";
+import { X } from "lucide-react";
 
 type AgentState = "idle" | "listening" | "thinking" | "speaking";
-type Mode = "search" | "ask";
 
 interface ControlVoiceAgentProps {
   centeredTitle: string | null;
@@ -29,15 +27,11 @@ export function ControlVoiceAgent({
   onSearch,
   onDismiss,
 }: ControlVoiceAgentProps) {
-  const canAsk = !!centeredTitle;
-  const [mode, setMode] = useState<Mode>(canAsk ? "ask" : "search");
   const [state, setState] = useState<AgentState>("speaking");
   const [volume, setVolume] = useState(0);
   const [answer, setAnswer] = useState<string | null>(null);
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const mountedRef = useRef(true);
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
 
   const orbPhase: OrbPhase =
     state === "listening" ? "listening"
@@ -45,32 +39,31 @@ export function ControlVoiceAgent({
     : state === "speaking" ? "speaking"
     : "idle";
 
-  // Procesa lo que dijo el usuario según el modo activo.
+  // Procesa lo que dijo el usuario. El backend decide: pregunta sobre el título
+  // centrado (contestamos y lo hablamos) o pedido de búsqueda (buscamos en la TV).
   const handleTranscript = useCallback(
     async (raw: string) => {
       const q = raw.trim();
       if (!q || !mountedRef.current) return;
-
-      if (modeRef.current === "search") {
-        // Pedir más recomendaciones → búsqueda en la TV y cerramos el orbe.
-        onSearch(q);
-        onDismiss();
-        return;
-      }
-
-      // Preguntar sobre la película centrada.
       setState("thinking");
       setAnswer(null);
       try {
-        const { answer: a } = await fetchAsk({
+        const result = await fetchOrb({
+          transcript: q,
           title: centeredTitle ?? "",
           platform: centeredPlatform ?? "",
-          question: q,
         });
         if (!mountedRef.current) return;
-        setAnswer(a);
+        if (result.mode === "search") {
+          // Quiere algo nuevo → búsqueda en la TV y cerramos el orbe.
+          onSearch(result.query || q);
+          onDismiss();
+          return;
+        }
+        // Pregunta sobre el título centrado → contestamos y lo hablamos.
+        setAnswer(result.answer);
         setState("speaking");
-        await speak(a);
+        await speak(result.answer);
         if (mountedRef.current) setState("idle");
       } catch {
         if (mountedRef.current) {
@@ -118,14 +111,14 @@ export function ControlVoiceAgent({
     }
   }, [handleTranscript]);
 
-  // Al montar: saluda según el modo y arranca a escuchar.
+  // Al montar: saluda y arranca a escuchar.
   useEffect(() => {
     mountedRef.current = true;
     const greet = async () => {
       setState("speaking");
-      const text = canAsk
-        ? `Estás viendo ${centeredTitle}. Preguntame lo que quieras sobre esta, o cambiá a buscar para pedirme algo nuevo.`
-        : "Decime qué querés ver y busco algo nuevo para vos.";
+      const text = centeredTitle
+        ? `Estás viendo ${centeredTitle}. Preguntame lo que quieras sobre esta, o pedime que te busque algo nuevo.`
+        : "Decime qué querés ver, o preguntame sobre lo que estás mirando.";
       await speak(text);
       if (mountedRef.current) await startListening();
     };
@@ -168,24 +161,11 @@ export function ControlVoiceAgent({
     }
   }, [state, startListening, stopListeningManual]);
 
-  const switchMode = (next: Mode) => {
-    if (next === mode) return;
-    setMode(next);
-    setAnswer(null);
-    stopSpeaking();
-    if (recorderRef.current) {
-      recorderRef.current.cancel();
-      recorderRef.current = null;
-    }
-    setVolume(0);
-    setState("idle");
-  };
-
   const hintText =
     state === "listening" ? "Te escucho…"
     : state === "speaking" ? "Escuchame…"
     : state === "thinking" ? "Pensando…"
-    : mode === "ask" ? "Tocá el orbe para preguntar" : "Tocá el orbe para buscar";
+    : "Tocá el orbe para hablar";
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 px-6 backdrop-blur-md">
@@ -197,33 +177,9 @@ export function ControlVoiceAgent({
         <X className="h-5 w-5" />
       </button>
 
-      {/* Selector de modo (solo tiene sentido "Sobre esta" si hay algo centrado) */}
-      {canAsk && (
-        <div className="mb-8 flex gap-2 rounded-full border border-white/15 bg-white/5 p-1">
-          <button
-            onClick={() => switchMode("ask")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
-              mode === "ask" ? "bg-white/20 text-white" : "text-white/60",
-            )}
-          >
-            <MessageCircle className="h-4 w-4" /> Sobre esta
-          </button>
-          <button
-            onClick={() => switchMode("search")}
-            className={cn(
-              "flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
-              mode === "search" ? "bg-white/20 text-white" : "text-white/60",
-            )}
-          >
-            <Search className="h-4 w-4" /> Buscar algo
-          </button>
-        </div>
-      )}
-
-      {mode === "ask" && centeredTitle && (
+      {centeredTitle && (
         <p className="mb-6 max-w-xs text-center text-xs uppercase tracking-wide text-white/45">
-          Sobre <span className="text-white/80">{centeredTitle}</span>
+          Mirando <span className="text-white/80">{centeredTitle}</span>
         </p>
       )}
 
@@ -245,8 +201,4 @@ export function ControlVoiceAgent({
       </div>
     </div>
   );
-}
-
-function cn(...c: (string | boolean | undefined | null)[]): string {
-  return c.filter(Boolean).join(" ");
 }

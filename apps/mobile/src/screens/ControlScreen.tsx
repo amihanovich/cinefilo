@@ -3,7 +3,7 @@
 // tema oscuro del móvil y usando el micrófono NATIVO existente (lib/stt.ts) en
 // vez del botón de voz web. Se conecta al mismo canal Realtime (lado "control").
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search, Play, CornerDownLeft, Loader2, Eye, Bookmark, BookmarkCheck,
   ThumbsUp, ThumbsDown, Mic, X, Smartphone,
@@ -11,6 +11,7 @@ import {
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
 import { colorForPlatform } from "../lib/deeplink";
+import { inferContext, contextToPromptHint } from "../lib/context";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { ControlVoiceAgent } from "../components/ControlVoiceAgent";
 import { Orb } from "../components/Orb";
@@ -18,6 +19,8 @@ import { Orb } from "../components/Orb";
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
 const DISLIKED_KEY = "cinefilo:disliked";
+// Plataformas que el usuario ya eligió en la app móvil (wizard / AccountSheet).
+const PLATFORMS_KEY = "queveo:guest:default_platforms";
 
 type SavedItem = { title: string; platform?: string; type?: string; posterUrl?: string; year?: number };
 
@@ -86,6 +89,22 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   });
 
   const send = useCallback((cmd: ControlCommandMessage) => sendCommand(cmd), [sendCommand]);
+
+  // Al emparejar, compartir con la TV las plataformas que el usuario ya eligió en
+  // la app móvil, así la TV las hereda sin selección manual. Solo una vez.
+  const platformsSentRef = useRef(false);
+  useEffect(() => {
+    if (!paired || platformsSentRef.current) return;
+    let platforms: string[] = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]");
+      if (Array.isArray(raw)) platforms = raw.filter((p): p is string => typeof p === "string");
+    } catch {
+      platforms = [];
+    }
+    if (platforms.length > 0) send({ type: "SET_PLATFORMS", platforms });
+    platformsSentRef.current = true;
+  }, [paired, send]);
 
   // Scroll → FOCUS + carga infinita (idéntico a control.tsx).
   const cardEls = useRef<Map<string, HTMLElement>>(new Map());
@@ -248,6 +267,23 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
 
   const centered = items.find((i) => i.id === centeredId) ?? null;
 
+  // Chips de sugerencia (mismos que la home de la TV): cada uno dispara una
+  // búsqueda en la TV, así el teléfono también maneja esos accesos rápidos.
+  const chips = useMemo(() => {
+    const ctx = inferContext();
+    const ctxChip =
+      ctx.dayType === "finde"
+        ? { label: "Plan de finde", q: `algo ideal para ${contextToPromptHint(ctx)}` }
+        : { label: `Para esta ${ctx.dayPart}`, q: `algo ideal para un ${contextToPromptHint(ctx)}` };
+    return [
+      ctxChip,
+      { label: "Algo liviano", q: "algo liviano y entretenido para relajar" },
+      { label: "Suspenso", q: "un buen suspenso o thriller que enganche" },
+      { label: "En familia", q: "algo para ver en familia, apto para todos" },
+      { label: "Un clásico", q: "una película clásica imperdible" },
+    ];
+  }, []);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
       {/* Header */}
@@ -296,6 +332,19 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             <Search className="h-5 w-5" />
           </button>
         </form>
+        {/* Chips rápidos (mismos que la home de la TV): mandan una búsqueda. */}
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {chips.map((c) => (
+            <button
+              key={c.label}
+              onClick={() => runSearch(c.q)}
+              disabled={!paired}
+              className="shrink-0 rounded-full border border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground active:scale-95 disabled:opacity-40"
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => showMyList()}
           className="mt-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground active:scale-95"
@@ -317,28 +366,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             <p>{paired ? "Buscá algo arriba y deslizá para elegir." : "Conectando con la TV…"}</p>
           </div>
         ) : (
-          <>
-            {/* Orbe: seguir iterando con Cinéfilo (más recomendaciones o preguntar
-                sobre la película centrada). Queda FIJO arriba mientras se deslizan
-                las tarjetas (sticky), así siempre está a mano. El wrapper cancela
-                el padding lateral/superior del scroll (-mx-4 -mt-4) para que su
-                fondo tape las tarjetas de punta a punta al quedar pegado. */}
-            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 bg-background/95 px-4 pb-2.5 pt-4 backdrop-blur">
-              <button
-                onClick={() => setVoiceOpen(true)}
-                disabled={!paired}
-                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-40"
-              >
-                <Orb phase="idle" size="mini" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-foreground">Hablar con Cinéfilo</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {centered ? `Pedile más o preguntá sobre ${centered.title}` : "Pedile más recomendaciones"}
-                  </span>
-                </span>
-              </button>
-            </div>
-            <ul className="space-y-2.5 pb-2">
+          <ul className="space-y-2.5 pb-2">
             {items.map((item) => (
               <li key={item.id} ref={registerCard(item.id)}>
                 <MovieCard
@@ -356,14 +384,24 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
               </li>
             )}
             <li aria-hidden style={{ height: "40vh" }} />
-            </ul>
-          </>
+          </ul>
         )}
       </div>
 
       {/* Barra inferior */}
       {items.length > 0 && (
-        <div className="shrink-0 border-t border-border bg-muted/20 px-4 py-3">
+        <div className="relative shrink-0 border-t border-border bg-muted/20 px-4 py-3">
+          {/* Cinéfilo como chat flotante: círculo con el orbe, anclado JUSTO arriba
+              de esta barra (bottom-full) a la derecha. Así nunca tapa Reproducir/
+              Volver y queda fijo mientras se deslizan las tarjetas. */}
+          <button
+            onClick={() => setVoiceOpen(true)}
+            disabled={!paired}
+            aria-label="Hablar con Cinéfilo"
+            className="absolute bottom-full right-4 z-20 mb-3 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-border bg-background/90 shadow-lg shadow-black/40 backdrop-blur transition-transform active:scale-95 disabled:opacity-40"
+          >
+            <Orb phase="idle" size="mini" />
+          </button>
           <div className="mb-2 truncate text-center text-sm text-muted-foreground">
             {nowPlaying ? (
               <span className="text-foreground">▶ {nowPlaying.title}</span>

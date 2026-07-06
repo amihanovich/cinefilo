@@ -33,6 +33,7 @@ export interface TvSessionHandlers {
   onRemove: (mediaId: string) => void;
   onShowList: (items: MediaItem[]) => void;
   onFocus: (mediaId: string) => void;
+  onSetPlatforms: (platforms: string[]) => void;
 }
 
 export interface TvSession {
@@ -78,6 +79,9 @@ export function useTvSession(handlers: TvSessionHandlers): TvSession {
         break;
       case "REMOVE":
         h.onRemove(cmd.mediaId);
+        break;
+      case "SET_PLATFORMS":
+        h.onSetPlatforms(cmd.platforms);
         break;
       case "SHOW_LIST":
         h.onShowList(cmd.items);
