@@ -1,8 +1,15 @@
-// Home tipo streaming (referencia: Netflix/Paramount+): chips IA arriba, hero
-// destacado, y rails de contenido real. Navegable con D-pad (control físico) y
-// con el teléfono (vía el bridge). OK sobre un título abre la ficha de detalle.
+// Home tipo streaming: chips IA arriba, un CARRUSEL de banners grandes (los 5
+// recomendados principales, uno a la vez tipo pager) y debajo una fila con el
+// resto de alternativas. "Más opciones" (desde el teléfono) trae más y las
+// agrega a esa fila. Navegable con D-pad (control físico) y con el teléfono.
+//
+// Filas del D-pad:
+//   chips        → sugerencias IA
+//   carousel     → ←/→ cambia el banner activo (de los 5); OK = Ver ahora
+//   hero-actions → [Ver ahora, Más info] del banner activo
+//   alts         → fila de posters con las alternativas
 
-import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Sparkles, Play, Info, Smartphone } from "lucide-react";
 import type { DeckItem } from "../lib/media";
 import type { JwResult } from "../lib/justwatch";
@@ -15,10 +22,8 @@ import { useDpad, type DpadRow, type DpadBridge } from "../hooks/useDpad";
 const SCROLL_BEHAVIOR: ScrollBehavior = "smooth";
 
 interface HomeScreenProps {
-  heroItem: DeckItem | null;
-  recs: DeckItem[];
-  latest: DeckItem[];
-  explore: DeckItem[];
+  carousel: DeckItem[]; // primeros 5 → banners grandes (pager)
+  alternatives: DeckItem[]; // el resto → fila de posters
   posters: Record<string, string | null>;
   availability: Record<string, JwResult>;
   paired: boolean;
@@ -32,10 +37,8 @@ interface HomeScreenProps {
 }
 
 export function HomeScreen({
-  heroItem,
-  recs,
-  latest,
-  explore,
+  carousel,
+  alternatives,
   posters,
   availability,
   paired,
@@ -62,16 +65,27 @@ export function HomeScreen({
     ];
   }, []);
 
+  // Banner activo del carrusel. Se actualiza al navegar ←/→ sobre la fila
+  // "carousel". activeRef espeja el valor para leerlo dentro de handlers estables.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const activeRef = useRef(0);
+  const setActive = useCallback((i: number) => {
+    activeRef.current = i;
+    setActiveIndex(i);
+  }, []);
+
+  // Si el carrusel cambia de tamaño, mantener el índice dentro de rango.
+  useEffect(() => {
+    const max = Math.max(0, carousel.length - 1);
+    if (activeIndex > max) setActive(max);
+  }, [carousel.length, activeIndex, setActive]);
+
   const rows: DpadRow[] = [
     { id: "chips", count: chips.length },
-    { id: "hero", count: heroItem ? 2 : 0 },
-    { id: "recs", count: recs.length },
-    { id: "latest", count: latest.length },
-    { id: "explore", count: explore.length },
+    { id: "carousel", count: carousel.length },
+    { id: "hero-actions", count: carousel.length ? 2 : 0 },
+    { id: "alts", count: alternatives.length },
   ];
-
-  const railById = (rowId: string): DeckItem[] =>
-    rowId === "recs" ? recs : rowId === "latest" ? latest : rowId === "explore" ? explore : [];
 
   const dpad = useDpad({
     rows,
@@ -80,41 +94,47 @@ export function HomeScreen({
     onSelect: (rowId, col) => {
       if (rowId === "chips") {
         onChip(chips[col].q);
-      } else if (rowId === "hero") {
-        if (!heroItem) return;
-        if (col === 0) onPlayHero(heroItem);
-        else onOpenDetail(heroItem);
-      } else {
-        const it = railById(rowId)[col];
+      } else if (rowId === "carousel") {
+        const it = carousel[col];
+        if (it) onPlayHero(it); // OK sobre el banner = Ver ahora
+      } else if (rowId === "hero-actions") {
+        const it = carousel[activeRef.current];
+        if (!it) return;
+        if (col === 0) onPlayHero(it);
+        else onOpenDetail(it);
+      } else if (rowId === "alts") {
+        const it = alternatives[col];
         if (it) onOpenDetail(it);
       }
     },
     onFocusChange: (rowId, col) => {
-      let id: string | null = null;
-      if (rowId === "hero") id = heroItem?.id ?? null;
-      else if (rowId !== "chips") id = railById(rowId)[col]?.id ?? null;
-      onFocusedItemChange(id);
-      if (rowId === "explore" && col >= explore.length - 3) onLoadMoreExplore();
+      if (rowId === "carousel") {
+        setActive(col);
+        onFocusedItemChange(carousel[col]?.id ?? null);
+      } else if (rowId === "hero-actions") {
+        onFocusedItemChange(carousel[activeRef.current]?.id ?? null);
+      } else if (rowId === "alts") {
+        onFocusedItemChange(alternatives[col]?.id ?? null);
+        if (col >= alternatives.length - 3) onLoadMoreExplore();
+      } else {
+        onFocusedItemChange(null);
+      }
     },
   });
 
-  // Foco por id (comando FOCUS del teléfono) — solo esta pantalla sabe el layout.
+  // Foco por id (comando FOCUS del teléfono) — mapea al banner o a la alternativa.
   const focusById = useCallback(
     (id: string) => {
-      if (heroItem && heroItem.id === id) {
-        dpad.setFocus("hero", 0);
+      const ci = carousel.findIndex((d) => d.id === id);
+      if (ci >= 0) {
+        dpad.setFocus("carousel", ci);
         return;
       }
-      for (const rowId of ["recs", "latest", "explore"]) {
-        const idx = railById(rowId).findIndex((d) => d.id === id);
-        if (idx >= 0) {
-          dpad.setFocus(rowId, idx);
-          return;
-        }
-      }
+      const ai = alternatives.findIndex((d) => d.id === id);
+      if (ai >= 0) dpad.setFocus("alts", ai);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dpad.setFocus, heroItem, recs, latest, explore],
+    [dpad.setFocus, carousel, alternatives],
   );
 
   useEffect(() => {
@@ -124,11 +144,11 @@ export function HomeScreen({
     };
   }, [bridgeRef, dpad.move, dpad.select, dpad.setFocus, focusById]);
 
-  // Scroll del ítem enfocado a la vista (vertical + horizontal).
+  // Scroll del ítem enfocado a la vista.
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
   useEffect(() => {
     const el = cardRefs.current.get(`${dpad.focusedRowId}:${dpad.focusedCol}`);
-    el?.scrollIntoView({ block: "center", inline: "center", behavior: SCROLL_BEHAVIOR });
+    el?.scrollIntoView({ block: "nearest", inline: "center", behavior: SCROLL_BEHAVIOR });
   }, [dpad.focusedRowId, dpad.focusedCol]);
 
   const setRef = (key: string) => (el: HTMLElement | null) => {
@@ -136,9 +156,11 @@ export function HomeScreen({
     else cardRefs.current.delete(key);
   };
 
-  const heroPoster = heroItem ? posters[heroItem.title] : undefined;
-  const heroAvail = heroItem ? availability[heroItem.title] : undefined;
-  const heroColor = heroItem ? colorForPlatform(heroItem.platform) : "#6d28d9";
+  const active = carousel[activeIndex] ?? carousel[0] ?? null;
+  const activePoster = active ? posters[active.title] : undefined;
+  const activeAvail = active ? availability[active.title] : undefined;
+  const activeColor = active ? colorForPlatform(active.platform) : "#6d28d9";
+  const carouselFocused = dpad.focusedRowId === "carousel";
 
   return (
     <div className="relative h-screen w-screen overflow-y-auto bg-background">
@@ -172,74 +194,99 @@ export function HomeScreen({
         )}
       </div>
 
-      {/* Hero destacado */}
-      {heroItem && (
-        <div className="relative mx-[4vw] mt-2 h-[48vh] overflow-hidden rounded-3xl border border-border bg-muted/20">
-          {heroPoster && (
-            <img src={heroPoster} alt={heroItem.title} className="absolute inset-0 h-full w-full object-cover" />
+      {/* Carrusel de banners (pager): un recomendado grande a la vez, ←/→ cambia. */}
+      {active && (
+        <div
+          ref={setRef(`carousel:${activeIndex}`)}
+          className={cn(
+            "relative mx-[4vw] mt-2 h-[48vh] overflow-hidden rounded-3xl border bg-muted/20 transition-all",
+            carouselFocused ? "tv-focus border-primary" : "border-border",
           )}
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-transparent" />
-          <div className="relative flex h-full max-w-2xl flex-col justify-center gap-3 p-10">
-            <h1 className="text-4xl font-bold leading-tight text-foreground">{heroItem.title}</h1>
+        >
+          {activePoster && (
+            <img src={activePoster} alt={active.title} className="absolute inset-0 h-full w-full object-cover" />
+          )}
+          {/* Doble gradiente: lateral (cinematográfico) + base, para que el texto
+              y la razón se lean SOBRE la imagen sin oscurecer el banner entero. */}
+          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-background/95 via-background/25 to-transparent" />
 
-            {/* Metadata (misma info que la App Móvil): plataforma, tipo, duración,
-                año y clasificación. Los campos vacíos se descartan solos. */}
+          <div className="relative flex h-full max-w-2xl flex-col justify-center gap-3 p-9">
+            {/* Dots + posición (1 de 5) */}
+            {carousel.length > 1 && (
+              <div className="flex items-center gap-2.5">
+                <div className="flex gap-1.5">
+                  {carousel.map((_, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all",
+                        i === activeIndex ? "w-6 bg-primary" : "w-1.5 bg-muted-foreground/40",
+                      )}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {activeIndex + 1} de {carousel.length}
+                </span>
+              </div>
+            )}
+
+            <h1 className="text-4xl font-bold leading-tight text-foreground">{active.title}</h1>
+
+            {/* Metadata: plataforma, tipo, duración, año, clasificación, disponibilidad. */}
             <div className="flex flex-wrap items-center gap-3">
               <span
                 className="rounded-full px-3 py-1 text-sm font-bold text-white"
-                style={{ backgroundColor: heroColor }}
+                style={{ backgroundColor: activeColor }}
               >
-                {platformLabel(heroItem.platform)}
+                {platformLabel(active.platform)}
               </span>
               <span className="text-base text-muted-foreground">
-                {[heroItem.type, heroItem.duration, heroItem.year].filter(Boolean).join(" · ")}
+                {[active.type, active.duration, active.year].filter(Boolean).join(" · ")}
               </span>
-              {heroItem.ageRating && (
+              {active.ageRating && (
                 <span className="rounded border border-muted-foreground/30 px-2 py-0.5 text-sm font-semibold text-muted-foreground">
-                  {heroItem.ageRating}
+                  {active.ageRating}
                 </span>
               )}
-              {heroAvail === undefined ? (
+              {activeAvail === undefined ? (
                 <span className="text-sm text-muted-foreground/50">Verificando disponibilidad...</span>
-              ) : heroAvail.confirmed ? (
+              ) : activeAvail.confirmed ? (
                 <span className="text-sm font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
               ) : (
                 <span className="text-sm text-muted-foreground/50">Verificalo al abrir la app</span>
               )}
             </div>
 
-            {heroItem.synopsis && (
-              <p className="max-w-xl text-lg leading-relaxed text-foreground/80 line-clamp-2">
-                {heroItem.synopsis}
+            {/* La razón de Cinéfilo — SOBRE la imagen del banner, con realce para
+                que se lea. Va directo la descripción (sin etiqueta). shrink-0 evita
+                que flex la comprima; line-clamp-3 es tope de seguridad. */}
+            {active.reason && (
+              <p className="max-w-xl shrink-0 rounded-xl bg-black/45 px-4 py-2.5 text-base leading-relaxed text-foreground/95 backdrop-blur-sm line-clamp-3">
+                <span className="mr-1.5 font-semibold text-primary">✦</span>
+                {active.reason}
               </p>
             )}
 
-            {/* Por qué te la sugerimos */}
-            {heroItem.reason && (
-              <p className="max-w-xl text-base leading-relaxed text-foreground/70 line-clamp-2">
-                <span className="font-semibold text-primary">✦ Por qué: </span>
-                {heroItem.reason}
-              </p>
-            )}
-
-            <div className="mt-2 flex gap-3">
+            <div className="mt-1 flex gap-3">
               <button
-                ref={setRef("hero:0")}
-                onClick={() => onPlayHero(heroItem)}
+                ref={setRef("hero-actions:0")}
+                onClick={() => onPlayHero(active)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full px-6 py-2.5 text-base font-bold text-white transition-transform",
-                  dpad.isFocused("hero", 0) && "tv-focus",
+                  "flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold text-white transition-transform",
+                  dpad.isFocused("hero-actions", 0) && "tv-focus",
                 )}
-                style={{ backgroundColor: heroColor }}
+                style={{ backgroundColor: activeColor }}
               >
                 <Play className="h-4 w-4" /> Ver ahora
               </button>
               <button
-                ref={setRef("hero:1")}
-                onClick={() => onOpenDetail(heroItem)}
+                ref={setRef("hero-actions:1")}
+                onClick={() => onOpenDetail(active)}
                 className={cn(
-                  "flex items-center gap-2 rounded-full border-2 border-border bg-background/60 px-6 py-2.5 text-base font-semibold text-foreground transition-transform",
-                  dpad.isFocused("hero", 1) && "tv-focus",
+                  "flex items-center gap-2 rounded-full border-2 border-border bg-background/60 px-5 py-2 text-sm font-semibold text-foreground transition-transform",
+                  dpad.isFocused("hero-actions", 1) && "tv-focus",
                 )}
               >
                 <Info className="h-4 w-4" /> Más info
@@ -249,13 +296,17 @@ export function HomeScreen({
         </div>
       )}
 
-      {/* Rails */}
+      {/* Fila de alternativas (el resto de recomendaciones). "Más opciones" desde
+          el teléfono agrega más acá. */}
       <div className="mt-8 flex flex-col gap-8 pb-[6vh]">
-        <Rail rowId="recs" title="Recomendadas para vos" items={recs} posters={posters} dpad={dpad} setRef={setRef} />
-        <Rail rowId="latest" title="Últimas subidas a las plataformas" items={latest} posters={posters} dpad={dpad} setRef={setRef} />
-        {explore.length > 0 && (
-          <Rail rowId="explore" title="Más para explorar" items={explore} posters={posters} dpad={dpad} setRef={setRef} />
-        )}
+        <Rail
+          rowId="alts"
+          title="Más opciones para vos"
+          items={alternatives}
+          posters={posters}
+          dpad={dpad}
+          setRef={setRef}
+        />
       </div>
     </div>
   );

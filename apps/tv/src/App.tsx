@@ -56,8 +56,6 @@ export default function App() {
   const [launchHint, setLaunchHint] = useState<{ title: string; platform: string } | null>(null);
 
   // Home aplanado + dedupeado por id (para lookups del teléfono + emitir SCREEN).
-  const heroItem = homeRecs[0] ?? homeLatest[0] ?? null;
-  const recsRail = useMemo(() => homeRecs.slice(1), [homeRecs]);
   const homeItems = useMemo(() => {
     const seen = new Set<string>();
     const out: DeckItem[] = [];
@@ -68,6 +66,11 @@ export default function App() {
     }
     return out;
   }, [homeRecs, homeLatest, homeExplore]);
+
+  // La home es una sola lista ordenada: los primeros 5 son el carrusel de banners
+  // grandes; el resto es la fila de alternativas ("Más opciones" agrega más).
+  const carousel = useMemo(() => homeItems.slice(0, 5), [homeItems]);
+  const alternatives = useMemo(() => homeItems.slice(5), [homeItems]);
 
   // Refs para leer estado actual dentro de handlers estables (comandos del teléfono).
   const itemsRef = useRef(items);
@@ -141,8 +144,8 @@ export default function App() {
     rememberShown([...finalRecs, ...finalLatest]);
     void fetchPostersInto(finalRecs); // hero + recs primero
     void fetchPostersInto(finalLatest);
-    const hero = finalRecs[0] ?? finalLatest[0];
-    if (hero) void loadAvailability([hero]);
+    // Disponibilidad de los 5 banners del carrusel (los primeros del combinado).
+    void loadAvailability([...finalRecs, ...finalLatest].slice(0, 5));
   };
 
   // Pre-warm en platforms + asegurar en home (guard interno → corre una vez).
@@ -380,10 +383,8 @@ export default function App() {
     return (
       <>
         <HomeScreen
-          heroItem={heroItem}
-          recs={recsRail}
-          latest={homeLatest}
-          explore={homeExplore}
+          carousel={carousel}
+          alternatives={alternatives}
           posters={posters}
           availability={availability}
           paired={session.paired}

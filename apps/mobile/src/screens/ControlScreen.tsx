@@ -318,21 +318,26 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           </div>
         ) : (
           <>
-            {/* Orbe: seguir iterando con Cinéfilo (más recomendaciones o
-                preguntar sobre la película centrada). */}
-            <button
-              onClick={() => setVoiceOpen(true)}
-              disabled={!paired}
-              className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/20 px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-40"
-            >
-              <Orb phase="idle" size="mini" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-foreground">Hablar con Cinéfilo</span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {centered ? `Pedile más o preguntá sobre ${centered.title}` : "Pedile más recomendaciones"}
+            {/* Orbe: seguir iterando con Cinéfilo (más recomendaciones o preguntar
+                sobre la película centrada). Queda FIJO arriba mientras se deslizan
+                las tarjetas (sticky), así siempre está a mano. El wrapper cancela
+                el padding lateral/superior del scroll (-mx-4 -mt-4) para que su
+                fondo tape las tarjetas de punta a punta al quedar pegado. */}
+            <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-3 bg-background/95 px-4 pb-2.5 pt-4 backdrop-blur">
+              <button
+                onClick={() => setVoiceOpen(true)}
+                disabled={!paired}
+                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 px-3 py-2.5 text-left active:scale-[0.99] disabled:opacity-40"
+              >
+                <Orb phase="idle" size="mini" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">Hablar con Cinéfilo</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {centered ? `Pedile más o preguntá sobre ${centered.title}` : "Pedile más recomendaciones"}
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+            </div>
             <ul className="space-y-2.5 pb-2">
             {items.map((item) => (
               <li key={item.id} ref={registerCard(item.id)}>
@@ -473,12 +478,8 @@ function MovieCard({
             {item.year && <span className="shrink-0 text-[11px] text-muted-foreground">{item.year}</span>}
           </div>
           {item.synopsis && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.synopsis}</p>}
-          {item.reason && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-foreground/80">
-              <span className="font-semibold text-primary">✦ Por qué: </span>
-              {item.reason}
-            </p>
-          )}
+          {/* El "por qué" no se muestra acá: en esta tarjeta chica queda ilegible.
+              Va completo en el banner grande de la TV, que es donde tiene sentido. */}
         </div>
       </div>
       <div className="mt-2 flex gap-2">

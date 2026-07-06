@@ -483,12 +483,8 @@ function MovieCard({
             {item.year && <span className="shrink-0 text-[11px] text-muted-foreground">{item.year}</span>}
           </div>
           {item.synopsis && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{item.synopsis}</p>}
-          {item.reason && (
-            <p className="mt-0.5 line-clamp-2 text-xs text-foreground/80">
-              <span className="font-semibold text-primary">✦ Por qué: </span>
-              {item.reason}
-            </p>
-          )}
+          {/* El "por qué" no se muestra acá: en esta tarjeta chica queda ilegible.
+              Va completo en el banner grande de la TV, que es donde tiene sentido. */}
         </div>
       </div>
       <div className="mt-2 flex gap-2">
