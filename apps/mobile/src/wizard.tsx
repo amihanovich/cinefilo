@@ -12,6 +12,7 @@ import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
 import { WelcomeScreen } from "./components/WelcomeScreen";
+import { SearchLoading } from "./components/SearchLoading";
 import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
@@ -122,6 +123,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [cart, setCart] = useState<Recommendation[]>([]);
   const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
 
+  // Búsqueda en curso → pantalla de loading (Bloque 3). null = sin búsqueda activa.
+  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice" } | null>(null);
+
   // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
@@ -227,6 +231,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
+    // Feedback inmediato (≤100ms): plataformas activas + eco del pedido.
+    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -254,6 +260,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setCurrentIndex(0);
       setScreen("magic");
       setLoading(false);
+      setSearchInfo(null);
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
 
@@ -264,6 +271,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
+      setSearchInfo(null);
       showError("No pudimos buscar. Revisá tu conexión e intentá de nuevo.");
     }
   };
@@ -505,6 +513,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // Control remoto de la TV (full-screen sobre cualquier pantalla).
   if (controlSession) {
     return <ControlScreen session={controlSession} onClose={() => setControlSession(null)} />;
+  }
+
+  // Búsqueda en curso: pantalla de loading (reemplaza el resultado, con fade-in).
+  if (searchInfo) {
+    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} />;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -795,7 +808,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {/* Contenido en scroll continuo: héroe + carrito + grilla */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
           {/* Héroe: recomendación principal (~mitad de pantalla) */}
-          <div className="h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none">
+          <div key={current.title} className="fade-in h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none">
             <div className="flex h-full">
               {/* Poster */}
               <div className="w-28 shrink-0 overflow-hidden">
