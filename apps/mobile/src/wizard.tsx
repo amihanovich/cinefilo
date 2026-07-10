@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent, type UIEvent as ReactUIEvent } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
   User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
@@ -277,9 +277,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   };
 
-  // ── Galería: carga ~16 opciones ───────────────────────────────────────────
-  // Carga "más opciones" en segundo plano para la grilla continua de la Home.
+  // ── Galería / "más opciones" + carga infinita ─────────────────────────────
+  const loadingMoreRef = useRef(false);
+  const galleryDryRef = useRef(false);
+
+  // Carga inicial de "más opciones" en segundo plano al recibir una búsqueda.
   const loadGallery = async () => {
+    galleryDryRef.current = false;
     setGalleryLoading(true);
     setGalleryItems([]);
     setGalleryPosters({});
@@ -310,6 +314,44 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     } catch {
       setGalleryLoading(false);
     }
+  };
+
+  // Carga infinita: al acercarse al fondo, appendear otra tanda de opciones nuevas.
+  const loadMoreGallery = async () => {
+    if (loadingMoreRef.current || galleryDryRef.current) return;
+    loadingMoreRef.current = true;
+    setGalleryLoading(true);
+    try {
+      const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
+      const ctx = inferContext();
+      const data = await fetchRecommendation({
+        messages: [...messages, { role: "user", content: "Mostrame más opciones distintas" }],
+        platforms: effectivePlatforms,
+        contextHint: contextToPromptHint(ctx),
+        seasonHint: seasonHintShort(ctx),
+        weatherHint: null,
+        excludeTitles: excludeList(),
+        alternativesCount: 12,
+      });
+      const all = data?.main ? [data.main, ...(data.alternatives ?? [])] : [];
+      const existing = new Set([...items, ...galleryItems].map((i) => i.title));
+      const fresh = all.filter((i) => !existing.has(i.title));
+      if (fresh.length === 0) {
+        galleryDryRef.current = true; // no hay más: cortamos el loop
+      } else {
+        rememberShown(fresh);
+        setGalleryItems((prev) => [...prev, ...fresh]);
+        void fetchPosters(fresh.map((i) => ({ title: i.title, type: i.type, year: i.year })))
+          .then((p) => setGalleryPosters((prev) => ({ ...prev, ...p })));
+      }
+    } catch { /* noop */ }
+    setGalleryLoading(false);
+    loadingMoreRef.current = false;
+  };
+
+  const onGridScroll = (e: ReactUIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) void loadMoreGallery();
   };
 
   const confirmGallerySelection = () => {
@@ -357,7 +399,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
     // Pregunta sobre el título en pantalla → respuesta conversacional,
     // SIN pisar el deck actual con recomendaciones nuevas.
-    const currentItem = items[currentIndex];
+    const currentItem = (cart.length > 0 ? cart : items)[currentIndex];
     if (screen === "magic" && currentItem && isDetailQuery(text)) {
       setLoading(true);
       track("detail_question", { title: currentItem.title });
@@ -487,11 +529,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // ── Carrito "Para ver hoy" + long-press de la grilla ──────────────────────
   const inCart = (title: string) => cart.some((c) => c.title === title);
   const toggleCart = (item: Recommendation) => {
+    const adding = !cart.some((c) => c.title === item.title);
     setCart((prev) =>
       prev.some((c) => c.title === item.title)
         ? prev.filter((c) => c.title !== item.title)
         : [item, ...prev],
     );
+    // Al sumar, las tarjetas grandes pasan a mostrar el carrito y saltan a la
+    // recién agregada (queda primera). Al quitar, no saltamos.
+    if (adding) setCurrentIndex(0);
   };
   const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
 
@@ -653,21 +699,29 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    // Héroe = carrusel de las 5 principales; la card visible la maneja currentIndex.
-    const heroItems = items.slice(0, 5);
-    const heroIndex = Math.min(currentIndex, heroItems.length - 1); // clamp defensivo
+    // Tarjetas grandes: carrito vacío = las 5 recomendaciones; apenas sumás algo,
+    // pasan a mostrar TU CARRITO en detalle (swipe entre lo que vas a ver hoy).
+    const cartMode = cart.length > 0;
+    const heroItems = cartMode ? cart : items.slice(0, 5);
+    const heroIndex = Math.min(currentIndex, Math.max(0, heroItems.length - 1));
     const current = heroItems[heroIndex];
-    const poster = current ? posters[current.title] : undefined;
+    const posterFor = (t: string) => posters[t] ?? galleryPosters[t];
+    const poster = current ? posterFor(current.title) : undefined;
     const avail = current ? availability[current.title] : undefined;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
-    // Grilla continua = resto (items[5..]) + "más opciones", sin duplicar NINGUNO de los 5 del héroe.
-    const seenTitles = new Set(heroItems.map((i) => i.title));
+    // Grilla: en modo browse (carrito vacío) ocultamos las 5 del héroe; en modo
+    // carrito mostramos TODO (las 5 recos vuelven acá + más opciones), con check
+    // en las que ya están en el carrito.
+    const heroTitles = new Set(heroItems.map((i) => i.title));
+    const seenGrid = new Set<string>();
     const gridItems: Recommendation[] = [];
-    for (const it of [...items.slice(5), ...galleryItems]) {
-      if (!seenTitles.has(it.title)) { seenTitles.add(it.title); gridItems.push(it); }
+    for (const it of [...items, ...galleryItems]) {
+      if (seenGrid.has(it.title)) continue;
+      seenGrid.add(it.title);
+      if (!cartMode && heroTitles.has(it.title)) continue;
+      gridItems.push(it);
     }
-    const posterFor = (t: string) => posters[t] ?? galleryPosters[t];
 
     return (
       <div className="relative flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
@@ -800,9 +854,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </button>
         </div>
 
-        {/* Contenido en scroll continuo: héroe + carrito + grilla */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
-          {/* Héroe: carrusel de las 5 principales (~mitad de pantalla, swipe ←/→) */}
+        {/* Contenido en scroll continuo: héroe + grilla (con carga infinita) */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8" onScroll={onGridScroll}>
+          {cart.length > 0 && (
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-foreground">
+              <Check className="h-4 w-4 text-primary" /> Para ver hoy ({cart.length})
+            </p>
+          )}
+          {/* Tarjetas grandes: carrito (si tiene ítems) o top-5, swipe ←/→ */}
           <div
             key={current.title}
             onTouchStart={onHeroTouchStart}
@@ -902,41 +961,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 ))}
               </div>
               <p className="mt-1.5 text-center text-[10px] text-muted-foreground/50">
-                Deslizá para ver las {heroItems.length} mejores
+                {cart.length > 0 ? "Deslizá entre tu lista de hoy" : `Deslizá para ver las ${heroItems.length} mejores`}
               </p>
             </>
           )}
 
-          {/* Carrito "Para ver hoy" (carrusel horizontal, entre héroe y grilla) */}
-          {cart.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
-                <Check className="h-3.5 w-3.5 text-primary" /> Para ver hoy ({cart.length})
-              </p>
-              <div className="flex gap-2.5 overflow-x-auto pb-1">
-                {cart.map((it) => {
-                  const p = posterFor(it.title);
-                  const col = colorForPlatform(it.platform);
-                  return (
-                    <div key={it.title} className="w-20 shrink-0">
-                      <div className="relative h-28 w-full overflow-hidden rounded-xl bg-muted" style={!p ? { backgroundColor: `${col}20` } : undefined}>
-                        {p ? (
-                          <img src={p} alt={it.title} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-2xl font-black opacity-10" style={{ color: col }}>{it.title.charAt(0)}</div>
-                        )}
-                        <button onClick={() => removeFromCart(it.title)} aria-label="Quitar" className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white active:scale-90">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-tight text-foreground">{it.title}</p>
-                      <span className="text-[8px] font-bold" style={{ color: col }}>{platformLabel(it.platform)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* (La tira chica "Para ver hoy" se quitó: las tarjetas grandes de arriba
+              ahora muestran el carrito en detalle cuando tiene ítems.) */}
 
           {/* Grilla de opciones (scroll continuo, sin título ni botón) */}
           <div className="mt-4 grid grid-cols-3 gap-2.5">
@@ -975,7 +1006,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 </button>
               );
             })}
-            {galleryLoading && gridItems.length < 6 && (
+            {galleryLoading && (
               <div className="col-span-3 flex items-center justify-center gap-2 py-6 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" /> <span className="text-xs">Cargando más opciones…</span>
               </div>
