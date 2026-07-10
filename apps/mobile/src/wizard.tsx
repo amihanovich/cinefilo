@@ -11,6 +11,7 @@ import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
@@ -26,9 +27,10 @@ const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Par
 const COUNTRY_KEY = "cinefilo:country";
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 const TV_BANNER_KEY = "cinefilo:tvBannerDismissed";
+const OPENED_KEY = "cinefilo:opened_before";
 
 type SavedItem = { title: string; platform: string; type: string };
-type Screen = "welcome" | "platforms" | "magic" | "gallery";
+type Screen = "welcome" | "magic" | "gallery";
 
 // ── Helpers localStorage ─────────────────────────────────────────────────────
 function loadSet(key: string): Set<string> {
@@ -98,8 +100,10 @@ function isDetailQuery(q: string): boolean {
 export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[]; }
-    catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[];
+      return saved.length > 0 ? saved : [...PLATFORMS];
+    } catch { return [...PLATFORMS]; }
   });
 
   // Cards
@@ -188,14 +192,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const touchStartX = useRef(0);
   const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
-  // Auto-advance welcome → platforms
+  // Warmup del backend mientras se muestra el splash del welcome. El splash y el
+  // paso a la Home los maneja WelcomeScreen (ya no auto-avanza a "platforms").
   useEffect(() => {
     if (screen !== "welcome") return;
     void detectCountry();
-    warmupBackend(); // despierta Railway mientras el usuario mira el welcome
-    const t = setTimeout(() => setScreen("platforms"), 2000);
-    return () => clearTimeout(t);
+    warmupBackend();
   }, [screen]);
+
+  // Semilla: si el usuario nunca eligió plataformas, arrancan TODAS activas.
+  useEffect(() => {
+    if (!localStorage.getItem(PLATFORMS_KEY)) {
+      localStorage.setItem(PLATFORMS_KEY, JSON.stringify(PLATFORMS));
+    }
+  }, []);
 
   // ── Disponibilidad JustWatch ──────────────────────────────────────────────
   const loadAvailability = useCallback(async (allItems: Recommendation[]) => {
@@ -465,73 +475,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "welcome") {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
-        <div className="flex flex-col items-center gap-5">
-          <Sparkles className="h-12 w-12 text-primary" />
-          <div className="flex flex-col gap-2">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo.</h1>
-            <p className="text-base text-muted-foreground leading-snug">
-              Contame qué querés ver<br />y te ayudo a encontrarlo.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // PANTALLA: PLATFORMS
-  // ════════════════════════════════════════════════════════════════════════════
-  if (screen === "platforms") {
-    return (
-      <div className="flex h-[100dvh] flex-col bg-background px-6 pt-16 pb-10 safe-top safe-bottom">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">¿Cuáles tenés?</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Seleccioná tus plataformas. Si no elegís ninguna, buscamos en todas.
-        </p>
-
-        <div className="mt-8 grid grid-cols-2 gap-3">
-          {PLATFORMS.map((p) => {
-            const selected = platforms.includes(p);
-            const color = colorForPlatform(p);
-            return (
-              <button
-                key={p}
-                onClick={() => setPlatforms((prev) => selected ? prev.filter((x) => x !== p) : [...prev, p])}
-                className={cn(
-                  "rounded-2xl border-2 px-4 py-5 text-left text-sm font-semibold transition-all active:scale-95",
-                  selected ? "border-transparent text-white" : "border-border bg-background text-foreground"
-                )}
-                style={selected ? { backgroundColor: color, borderColor: color } : {}}
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-auto pt-8">
-          {offline && (
-            <p className="mb-3 text-center text-xs font-semibold text-amber-500">Sin conexión — conectate para buscar</p>
-          )}
-          {error && (
-            <p className="mb-3 text-center text-xs font-semibold text-red-400">{error}</p>
-          )}
-          {loading ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
-              <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
-            </div>
-          ) : (
-            <button
-              onClick={handleStartReco}
-              className="w-full rounded-full bg-foreground py-4 text-base font-semibold text-background active:scale-95 transition-transform"
-            >
-              Empezar →
-            </button>
-          )}
-        </div>
-      </div>
+      <WelcomeScreen
+        firstTime={!localStorage.getItem(OPENED_KEY)}
+        busy={loading}
+        error={error}
+        onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
+        onSurprise={() => { localStorage.setItem(OPENED_KEY, "1"); handleStartReco(); }}
+      />
     );
   }
 
