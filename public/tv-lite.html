@@ -8,64 +8,95 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Paleta cálida tipo Anthropic: marfil claro + texto cálido + acento coral. */
+  /* Paleta oscura / cinematográfica: casi-negro + texto claro + acento coral. */
   * { box-sizing: border-box; }
-  body { margin:0; background:#F7F4ED; color:#2B2A27;
+  body { margin:0; background:#0E0E10; color:#F5F5F7;
     font-family:'Inter', system-ui, -apple-system, Arial, sans-serif; -webkit-font-smoothing:antialiased; }
   .serif { font-family:'Newsreader', Georgia, serif; }
-  .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #E7E2D6; background:#FBFAF5; }
-  .brand { font-family:'Newsreader', Georgia, serif; font-size:30px; font-weight:600; letter-spacing:-.01em; }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #26262A; background:#141416; }
+  .brand { font-family:'Newsreader', Georgia, serif; font-size:30px; font-weight:600; letter-spacing:-.01em; color:#F5F5F7; }
   .brand span { color:#CC785C; }
-  .ai { font-size:13px; color:#8A8678; margin-left:10px; font-family:'Inter',sans-serif; }
-  .badge { font-size:16px; color:#6B6A61; background:#FFFFFF; border:1px solid #E7E2D6; border-radius:999px; padding:7px 15px; }
-  .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#BDB8AB; }
+  .ai { font-size:13px; color:#8A8A93; margin-left:10px; font-family:'Inter',sans-serif; }
+  .badge { font-size:16px; color:#C9C9CE; background:#1C1C1F; border:1px solid #2A2A2E; border-radius:999px; padding:7px 15px; }
+  .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
   .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
 
-  /* === Landing / vinculación === */
-  .pair { text-align:center; padding:34px 24px 44px; }
-  .taglines { max-width:920px; margin:0 auto 8px; }
-  .taglines p { margin:8px 0; font-size:24px; color:#4A4942; line-height:1.35; }
+  /* === Landing / vinculación: 2 mitades (QR+copy | grilla de pósters) === */
+  .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
+  .pairleft { width:42%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:18px; padding:0 52px; border-right:1px solid #1E1E22; }
+  .qrbox { align-self:flex-start; background:#fff; padding:16px; border-radius:22px; box-shadow:0 18px 60px rgba(204,120,92,.28); }
+  .qrbox img { display:block; width:300px; height:300px; }
+  .pairleft h1 { font-family:'Newsreader', Georgia, serif; font-size:38px; font-weight:600; margin:6px 0 0; color:#F5F5F7; }
+  .pairleft .sub { font-size:19px; color:#B4B4BC; margin:0; max-width:460px; line-height:1.4; }
+  .taglines { margin:2px 0 0; }
+  .taglines p { margin:6px 0; font-size:17px; color:#9A9AA2; line-height:1.35; }
   .taglines .a { color:#CC785C; font-weight:600; }
-  .stage { position:relative; width:660px; max-width:94%; height:380px; margin:14px auto 6px; }
-  .qrbox { position:absolute; left:50%; top:50%; margin-left:-178px; margin-top:-178px; background:#fff; padding:18px; border-radius:22px; border:1px solid #E7E2D6; box-shadow:0 14px 50px rgba(204,120,92,.20); }
-  .qrbox img { display:block; width:320px; height:320px; }
-  .chip { position:absolute; color:#fff; font-weight:600; font-size:18px; padding:9px 16px; border-radius:12px; box-shadow:0 8px 22px rgba(0,0,0,.18); animation:float 3.2s ease-in-out infinite; white-space:nowrap; }
-  @keyframes float { 0%{transform:translateY(0)} 50%{transform:translateY(-16px)} 100%{transform:translateY(0)} }
-  .pair h1 { font-family:'Newsreader', Georgia, serif; font-size:38px; font-weight:600; margin:16px 0 6px; }
-  .pair .sub { font-size:19px; color:#6B6A61; margin:0; }
-  .sess { margin-top:14px; color:#A39E91; font-size:15px; }
+  .sess { margin-top:6px; color:#6A6A72; font-size:15px; }
+  /* Grilla de pósters reales de tendencias, mitad derecha (estilo operadora). */
+  .pairgrid { flex:1; display:grid; grid-template-columns:repeat(4, 1fr); grid-auto-rows:1fr; gap:14px; padding:26px; }
+  .ptile { position:relative; overflow:hidden; border-radius:16px; background:#161619; box-shadow:0 12px 34px rgba(0,0,0,.55); }
+  .ptile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .ptile .cap { position:absolute; left:0; right:0; bottom:0; padding:26px 12px 10px; background:linear-gradient(to top, rgba(0,0,0,.9), transparent); }
+  .ptile .cap .tt { display:block; font-size:14px; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ptile .cap .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
 
   /* === Resultados / home === */
   .wrap { padding:18px 34px 44px; }
-  .topline { font-size:20px; color:#4A4942; margin-bottom:14px; }
-  .topline b { color:#2B2A27; }
+  .topline { font-size:20px; color:#B4B4BC; margin-bottom:14px; }
+  .topline b { color:#F5F5F7; }
   .topline .hint { color:#CC785C; font-weight:600; }
 
-  .spot { display:flex; gap:18px; background:#FFFFFF; border:1px solid #E7E2D6; border-radius:18px; padding:16px; margin-bottom:18px; position:sticky; top:0; z-index:5; box-shadow:0 6px 22px rgba(0,0,0,.05); }
-  .spot .poster { width:84px; height:126px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#EFEBE0; }
-  .spot .poster img { width:100%; height:100%; object-fit:cover; }
-  .spot h2 { font-family:'Newsreader', Georgia, serif; margin:0; font-size:24px; font-weight:600; }
-  .spot .yr { color:#A39E91; font-size:15px; font-weight:normal; margin-left:8px; font-family:'Inter',sans-serif; }
-  .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; margin-top:7px; }
-  .syn { font-size:16px; color:#4A4942; margin:8px 0 0; line-height:1.4; }
-  .why { font-size:16px; color:#2B2A27; margin:6px 0 0; line-height:1.4; }
-  .why b { color:#CC785C; }
-  .why .ico { color:#CC785C; }
+  .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:'Newsreader', Georgia, serif; font-size:23px; font-weight:600; margin:20px 0 12px; color:#2B2A27; }
+  .sec { font-family:'Newsreader', Georgia, serif; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
-  .grid { display:flex; flex-wrap:wrap; margin:-6px; }
-  .card { width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #ECE7DA; border-radius:13px; overflow:hidden; background:#FFFFFF; opacity:.92; transition:all .12s; }
-  .card.foc { opacity:1; border-color:#CC785C; box-shadow:0 6px 22px rgba(204,120,92,.30); transform:scale(1.05); }
-  .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#EFEBE0; overflow:hidden; }
+
+  /* === Héroe (home): la recomendación principal a lo grande === */
+  .hero { position:relative; height:52vh; min-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  .hero.foc { border-color:#CC785C; box-shadow:0 0 0 3px rgba(204,120,92,.55), 0 20px 60px rgba(204,120,92,.30); }
+  .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
+  .hero .g2 { position:absolute; inset:0; background:linear-gradient(to top, #0E0E10 2%, rgba(14,14,16,.15) 46%, rgba(14,14,16,0) 78%); }
+  .hero .info { position:relative; z-index:2; max-width:56%; height:100%; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 48px; }
+  .hero .htitle { font-family:'Newsreader', Georgia, serif; font-size:44px; font-weight:600; line-height:1.05; margin:0; color:#F5F5F7; }
+  .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+  .hero .hsub { font-size:16px; color:#B4B4BC; }
+  .hero .hreason { max-width:640px; margin:2px 0 0; font-size:17px; line-height:1.4; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason b { color:#CC785C; margin-right:6px; }
+
+  /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
+  .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
+  .card { position:relative; width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
+  .card.foc { opacity:1; border-color:#CC785C; box-shadow:0 12px 34px rgba(204,120,92,.4); transform:scale(1.08); z-index:4; }
+  /* Detalle (solo la razón): overlay sobre la parte baja del póster enfocado. */
+  .card .det { display:none; position:absolute; left:0; right:0; bottom:0; background:rgba(10,10,12,.92); padding:8px 9px; border-top:1px solid rgba(204,120,92,.35); }
+  .card.foc .det { display:block; }
+  .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .why b { color:#CC785C; }
+  .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
   .card .ph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
-  .card .ph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; color:#8A8678; font-size:13px; font-weight:500; }
+  .card .ph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; color:#9A9AA2; font-size:13px; font-weight:500; }
   .card .meta { padding:8px 10px; }
-  .card .meta .t { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#2B2A27; }
+  .card .meta .t { display:flex; align-items:baseline; gap:5px; font-size:14px; font-weight:600; }
+  .card .meta .t .tt { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#F5F5F7; }
+  .card .meta .t .y { flex:0 0 auto; font-size:11px; font-weight:500; color:#8A8A93; }
   .card .meta .p { font-size:12px; margin-top:2px; }
-  .center { text-align:center; color:#8A8678; font-size:21px; padding:60px 20px; }
-  .more { text-align:center; color:#8A8678; font-size:18px; padding:20px; width:100%; }
+  .center { text-align:center; color:#9A9AA2; font-size:21px; padding:60px 20px; }
+  .more { text-align:center; color:#9A9AA2; font-size:18px; padding:20px; width:100%; }
   .hidden { display:none; }
+  /* Estado de búsqueda: barra que se llena + plataformas pasando */
+  .searching { max-width:680px; margin:12vh auto 0; text-align:center; padding:0 24px; }
+  .searching .sline { font-size:22px; color:#F5F5F7; margin-bottom:18px; }
+  .searching .sline b { color:#CC785C; }
+  .sbar { height:12px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; }
+  .sbar i { display:block; height:100%; width:8%; border-radius:999px; background:#CC785C; animation:sfill 7s ease-out forwards; }
+  @keyframes sfill { from { width:8%; } to { width:95%; } }
+  .schips { overflow:hidden; margin-top:22px; }
+  .schips .row { display:inline-flex; gap:10px; white-space:nowrap; animation:schipmove 9s linear infinite; }
+  .schip { border-radius:999px; padding:8px 16px; font-size:16px; font-weight:500; border:1px solid #333; }
+  @keyframes schipmove { from { transform:translateX(0); } to { transform:translateX(-50%); } }
 </style>
 </head>
 <body>
@@ -75,21 +106,21 @@
   </div>
 
   <div id="pair" class="pair">
-    <div class="taglines">
-      <p>🎬 Películas y Series de <span class="a">todas las plataformas</span> en un solo lugar</p>
-      <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
-    </div>
-    <div class="stage" id="stage">
+    <div class="pairleft">
       <div class="qrbox"><img id="qr" alt="QR"></div>
+      <h1 class="serif">Usá tu teléfono como control</h1>
+      <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
+      <div class="taglines">
+        <p>🎬 Películas y Series de <span class="a">todas las plataformas</span> en un solo lugar</p>
+        <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
+      </div>
+      <div class="sess" id="sess">Generando sesión…</div>
     </div>
-    <h1>Usá tu teléfono como control</h1>
-    <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
-    <div class="sess" id="sess">Generando sesión…</div>
+    <div class="pairgrid" id="pairgrid"></div>
   </div>
 
   <div id="results" class="wrap hidden">
     <div class="topline" id="topline"></div>
-    <div id="spot" class="spot hidden"></div>
     <div id="content"></div>
   </div>
 
@@ -176,6 +207,28 @@
     "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
   };
   function colorFor(p) { return COLORS[p] || "#2563EB"; }
+  // Star+ fue absorbido por Disney+ en LatAm (2024).
+  function platLabel(p) { return p === "Star+" ? "Disney+" : p; }
+
+  // Estado de búsqueda: barra que se llena + chips de plataformas que pasan.
+  function searchingHTML() {
+    var chip = function (p) {
+      var col = colorFor(p);
+      return '<span class="schip" style="border-color:' + col + ';color:' + col + '">' + esc(p) + "</span>";
+    };
+    var row = "";
+    // Duplicado para que el marquee sea continuo (-50%).
+    for (var k = 0; k < 2; k++) {
+      for (var i = 0; i < PLATFORMS.length; i++) row += chip(PLATFORMS[i]);
+    }
+    return (
+      '<div class="searching">' +
+      '<div class="sline">Buscando en <b>Netflix, Disney+, Max, Prime Video…</b></div>' +
+      '<div class="sbar"><i></i></div>' +
+      '<div class="schips"><span class="row">' + row + "</span></div>" +
+      "</div>"
+    );
+  }
 
   function deepLink(platform, title) {
     var t = encodeURIComponent(title);
@@ -222,31 +275,14 @@
   var elPair = document.getElementById("pair");
   var elResults = document.getElementById("results");
   var elTopline = document.getElementById("topline");
-  var elSpot = document.getElementById("spot");
   var elContent = document.getElementById("content");
   var elBadge = document.getElementById("badge");
   var elDot = document.getElementById("dot");
 
-  // QR + sesión + logos flotando
+  // QR + sesión
   document.getElementById("qr").src =
     "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
   document.getElementById("sess").textContent = "Sesión " + sessionId;
-  (function buildChips() {
-    var stage = document.getElementById("stage");
-    // posiciones (left%, top%) alrededor del QR central
-    var pos = [[6, 12], [82, 8], [2, 58], [88, 52], [20, 84], [70, 86], [44, 2]];
-    for (var i = 0; i < PLATFORMS.length; i++) {
-      var p = PLATFORMS[i];
-      var c = document.createElement("span");
-      c.className = "chip";
-      c.textContent = p;
-      c.style.background = colorFor(p);
-      c.style.left = pos[i][0] + "%";
-      c.style.top = pos[i][1] + "%";
-      c.style.animationDelay = (i * 0.4) + "s";
-      stage.appendChild(c);
-    }
-  })();
 
   function setBadge(text, cls) {
     elBadge.textContent = text;
@@ -259,40 +295,69 @@
     return '<div class="txt">' + esc(it.title) + "</div>";
   }
 
-  function renderSpot() {
-    var it = items[focusedIndex];
-    if (!it) { elSpot.className = "spot hidden"; return; }
-    elSpot.className = "spot";
-    var html = '<div class="poster">' + posterHTML(it) + "</div><div>";
-    html += "<h2>" + esc(it.title);
-    if (it.year) html += '<span class="yr">' + esc(it.year) + "</span>";
-    html += "</h2>";
-    if (it.platform) html += '<span class="pill" style="background:' + colorFor(it.platform) + '">' + esc(it.platform) + "</span>";
-    if (it.synopsis) html += '<p class="syn">' + esc(it.synopsis) + "</p>";
-    if (it.reason) html += '<p class="why"><b><span class="ico">✦</span> Por qué te lo recomiendo: </b>' + esc(it.reason) + "</p>";
-    html += "</div>";
-    elSpot.innerHTML = html;
+  // El panel superior (spotlight) se eliminó: la descripción vive ahora dentro
+  // de la tarjeta enfocada (.card.foc .det). Stub para no tocar los call sites.
+  function renderSpot() {}
+
+  // Detalle como overlay sobre la parte baja del póster (solo tarjeta enfocada).
+  // Solo la razón de Cinéfilo: un párrafo corto de impacto, sin etiqueta ni sinopsis.
+  function detHTML(it) {
+    if (!it.reason) return "";
+    return '<div class="det"><p class="why"><b>✦</b> ' + esc(it.reason) + "</p></div>";
   }
 
   function cardHTML(it, foc) {
     var h = '<div class="card' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
-    h += '<div class="ph">' + posterHTML(it) + "</div>";
-    h += '<div class="meta"><div class="t">' + esc(it.title) + "</div>";
-    if (it.platform) h += '<div class="p" style="color:' + colorFor(it.platform) + '">' + esc(it.platform) + "</div>";
+    h += '<div class="ph">' + posterHTML(it) + detHTML(it) + "</div>";
+    h += '<div class="meta"><div class="t"><span class="tt">' + esc(it.title) + "</span>";
+    var sub = [];
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="y">' + esc(sub.join(" ")) + "</span>";
+    h += "</div>";
+    if (it.platform) h += '<div class="p" style="color:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</div>";
     h += "</div></div>";
     return h;
   }
 
-  function renderContent() {
-    if (loading && items.length === 0) { elContent.innerHTML = '<div class="center">Buscando…</div>'; return; }
-    if (items.length === 0) {
-      elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
-      return;
-    }
+  // Héroe: la recomendación principal (item 0) a lo grande, con póster de fondo,
+  // doble gradiente cinematográfico y la razón de Cinéfilo. Comparte el id
+  // "card-<id>" con las tarjetas para reusar foco/scroll.
+  function heroHTML(it, foc) {
+    var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
+    h += '<img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt="">';
+    h += '<div class="g1"></div><div class="g2"></div>';
+    h += '<div class="info">';
+    h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
+    h += '<div class="hmeta">';
+    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    var sub = [];
+    if (it.type) sub.push(it.type);
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
+    h += "</div>";
+    if (it.reason) h += '<p class="hreason"><b>✦</b> ' + esc(it.reason) + "</p>";
+    h += "</div></div>";
+    return h;
+  }
+
+  // Grilla simple (sin encabezados de sección), desde startIndex. Para el bloque
+  // "Más opciones" del home.
+  function cardsGridHTML(start) {
+    var html = '<div class="grid">';
+    for (var i = start; i < items.length; i++) html += cardHTML(items[i], i === focusedIndex);
+    html += "</div>";
+    if (loadingMore) html += '<div class="more">Cargando más…</div>';
+    return html;
+  }
+
+  // Grilla plana agrupada por sección (búsqueda / "Mi lista"): resultados pares.
+  function gridHTML(start) {
     var html = "";
     var cur = null;
     var open = false;
-    for (var i = 0; i < items.length; i++) {
+    for (var i = start; i < items.length; i++) {
       var it = items[i];
       var sec = it.section || "";
       if (sec !== cur) {
@@ -305,7 +370,23 @@
     }
     if (open) html += "</div>";
     if (loadingMore) html += '<div class="more">Cargando más…</div>';
-    elContent.innerHTML = html;
+    return html;
+  }
+
+  function renderContent() {
+    if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); return; }
+    if (items.length === 0) {
+      elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
+      return;
+    }
+    // Home = jerárquico (héroe + resto). Búsqueda / lista = grilla plana (pares).
+    if (mode === "home") {
+      var html = heroHTML(items[0], focusedIndex === 0);
+      if (items.length > 1) html += '<h3 class="sec">Más opciones para vos</h3>' + cardsGridHTML(1);
+      elContent.innerHTML = html;
+    } else {
+      elContent.innerHTML = gridHTML(0);
+    }
   }
 
   function render() {
@@ -315,7 +396,11 @@
     if (mode === "search") {
       elTopline.innerHTML = "Resultados para <b>“" + esc(query) + "”</b>";
     } else if (mode === "list") {
-      elTopline.innerHTML = '<span class="hint">Mi lista</span> — tus películas y series guardadas.';
+      var listSec = (items[0] && items[0].section) || "Mi lista";
+      var listMsg = listSec === "Ya vistas"
+        ? " — películas y series que ya viste."
+        : " — tus películas y series guardadas.";
+      elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
       elTopline.innerHTML = '<span class="hint">Usá tu teléfono para buscar</span> — más práctico que el control de la TV.';
     }
@@ -335,6 +420,9 @@
   }
 
   function updateFocusClasses() {
+    // En home conviven héroe (.hero) + tarjetas (.card): re-render simple para
+    // reflejar el foco correctamente al cruzar entre ellos.
+    if (mode === "home") { renderContent(); return; }
     var cards = elContent.getElementsByClassName("card");
     for (var i = 0; i < cards.length; i++) {
       cards[i].className = "card" + (i === focusedIndex ? " foc" : "");
@@ -378,8 +466,11 @@
         loaded++;
         it.posterUrl = url;
         var ph = document.querySelector("#card-" + it.id + " .ph");
-        if (ph) ph.innerHTML = posterHTML(it);
-        if (items[focusedIndex] && items[focusedIndex].id === it.id) renderSpot();
+        // Importante: regenerar también el detalle, si no la carátula lo pisa.
+        if (ph) ph.innerHTML = posterHTML(it) + detHTML(it);
+        // Si el ítem es el héroe (home), su póster va como fondo (.bg).
+        var bg = document.querySelector("#card-" + it.id + " .bg");
+        if (bg) bg.src = url;
       }
       done++;
       if (done % 4 === 0 || done >= total) emitScreen();
@@ -428,6 +519,8 @@
         render();
         emitScreen();
         loadPosters();
+        autoDry = false;
+        autoFill();
       })
       .catch(function () {});
   }
@@ -455,6 +548,7 @@
     focusedIndex = 0;
     render();
     emitScreen();
+    autoDry = false;
     postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked })
       .then(function (data) {
         loading = false;
@@ -462,11 +556,24 @@
         render();
         emitScreen();
         loadPosters();
+        autoFill();
       })
       .catch(function () {
         loading = false; items = [];
         elContent.innerHTML = '<div class="center">No pudimos buscar. Probá de nuevo.</div>';
       });
+  }
+
+  // Carga anticipada: seguir pidiendo películas sin esperar a que el usuario
+  // llegue al final. Búsqueda: hasta 36. Home: hasta el tope (60). Después de
+  // esos umbrales, recién se carga más cuando el usuario se acerca al final.
+  var autoDry = false; // true si una ronda no trajo nada nuevo (cortar el loop)
+  function autoFill() {
+    if (autoDry) return;
+    if (mode !== "home" && mode !== "search") return;
+    var target = mode === "search" ? 36 : 60;
+    if (items.length === 0 || items.length >= target) return;
+    setTimeout(loadMore, 300);
   }
 
   function loadMore() {
@@ -488,6 +595,7 @@
     p
       .then(function (data) {
         loadingMore = false;
+        var added = 0;
         if (data && data.items && data.items.length) {
           var seen = {};
           for (var j = 0; j < items.length; j++) { seen[items[j].title.toLowerCase()] = true; }
@@ -495,13 +603,16 @@
           for (var k = 0; k < data.items.length; k++) {
             if (!seen[String(data.items[k].title).toLowerCase()]) fresh.push(data.items[k]);
           }
+          added = fresh.length;
           items = items.concat(assignIds(fresh, items.length));
         }
+        if (added === 0) autoDry = true; // no hay más novedades: cortar el loop
         render();
         emitScreen();
         loadPosters();
+        autoFill();
       })
-      .catch(function () { loadingMore = false; renderContent(); });
+      .catch(function () { loadingMore = false; autoDry = true; renderContent(); });
   }
 
   function focusById(mediaId) {
@@ -595,15 +706,20 @@
     else if (cmd.type === "BACK") goBack();
   }
 
-  // Teclas del control físico de la TV.
+  // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
+  // 415=Play, 10252=Play/Pause, 10009=Return).
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode;
     if (k === 37) moveFocus("left");
     else if (k === 39) moveFocus("right");
     else if (k === 38) moveFocus("up");
     else if (k === 40) moveFocus("down");
-    else if (k === 13) { var it = items[focusedIndex]; if (it) play(it.id); }
-    else return;
+    else if (k === 13 || k === 415 || k === 10252) {
+      var it = items[focusedIndex];
+      if (it) play(it.id);
+    } else if (k === 10009 || k === 8 || k === 27) {
+      goBack();
+    } else return;
     e.preventDefault();
   });
 
@@ -616,6 +732,7 @@
       setBadge("Teléfono vinculado", "on");
       sendState({ type: "PAIRED" });
       render();
+      emitScreen(); // el home ya está precargado: mandárselo al teléfono ya
       loadHome();
     } else if (!present && paired) {
       paired = false;
@@ -643,8 +760,42 @@
     });
   }
 
+  // Grilla de pósters reales de tendencias en la mitad derecha del landing
+  // (mismo contenido que el home). Cada tile trae carátula + "Disponible en X".
+  function buildLandingGrid() {
+    var box = document.getElementById("pairgrid");
+    if (!box) return;
+    fetch("/api/tv-home")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = (data && data.items) ? data.items.slice(0, 12) : [];
+        for (var i = 0; i < list.length; i++) {
+          (function (it) {
+            var tile = document.createElement("div");
+            tile.className = "ptile";
+            var cap = '<div class="cap"><span class="tt">' + esc(it.title) + "</span>";
+            if (it.platform) cap += '<span class="pl" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+            cap += "</div>";
+            tile.innerHTML = cap;
+            box.appendChild(tile);
+            cinemetaPoster(it.title, it.type, function (url) {
+              if (!url) return;
+              var img = document.createElement("img");
+              img.src = url;
+              tile.insertBefore(img, tile.firstChild);
+            });
+          })(list[i]);
+        }
+      })
+      .catch(function () {});
+  }
+
   render();
   connect();
+  buildLandingGrid();
+  // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
+  // vincule, las películas aparecen al instante en vez de recién pedirse.
+  loadHome();
 })();
 </script>
 </body>
