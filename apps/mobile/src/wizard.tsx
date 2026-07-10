@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, Tv, X, Plus,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
@@ -198,6 +198,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   };
 
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
   const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
   // Warmup del backend mientras se muestra el splash del welcome. El splash y el
@@ -332,6 +333,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       title: items[newIndex]?.title,
       platform: items[newIndex]?.platform,
     });
+  };
+
+  // Swipe horizontal sobre el héroe → cambiar de card. Coexiste con el scroll
+  // vertical de la página: solo dispara si el eje horizontal es dominante y |dx|>50.
+  const onHeroTouchStart = (e: ReactTouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const onHeroTouchEnd = (e: ReactTouchEvent, heroCount: number) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return; // tap o scroll vertical
+    const next = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (next >= 0 && next < heroCount) navigate(next);
   };
 
   // ── Chat ──────────────────────────────────────────────────────────────────
@@ -638,15 +653,18 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    const current = items[0];
+    // Héroe = carrusel de las 5 principales; la card visible la maneja currentIndex.
+    const heroItems = items.slice(0, 5);
+    const heroIndex = Math.min(currentIndex, heroItems.length - 1); // clamp defensivo
+    const current = heroItems[heroIndex];
     const poster = current ? posters[current.title] : undefined;
     const avail = current ? availability[current.title] : undefined;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
-    // Grilla continua = alternativas (items[1..]) + "más opciones" (galleryItems), sin duplicar.
-    const seenTitles = new Set([current.title]);
+    // Grilla continua = resto (items[5..]) + "más opciones", sin duplicar NINGUNO de los 5 del héroe.
+    const seenTitles = new Set(heroItems.map((i) => i.title));
     const gridItems: Recommendation[] = [];
-    for (const it of [...items.slice(1), ...galleryItems]) {
+    for (const it of [...items.slice(5), ...galleryItems]) {
       if (!seenTitles.has(it.title)) { seenTitles.add(it.title); gridItems.push(it); }
     }
     const posterFor = (t: string) => posters[t] ?? galleryPosters[t];
@@ -693,9 +711,21 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           />
         )}
 
-        {/* Header */}
+        {/* Header: logo a la izquierda; "Conecta la TV" (con QR) + "Mi cuenta" a la derecha */}
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-base font-bold text-foreground">Cinéfilo</span>
+          </div>
+
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => void openTvRemote()}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 text-primary active:scale-90 transition-transform"
+              aria-label="Conectar la TV"
+            >
+              <QrCode className="h-4 w-4" /> <span className="text-[11px] font-semibold">Conecta la TV</span>
+            </button>
             <button
               onClick={() => setAccountOpen(true)}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
@@ -703,30 +733,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             >
               <User className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => void openTvRemote()}
-              className="flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 text-muted-foreground active:scale-90 transition-transform"
-              aria-label="Controlar la TV"
-            >
-              <Tv className="h-4 w-4" /> <span className="text-[11px] font-semibold">TV</span>
-            </button>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
-          </div>
-
-          <button
-            onClick={() => { track("voice_used"); setVoiceMode(true); }}
-            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 py-1 pl-1 pr-2.5 transition-all active:scale-95"
-          >
-            {/* Orbe reducido (~24px) para no apretar el header con el ícono de TV */}
-            <span className="-m-3 scale-50">
-              <Orb phase="idle" size="mini" />
-            </span>
-            <span className="text-[10px] font-semibold text-primary">Hablar con Cinéfilo</span>
-          </button>
         </div>
 
         {/* Chat */}
@@ -780,10 +787,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           )}
         </div>
 
+        {/* Hablar con Cinéfilo: plantado full-width arriba de las tarjetas */}
+        <div className="shrink-0 px-5 pb-3">
+          <button
+            onClick={() => { track("voice_used"); setVoiceMode(true); }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-all active:scale-95"
+          >
+            <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full">
+              <Orb phase="idle" size="mini" />
+            </span>
+            <span className="text-sm font-semibold text-primary">Hablar con Cinéfilo</span>
+          </button>
+        </div>
+
         {/* Contenido en scroll continuo: héroe + carrito + grilla */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
-          {/* Héroe: recomendación principal (~mitad de pantalla) */}
-          <div key={current.title} className="fade-in h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none">
+          {/* Héroe: carrusel de las 5 principales (~mitad de pantalla, swipe ←/→) */}
+          <div
+            key={current.title}
+            onTouchStart={onHeroTouchStart}
+            onTouchEnd={(e) => onHeroTouchEnd(e, heroItems.length)}
+            className="fade-in h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+          >
             <div className="flex h-full">
               {/* Poster */}
               <div className="w-28 shrink-0 overflow-hidden">
@@ -859,6 +884,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               </div>
             </div>
           </div>
+
+          {/* Dots del carrusel del héroe + hint */}
+          {heroItems.length > 1 && (
+            <>
+              <div className="mt-3 flex items-center justify-center gap-1.5">
+                {heroItems.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => navigate(i)}
+                    aria-label={`Opción ${i + 1} de ${heroItems.length}`}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      i === heroIndex ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30",
+                    )}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 text-center text-[10px] text-muted-foreground/50">
+                Deslizá para ver las {heroItems.length} mejores
+              </p>
+            </>
+          )}
 
           {/* Carrito "Para ver hoy" (carrusel horizontal, entre héroe y grilla) */}
           {cart.length > 0 && (
