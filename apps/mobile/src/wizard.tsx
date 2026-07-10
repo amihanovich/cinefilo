@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, Tv, X,
+  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
@@ -11,6 +11,8 @@ import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
+import { WelcomeScreen } from "./components/WelcomeScreen";
+import { SearchLoading } from "./components/SearchLoading";
 import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
@@ -26,9 +28,10 @@ const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Par
 const COUNTRY_KEY = "cinefilo:country";
 const PLATFORMS_KEY = "queveo:guest:default_platforms";
 const TV_BANNER_KEY = "cinefilo:tvBannerDismissed";
+const OPENED_KEY = "cinefilo:opened_before";
 
 type SavedItem = { title: string; platform: string; type: string };
-type Screen = "welcome" | "platforms" | "magic" | "gallery";
+type Screen = "welcome" | "magic" | "gallery";
 
 // ── Helpers localStorage ─────────────────────────────────────────────────────
 function loadSet(key: string): Set<string> {
@@ -98,8 +101,10 @@ function isDetailQuery(q: string): boolean {
 export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
   const [platforms, setPlatforms] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[]; }
-    catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[];
+      return saved.length > 0 ? saved : [...PLATFORMS];
+    } catch { return [...PLATFORMS]; }
   });
 
   // Cards
@@ -113,6 +118,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [galleryPosters, setGalleryPosters] = useState<Record<string, string | null>>({});
   const [gallerySelected, setGallerySelected] = useState<Set<string>>(new Set());
   const [galleryLoading, setGalleryLoading] = useState(false);
+
+  // Carrito "Para ver hoy" (solo sesión) + ficha en overlay (long-press).
+  const [cart, setCart] = useState<Recommendation[]>([]);
+  const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
+
+  // Búsqueda en curso → pantalla de loading (Bloque 3). null = sin búsqueda activa.
+  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice" } | null>(null);
 
   // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
@@ -186,16 +198,23 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   };
 
   const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
   const micRecorderRef = useRef<VoiceRecorder | null>(null);
 
-  // Auto-advance welcome → platforms
+  // Warmup del backend mientras se muestra el splash del welcome. El splash y el
+  // paso a la Home los maneja WelcomeScreen (ya no auto-avanza a "platforms").
   useEffect(() => {
     if (screen !== "welcome") return;
     void detectCountry();
-    warmupBackend(); // despierta Railway mientras el usuario mira el welcome
-    const t = setTimeout(() => setScreen("platforms"), 2000);
-    return () => clearTimeout(t);
+    warmupBackend();
   }, [screen]);
+
+  // Semilla: si el usuario nunca eligió plataformas, arrancan TODAS activas.
+  useEffect(() => {
+    if (!localStorage.getItem(PLATFORMS_KEY)) {
+      localStorage.setItem(PLATFORMS_KEY, JSON.stringify(PLATFORMS));
+    }
+  }, []);
 
   // ── Disponibilidad JustWatch ──────────────────────────────────────────────
   const loadAvailability = useCallback(async (allItems: Recommendation[]) => {
@@ -213,6 +232,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
+    // Feedback inmediato (≤100ms): plataformas activas + eco del pedido.
+    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -240,25 +261,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setCurrentIndex(0);
       setScreen("magic");
       setLoading(false);
+      setSearchInfo(null);
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
 
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
+      setGalleryItems([]);
+      void loadGallery(); // precargar "más opciones" para la grilla continua
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
+      setSearchInfo(null);
       showError("No pudimos buscar. Revisá tu conexión e intentá de nuevo.");
     }
   };
 
   // ── Galería: carga ~16 opciones ───────────────────────────────────────────
+  // Carga "más opciones" en segundo plano para la grilla continua de la Home.
   const loadGallery = async () => {
     setGalleryLoading(true);
-    setGallerySelected(new Set());
     setGalleryItems([]);
     setGalleryPosters({});
-    setScreen("gallery");
 
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     const ctx = inferContext();
@@ -285,8 +309,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       void fetchPosters(all.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setGalleryPosters);
     } catch {
       setGalleryLoading(false);
-      setScreen("magic");
-      showError("No pudimos cargar más opciones. Intentá de nuevo.");
     }
   };
 
@@ -311,6 +333,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       title: items[newIndex]?.title,
       platform: items[newIndex]?.platform,
     });
+  };
+
+  // Swipe horizontal sobre el héroe → cambiar de card. Coexiste con el scroll
+  // vertical de la página: solo dispara si el eje horizontal es dominante y |dx|>50.
+  const onHeroTouchStart = (e: ReactTouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const onHeroTouchEnd = (e: ReactTouchEvent, heroCount: number) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return; // tap o scroll vertical
+    const next = dx < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (next >= 0 && next < heroCount) navigate(next);
   };
 
   // ── Chat ──────────────────────────────────────────────────────────────────
@@ -396,6 +432,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     track("recommendation_received", { query_type: "voice" });
     void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
     void loadAvailability(allItems);
+    setGalleryItems([]);
+    void loadGallery();
   };
 
   // ── Acciones de cards ─────────────────────────────────────────────────────
@@ -446,6 +484,38 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   };
 
+  // ── Carrito "Para ver hoy" + long-press de la grilla ──────────────────────
+  const inCart = (title: string) => cart.some((c) => c.title === title);
+  const toggleCart = (item: Recommendation) => {
+    setCart((prev) =>
+      prev.some((c) => c.title === item.title)
+        ? prev.filter((c) => c.title !== item.title)
+        : [item, ...prev],
+    );
+  };
+  const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
+
+  // Tap corto = sumar/quitar del carrito; mantener presionado = abrir la ficha.
+  const longPressRef = useRef(false);
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startPress = (item: Recommendation) => {
+    longPressRef.current = false;
+    pressTimerRef.current = setTimeout(() => {
+      longPressRef.current = true;
+      setDetailItem(item);
+    }, 450);
+  };
+  const endPress = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+  const onTileClick = (item: Recommendation) => {
+    if (longPressRef.current) { longPressRef.current = false; return; }
+    toggleCart(item);
+  };
+
   // ── Inicio ────────────────────────────────────────────────────────────────
   const handleStartReco = () => {
     localStorage.setItem(PLATFORMS_KEY, JSON.stringify(platforms));
@@ -460,78 +530,23 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     return <ControlScreen session={controlSession} onClose={() => setControlSession(null)} />;
   }
 
+  // Búsqueda en curso: pantalla de loading (reemplaza el resultado, con fade-in).
+  if (searchInfo) {
+    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} />;
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // PANTALLA: WELCOME
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "welcome") {
     return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
-        <div className="flex flex-col items-center gap-5">
-          <Sparkles className="h-12 w-12 text-primary" />
-          <div className="flex flex-col gap-2">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo.</h1>
-            <p className="text-base text-muted-foreground leading-snug">
-              Contame qué querés ver<br />y te ayudo a encontrarlo.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // PANTALLA: PLATFORMS
-  // ════════════════════════════════════════════════════════════════════════════
-  if (screen === "platforms") {
-    return (
-      <div className="flex h-[100dvh] flex-col bg-background px-6 pt-16 pb-10 safe-top safe-bottom">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">¿Cuáles tenés?</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Seleccioná tus plataformas. Si no elegís ninguna, buscamos en todas.
-        </p>
-
-        <div className="mt-8 grid grid-cols-2 gap-3">
-          {PLATFORMS.map((p) => {
-            const selected = platforms.includes(p);
-            const color = colorForPlatform(p);
-            return (
-              <button
-                key={p}
-                onClick={() => setPlatforms((prev) => selected ? prev.filter((x) => x !== p) : [...prev, p])}
-                className={cn(
-                  "rounded-2xl border-2 px-4 py-5 text-left text-sm font-semibold transition-all active:scale-95",
-                  selected ? "border-transparent text-white" : "border-border bg-background text-foreground"
-                )}
-                style={selected ? { backgroundColor: color, borderColor: color } : {}}
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-auto pt-8">
-          {offline && (
-            <p className="mb-3 text-center text-xs font-semibold text-amber-500">Sin conexión — conectate para buscar</p>
-          )}
-          {error && (
-            <p className="mb-3 text-center text-xs font-semibold text-red-400">{error}</p>
-          )}
-          {loading ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-foreground/20 border-t-foreground" />
-              <p className="text-sm text-muted-foreground">Buscando las mejores opciones...</p>
-            </div>
-          ) : (
-            <button
-              onClick={handleStartReco}
-              className="w-full rounded-full bg-foreground py-4 text-base font-semibold text-background active:scale-95 transition-transform"
-            >
-              Empezar →
-            </button>
-          )}
-        </div>
-      </div>
+      <WelcomeScreen
+        firstTime={!localStorage.getItem(OPENED_KEY)}
+        busy={loading}
+        error={error}
+        onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
+        onSurprise={() => { localStorage.setItem(OPENED_KEY, "1"); handleStartReco(); }}
+      />
     );
   }
 
@@ -638,14 +653,21 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    const safeIndex = Math.min(currentIndex, Math.max(0, items.length - 1));
-    const current = items[safeIndex];
+    // Héroe = carrusel de las 5 principales; la card visible la maneja currentIndex.
+    const heroItems = items.slice(0, 5);
+    const heroIndex = Math.min(currentIndex, heroItems.length - 1); // clamp defensivo
+    const current = heroItems[heroIndex];
     const poster = current ? posters[current.title] : undefined;
     const avail = current ? availability[current.title] : undefined;
-    const hasPrev = safeIndex > 0;
-    const hasNext = safeIndex < items.length - 1;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
+    // Grilla continua = resto (items[5..]) + "más opciones", sin duplicar NINGUNO de los 5 del héroe.
+    const seenTitles = new Set(heroItems.map((i) => i.title));
+    const gridItems: Recommendation[] = [];
+    for (const it of [...items.slice(5), ...galleryItems]) {
+      if (!seenTitles.has(it.title)) { seenTitles.add(it.title); gridItems.push(it); }
+    }
+    const posterFor = (t: string) => posters[t] ?? galleryPosters[t];
 
     return (
       <div className="relative flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
@@ -676,33 +698,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           onOpenTvRemote={() => void openTvRemote()}
         />
 
-        {/* Banner promo Cinéfilo TV (dummy, descartable) */}
-        {tvBanner && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-28 z-30 flex justify-center px-5">
-            <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 to-purple-500/15 p-3 shadow-xl backdrop-blur-md">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20">
-                <Tv className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-bold leading-tight text-foreground">Cinéfilo para tu TV</p>
-                <p className="text-[10px] leading-tight text-muted-foreground">Viví la experiencia directo en tu televisor</p>
-              </div>
-              <button
-                onClick={dismissTvBanner}
-                className="rounded-full bg-primary px-3 py-1.5 text-[10px] font-bold text-white active:scale-95 transition-transform"
-              >
-                Pronto
-              </button>
-              <button
-                onClick={dismissTvBanner}
-                aria-label="Descartar"
-                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* (El banner promo dummy de "Cinéfilo para tu TV" se quitó: la entrada a
+            la TV es el botón "TV" del header, que abre el escáner del QR.) */}
 
         {voiceMode && (
           <VoiceAgentOverlay
@@ -714,9 +711,21 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           />
         )}
 
-        {/* Header */}
+        {/* Header: logo a la izquierda; "Conecta la TV" (con QR) + "Mi cuenta" a la derecha */}
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-base font-bold text-foreground">Cinéfilo</span>
+          </div>
+
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => void openTvRemote()}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 text-primary active:scale-90 transition-transform"
+              aria-label="Conectar la TV"
+            >
+              <QrCode className="h-4 w-4" /> <span className="text-[11px] font-semibold">Conecta la TV</span>
+            </button>
             <button
               onClick={() => setAccountOpen(true)}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
@@ -724,30 +733,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             >
               <User className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => void openTvRemote()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
-              aria-label="Controlar la TV"
-            >
-              <Tv className="h-4 w-4" />
-            </button>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Cinéfilo</span>
-          </div>
-
-          <button
-            onClick={() => { track("voice_used"); setVoiceMode(true); }}
-            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 py-1 pl-1 pr-2.5 transition-all active:scale-95"
-          >
-            {/* Orbe reducido (~24px) para no apretar el header con el ícono de TV */}
-            <span className="-m-3 scale-50">
-              <Orb phase="idle" size="mini" />
-            </span>
-            <span className="text-[10px] font-semibold text-primary">Hablar con Cinéfilo</span>
-          </button>
         </div>
 
         {/* Chat */}
@@ -801,159 +787,250 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           )}
         </div>
 
-        {/* Hero card */}
-        <div className="flex-1 min-h-0 flex flex-col gap-2 px-5 pb-2">
-          {current ? (
-            <>
-              <div
-                className="flex-1 min-h-0 overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
-                onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
-                onTouchEnd={(e) => {
-                  const dx = e.changedTouches[0].clientX - touchStartX.current;
-                  if (dx < -50 && hasNext) navigate(safeIndex + 1);
-                  else if (dx > 50 && hasPrev) navigate(safeIndex - 1);
-                }}
-              >
-                <div className="flex h-full">
-                  {/* Poster */}
-                  <div className="w-28 shrink-0 overflow-hidden">
-                    {poster ? (
-                      <img src={poster} alt={current.title} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="h-full w-full animate-pulse bg-muted" />
-                    )}
-                  </div>
+        {/* Hablar con Cinéfilo: plantado full-width arriba de las tarjetas */}
+        <div className="shrink-0 px-5 pb-3">
+          <button
+            onClick={() => { track("voice_used"); setVoiceMode(true); }}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-all active:scale-95"
+          >
+            <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full">
+              <Orb phase="idle" size="mini" />
+            </span>
+            <span className="text-sm font-semibold text-primary">Hablar con Cinéfilo</span>
+          </button>
+        </div>
 
-                  {/* Info */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-                    {/* Título + copiar (ícono discreto para no apretar el título) */}
-                    <div className="flex items-start gap-2">
-                      <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
-                      <button
-                        onClick={() => copyTitle(current.title, current.platform)}
-                        className={cn(
-                          "mt-0.5 shrink-0 transition-transform active:scale-90",
-                          copied ? "text-green-400" : "text-muted-foreground/40"
-                        )}
-                        aria-label={copied ? "¡Copiado!" : "Copiar título"}
-                      >
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>
-                        {label}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {current.type} · {current.duration}{current.year && ` · ${current.year}`}
-                      </span>
-                      {current.ageRating && (
-                        <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">
-                          {current.ageRating}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-0.5">
-                      {avail === undefined ? (
-                        <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
-                      ) : avail.confirmed ? (
-                        <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-                      ) : (
-                        <span className="text-[10px] text-muted-foreground/50">Verificalo al abrir la app</span>
-                      )}
-                    </div>
-
-                    <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">
-                      {current.reason}
-                    </p>
-
-                    <button
-                      onClick={() => openStreaming(current, avail)}
-                      className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
-                      style={{ backgroundColor: platformColor }}
-                    >
-                      ▶ Ver ahora en {label}
-                    </button>
-
-                    {/* Like + Guardar */}
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        onClick={() => toggleLike(current)}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                          liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                        )}
-                      >
-                        <ThumbsUp className="h-3 w-3" />
-                        {liked.has(current.title) ? "¡Me gustó!" : "Me gustó"}
-                      </button>
-                      <button
-                        onClick={() => toggleWatchlist(current)}
-                        className={cn(
-                          "flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2 text-[11px] font-semibold transition-all active:scale-95",
-                          watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground"
-                        )}
-                      >
-                        <Bookmark className="h-3 w-3" />
-                        {watchlisted.has(current.title) ? "Guardado" : "Ver luego"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+        {/* Contenido en scroll continuo: héroe + carrito + grilla */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
+          {/* Héroe: carrusel de las 5 principales (~mitad de pantalla, swipe ←/→) */}
+          <div
+            key={current.title}
+            onTouchStart={onHeroTouchStart}
+            onTouchEnd={(e) => onHeroTouchEnd(e, heroItems.length)}
+            className="fade-in h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+          >
+            <div className="flex h-full">
+              {/* Poster */}
+              <div className="w-28 shrink-0 overflow-hidden">
+                {poster ? (
+                  <img src={poster} alt={current.title} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="h-full w-full animate-pulse bg-muted" />
+                )}
               </div>
 
-              <p className="shrink-0 text-center text-[11px] font-medium text-muted-foreground">
-                ← deslizá para ver alternativas →
+              {/* Info */}
+              <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+                <div className="flex items-start gap-2">
+                  <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
+                  <button
+                    onClick={() => copyTitle(current.title, current.platform)}
+                    className={cn("mt-0.5 shrink-0 transition-transform active:scale-90", copied ? "text-green-400" : "text-muted-foreground/40")}
+                    aria-label={copied ? "¡Copiado!" : "Copiar título"}
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>{label}</span>
+                  <span className="text-[11px] text-muted-foreground">{current.type} · {current.duration}{current.year && ` · ${current.year}`}</span>
+                  {current.ageRating && (
+                    <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">{current.ageRating}</span>
+                  )}
+                </div>
+
+                <div className="mt-0.5">
+                  {avail === undefined ? (
+                    <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
+                  ) : avail.confirmed ? (
+                    <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground/50">Verificalo al abrir la app</span>
+                  )}
+                </div>
+
+                <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">{current.reason}</p>
+
+                <button
+                  onClick={() => openStreaming(current, avail)}
+                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
+                  style={{ backgroundColor: platformColor }}
+                >
+                  ▶ Ver ahora en {label}
+                </button>
+
+                {/* Me gustó · Ver hoy (carrito) · Ver luego */}
+                <div className="mt-2 flex gap-1.5">
+                  <button
+                    onClick={() => toggleLike(current)}
+                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
+                  >
+                    <ThumbsUp className="h-3 w-3" /> {liked.has(current.title) ? "¡Gustó!" : "Me gustó"}
+                  </button>
+                  <button
+                    onClick={() => toggleCart(current)}
+                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
+                  >
+                    {inCart(current.title) ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />} Ver hoy
+                  </button>
+                  <button
+                    onClick={() => toggleWatchlist(current)}
+                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground")}
+                  >
+                    <Bookmark className="h-3 w-3" /> Ver luego
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dots del carrusel del héroe + hint */}
+          {heroItems.length > 1 && (
+            <>
+              <div className="mt-3 flex items-center justify-center gap-1.5">
+                {heroItems.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => navigate(i)}
+                    aria-label={`Opción ${i + 1} de ${heroItems.length}`}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all",
+                      i === heroIndex ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30",
+                    )}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 text-center text-[10px] text-muted-foreground/50">
+                Deslizá para ver las {heroItems.length} mejores
               </p>
             </>
-          ) : null}
-        </div>
+          )}
 
-        {/* Navegación + "Ver más" */}
-        <div className="shrink-0 px-5 pt-1 pb-8">
-          {/* Dots de posición */}
-          <div className="mb-2 flex items-center justify-center gap-1">
-            {items.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => navigate(i)}
-                aria-label={`Ir a ${i + 1}`}
-                className={cn("h-1.5 rounded-full transition-all", i === safeIndex ? "w-4 bg-foreground" : "w-1.5 bg-foreground/20")}
-              />
-            ))}
+          {/* Carrito "Para ver hoy" (carrusel horizontal, entre héroe y grilla) */}
+          {cart.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+                <Check className="h-3.5 w-3.5 text-primary" /> Para ver hoy ({cart.length})
+              </p>
+              <div className="flex gap-2.5 overflow-x-auto pb-1">
+                {cart.map((it) => {
+                  const p = posterFor(it.title);
+                  const col = colorForPlatform(it.platform);
+                  return (
+                    <div key={it.title} className="w-20 shrink-0">
+                      <div className="relative h-28 w-full overflow-hidden rounded-xl bg-muted" style={!p ? { backgroundColor: `${col}20` } : undefined}>
+                        {p ? (
+                          <img src={p} alt={it.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-2xl font-black opacity-10" style={{ color: col }}>{it.title.charAt(0)}</div>
+                        )}
+                        <button onClick={() => removeFromCart(it.title)} aria-label="Quitar" className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white active:scale-90">
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[9px] font-semibold leading-tight text-foreground">{it.title}</p>
+                      <span className="text-[8px] font-bold" style={{ color: col }}>{platformLabel(it.platform)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Grilla de opciones (scroll continuo, sin título ni botón) */}
+          <div className="mt-4 grid grid-cols-3 gap-2.5">
+            {gridItems.map((item) => {
+              const selected = inCart(item.title);
+              const p = posterFor(item.title);
+              const color = colorForPlatform(item.platform);
+              return (
+                <button
+                  key={item.title}
+                  onClick={() => onTileClick(item)}
+                  onTouchStart={() => startPress(item)}
+                  onTouchEnd={endPress}
+                  onTouchMove={endPress}
+                  className="relative overflow-hidden rounded-xl active:scale-95 transition-transform"
+                  style={{ WebkitTapHighlightColor: "transparent" }}
+                >
+                  <div className="relative h-32 w-full" style={!p ? { backgroundColor: `${color}20` } : undefined}>
+                    {p ? (
+                      <img src={p} alt={item.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <span className="text-3xl font-black opacity-10" style={{ color }}>{item.title.charAt(0)}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-1.5 pb-1.5 pt-4">
+                      <p className="line-clamp-2 text-[10px] font-semibold leading-tight text-white">{item.title}</p>
+                      <span className="mt-0.5 inline-block rounded-full px-1 py-px text-[8px] font-bold text-white" style={{ backgroundColor: color }}>{platformLabel(item.platform)}</span>
+                    </div>
+                    {selected && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-primary/50">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white"><Check className="h-4 w-4 text-primary" /></div>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+            {galleryLoading && gridItems.length < 6 && (
+              <div className="col-span-3 flex items-center justify-center gap-2 py-6 text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" /> <span className="text-xs">Cargando más opciones…</span>
+              </div>
+            )}
           </div>
 
-          {/* Anterior · Ver más (siempre) · Siguiente */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(safeIndex - 1)}
-              disabled={!hasPrev}
-              aria-label="Anterior"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-
-            <button
-              onClick={() => void loadGallery()}
-              className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary/10 border-2 border-primary/30 text-primary font-semibold transition-transform active:scale-95"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              <span className="text-sm">Ver más opciones</span>
-            </button>
-
-            <button
-              onClick={() => navigate(safeIndex + 1)}
-              disabled={!hasNext}
-              aria-label="Siguiente"
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-border transition-transform active:scale-95 disabled:opacity-20"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
+          {gridItems.length > 0 && (
+            <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
+              Tocá para sumar a "Para ver hoy" · mantené presionado para ver la ficha
+            </p>
+          )}
         </div>
+
+        {/* Ficha completa (long-press en la grilla) */}
+        {detailItem && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
+            <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
+              <button onClick={() => setDetailItem(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90" aria-label="Cerrar">
+                <X className="h-5 w-5" />
+              </button>
+              <p className="text-base font-bold text-foreground">Ficha</p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="overflow-hidden rounded-2xl border border-border bg-muted/30">
+                <div className="h-56 w-full overflow-hidden bg-muted">
+                  {posterFor(detailItem.title) ? (
+                    <img src={posterFor(detailItem.title)!} alt={detailItem.title} className="h-full w-full object-cover" />
+                  ) : null}
+                </div>
+                <div className="p-4">
+                  <h2 className="text-xl font-bold text-foreground">{detailItem.title}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: colorForPlatform(detailItem.platform) }}>{platformLabel(detailItem.platform)}</span>
+                    <span className="text-[11px] text-muted-foreground">{detailItem.type} · {detailItem.duration}{detailItem.year && ` · ${detailItem.year}`}</span>
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-foreground/75">{detailItem.reason}</p>
+                  <button
+                    onClick={() => openStreaming(detailItem, availability[detailItem.title])}
+                    className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"
+                    style={{ backgroundColor: colorForPlatform(detailItem.platform) }}
+                  >
+                    ▶ Ver ahora en {platformLabel(detailItem.platform)}
+                  </button>
+                  <button
+                    onClick={() => toggleCart(detailItem)}
+                    className={cn("mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-2.5 text-sm font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
+                  >
+                    {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {inCart(detailItem.title) ? "En tu lista de hoy" : "Agregar a Para ver hoy"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
