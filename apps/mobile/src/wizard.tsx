@@ -680,33 +680,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           onOpenTvRemote={() => void openTvRemote()}
         />
 
-        {/* Banner promo Cinéfilo TV (dummy, descartable) */}
-        {tvBanner && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-28 z-30 flex justify-center px-5">
-            <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 to-purple-500/15 p-3 shadow-xl backdrop-blur-md">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20">
-                <Tv className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-bold leading-tight text-foreground">Cinéfilo para tu TV</p>
-                <p className="text-[10px] leading-tight text-muted-foreground">Viví la experiencia directo en tu televisor</p>
-              </div>
-              <button
-                onClick={dismissTvBanner}
-                className="rounded-full bg-primary px-3 py-1.5 text-[10px] font-bold text-white active:scale-95 transition-transform"
-              >
-                Pronto
-              </button>
-              <button
-                onClick={dismissTvBanner}
-                aria-label="Descartar"
-                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* (El banner promo dummy de "Cinéfilo para tu TV" se quitó: la entrada a
+            la TV es el botón "TV" del header, que abre el escáner del QR.) */}
 
         {voiceMode && (
           <VoiceAgentOverlay
@@ -730,10 +705,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             </button>
             <button
               onClick={() => void openTvRemote()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
+              className="flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 text-muted-foreground active:scale-90 transition-transform"
               aria-label="Controlar la TV"
             >
-              <Tv className="h-4 w-4" />
+              <Tv className="h-4 w-4" /> <span className="text-[11px] font-semibold">TV</span>
             </button>
           </div>
 
