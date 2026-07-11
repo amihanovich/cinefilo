@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouch
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
   User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
-  Volume2, VolumeX,
+  Volume2, VolumeX, Keyboard, ChevronDown, ShoppingCart,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
 import { fetchRecommendation, fetchPosters, fetchAsk, fetchIntent, warmupBackend } from "./lib/api";
@@ -123,6 +123,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
   // Carrito "Para ver hoy" (solo sesión) + ficha en overlay (long-press).
   const [cart, setCart] = useState<Recommendation[]>([]);
+  const [cartOpen, setCartOpen] = useState(false); // carrito discreto expandible
+  const [chatOpen, setChatOpen] = useState(false); // buscador de texto (secundario) colapsado
   const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
 
   // Búsqueda en curso → pantalla de loading (Bloque 3). null = sin búsqueda activa.
@@ -543,9 +545,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         ? prev.filter((c) => c.title !== item.title)
         : [item, ...prev],
     );
-    // Al sumar, las tarjetas grandes pasan a mostrar el carrito y saltan a la
-    // recién agregada (queda primera). Al quitar, no saltamos.
-    if (adding) setCurrentIndex(0);
+    // Al sumar, abrimos el carrito discreto para dar feedback (el hero NO salta:
+    // sigue mostrando las recomendaciones de Cinéfilo).
+    if (adding) setCartOpen(true);
   };
   const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
 
@@ -707,10 +709,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    // Tarjetas grandes: carrito vacío = las 5 recomendaciones; apenas sumás algo,
-    // pasan a mostrar TU CARRITO en detalle (swipe entre lo que vas a ver hoy).
-    const cartMode = cart.length > 0;
-    const heroItems = cartMode ? cart : items.slice(0, 5);
+    // El héroe muestra SIEMPRE las recomendaciones de Cinéfilo (top-5), sin importar
+    // el carrito. Lo que sumás a "Para ver hoy" vive en la barra discreta de arriba.
+    const heroItems = items.slice(0, 5);
     const heroIndex = Math.min(currentIndex, Math.max(0, heroItems.length - 1));
     const current = heroItems[heroIndex];
     const posterFor = (t: string) => posters[t] ?? galleryPosters[t];
@@ -718,16 +719,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const avail = current ? availability[current.title] : undefined;
     const platformColor = current ? colorForPlatform(current.platform) : "#888";
     const label = current ? platformLabel(current.platform) : "";
-    // Grilla: en modo browse (carrito vacío) ocultamos las 5 del héroe; en modo
-    // carrito mostramos TODO (las 5 recos vuelven acá + más opciones), con check
-    // en las que ya están en el carrito.
+    // Grilla: ocultamos las 5 del héroe (ya se ven arriba) y mostramos el resto +
+    // "más opciones", con check en las que ya están en el carrito.
     const heroTitles = new Set(heroItems.map((i) => i.title));
     const seenGrid = new Set<string>();
     const gridItems: Recommendation[] = [];
     for (const it of [...items, ...galleryItems]) {
       if (seenGrid.has(it.title)) continue;
       seenGrid.add(it.title);
-      if (!cartMode && heroTitles.has(it.title)) continue;
+      if (heroTitles.has(it.title)) continue;
       gridItems.push(it);
     }
 
@@ -784,7 +784,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           <div className="flex items-center gap-2">
             <button
               onClick={() => void openTvRemote()}
-              className="flex h-9 items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 text-primary active:scale-90 transition-transform"
+              className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-muted px-3 text-muted-foreground active:scale-90 transition-transform"
               aria-label="Conectar la TV"
             >
               <QrCode className="h-4 w-4" /> <span className="text-[11px] font-semibold">Conecta la TV</span>
@@ -799,59 +799,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </div>
         </div>
 
-        {/* Chat */}
-        <div className="shrink-0 px-5 pt-3 pb-3">
-          <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "pointer-events-none")}>
-            <button
-              onClick={() => void toggleMic()}
-              disabled={loading}
-              className={cn(
-                "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-                micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-label={micRecording ? "Detener" : "Grabar"}
-            >
-              <Mic className="h-4 w-4" />
-              {micRecording && (
-                <span className="pointer-events-none absolute inset-0 rounded-full bg-primary/40 animate-ping" />
-              )}
-            </button>
-            <input
-              type="text"
-              value={chatText}
-              onChange={(e) => setChatText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-              placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
-              disabled={loading || micRecording}
-              className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-            />
-            <button
-              onClick={() => void sendChat()}
-              disabled={!chatText.trim() || loading}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
-            >
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-
-          {/* Respuesta del Cinéfilo sobre el título en pantalla */}
-          {agentReply && (
-            <div className="mt-2 flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p className="flex-1 text-[12px] leading-relaxed text-foreground/85">{agentReply}</p>
-              <button
-                onClick={() => setAgentReply(null)}
-                aria-label="Cerrar respuesta"
-                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Pedile a Cinéfilo: plantado arriba de las tarjetas + toggle de mute de la voz */}
-        <div className="shrink-0 px-5 pb-3 flex items-center gap-2">
+        {/* Acción principal: Pedile a Cinéfilo (voz) + escribir (texto, secundario) + mute */}
+        <div className="shrink-0 px-5 pt-3 pb-3 flex items-center gap-2">
           <button
             onClick={() => { track("voice_used"); setVoiceMode(true); }}
             className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-all active:scale-95"
@@ -862,25 +811,129 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <span className="text-sm font-semibold text-primary">Pedile a Cinéfilo</span>
           </button>
           <button
+            onClick={() => setChatOpen((v) => !v)}
+            aria-label={chatOpen ? "Cerrar búsqueda por texto" : "Escribir la búsqueda"}
+            title="Escribir"
+            className={cn(
+              "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95",
+              chatOpen ? "border-foreground/40 bg-foreground/10 text-foreground" : "border-border bg-muted text-muted-foreground",
+            )}
+          >
+            <Keyboard className="h-5 w-5" />
+          </button>
+          <button
             onClick={toggleMute}
             aria-label={ttsMuted ? "Activar la voz de Cinéfilo" : "Silenciar la voz de Cinéfilo"}
             title={ttsMuted ? "Voz silenciada" : "Voz activada"}
-            className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95 ${
-              ttsMuted
-                ? "border-border bg-muted text-muted-foreground"
-                : "border-primary/30 bg-primary/5 text-primary"
-            }`}
+            className={cn(
+              "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95",
+              ttsMuted ? "border-border bg-muted text-muted-foreground" : "border-primary/30 bg-primary/5 text-primary",
+            )}
           >
             {ttsMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
         </div>
 
+        {/* Buscador de texto (secundario) — colapsado por defecto, se abre con "escribir" */}
+        {chatOpen && (
+          <div className="shrink-0 px-5 pb-3">
+            <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "pointer-events-none")}>
+              <button
+                onClick={() => void toggleMic()}
+                disabled={loading}
+                className={cn(
+                  "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                  micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
+                )}
+                aria-label={micRecording ? "Detener" : "Grabar"}
+              >
+                <Mic className="h-4 w-4" />
+                {micRecording && (
+                  <span className="pointer-events-none absolute inset-0 rounded-full bg-primary/40 animate-ping" />
+                )}
+              </button>
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
+                placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
+                disabled={loading || micRecording}
+                autoFocus
+                className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+              />
+              <button
+                onClick={() => void sendChat()}
+                disabled={!chatText.trim() || loading}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Respuesta del Cinéfilo sobre el título en pantalla (siempre que exista) */}
+        {agentReply && (
+          <div className="shrink-0 px-5 pb-3">
+            <div className="flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p className="flex-1 text-[12px] leading-relaxed text-foreground/85">{agentReply}</p>
+              <button
+                onClick={() => setAgentReply(null)}
+                aria-label="Cerrar respuesta"
+                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Contenido en scroll continuo: héroe + grilla (con carga infinita) */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8" onScroll={onGridScroll}>
+          {/* Carrito "Para ver hoy" — discreto y expandible (no invade el héroe) */}
           {cart.length > 0 && (
-            <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-foreground">
-              <Check className="h-4 w-4 text-primary" /> Para ver hoy ({cart.length})
-            </p>
+            <div className="mb-3">
+              <button
+                onClick={() => setCartOpen((v) => !v)}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] font-semibold text-foreground active:scale-95 transition-transform"
+                aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
+              >
+                <ShoppingCart className="h-3.5 w-3.5 text-primary" />
+                {cart.length} para ver hoy
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
+              </button>
+
+              {cartOpen && (
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {cart.map((c) => {
+                    const p = posterFor(c.title);
+                    return (
+                      <div key={c.title} className="relative w-14 shrink-0">
+                        <button
+                          onClick={() => openStreaming(c, availability[c.title])}
+                          className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
+                        >
+                          {p ? (
+                            <img src={p} alt={c.title} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="flex h-full items-center justify-center p-1 text-center text-[8px] leading-tight text-muted-foreground">{c.title}</span>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(c.title)}
+                          aria-label={`Quitar ${c.title}`}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white active:scale-90 transition-transform"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
           {/* Tarjetas grandes (cinematográficas): póster de fondo + info sobre gradiente.
               Carrito (si tiene ítems) o top-5, swipe ←/→. */}
@@ -983,7 +1036,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 ))}
               </div>
               <p className="mt-1.5 text-center text-[10px] text-muted-foreground/50">
-                {cart.length > 0 ? "Deslizá entre tu lista de hoy" : `Deslizá para ver las ${heroItems.length} mejores`}
+                {`Deslizá para ver las ${heroItems.length} mejores`}
               </p>
             </>
           )}
