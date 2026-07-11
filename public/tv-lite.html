@@ -807,7 +807,7 @@
     else if (cmd.type === "PLAY") play(cmd.mediaId);
     else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
-    else if (cmd.type === "BACK") goBack();
+    else if (cmd.type === "BACK") { if (detailItem) closeDetail(); else goBack(); }
     else if (cmd.type === "SET_PLATFORMS") {
       // Fix: antes la TV descartaba esto → nunca heredaba las plataformas del usuario.
       if (cmd.platforms && cmd.platforms.length) userPlatforms = cmd.platforms;
@@ -845,7 +845,7 @@
     else if (k === 40) moveFocus("down");
     else if (k === 13 || k === 415 || k === 10252) {
       okPress();
-    } else if (k === 10009 || k === 8 || k === 27) {
+    } else if (k === 10009 || k === 8 || k === 27 || k === 4) {
       if (detailItem) { closeDetail(); }
       else goBack();
     } else return;
