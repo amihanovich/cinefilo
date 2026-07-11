@@ -79,6 +79,28 @@ export async function fetchOrb(params: {
   return res.json() as Promise<OrbResult>;
 }
 
+// (a.i) Intención inferida: manda el texto libre del pedido y el backend devuelve
+// una frase corta ("lo más importante del pedido") para mostrar mientras busca.
+// Falla en silencio (devuelve null) si el endpoint no existe todavía (pre-deploy)
+// o si hay error de red — así el loading cae al eco literal del texto.
+export async function fetchIntent(text: string): Promise<string | null> {
+  if (!text.trim()) return null;
+  try {
+    const res = await fetch(`${API_BASE}/api/intent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { intent?: string };
+    const intent = (data.intent ?? "").trim();
+    return intent || null;
+  } catch {
+    return null;
+  }
+}
+
 // Warmup: despierta el server de Railway (cold start) sin bloquear nada.
 export function warmupBackend(): void {
   void fetch(`${API_BASE}/api/ping`, { signal: AbortSignal.timeout(10000) }).catch(() => { /* silencioso */ });

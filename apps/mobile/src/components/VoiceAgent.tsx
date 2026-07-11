@@ -23,6 +23,9 @@ interface VoiceAgentProps {
   history: Message[];
   onResult: (result: VoiceResult) => void;
   onDismiss: () => void;
+  // Si es false, NO saluda por TTS: abre escuchando directo (pedido d — "Pedile a
+  // Cinéfilo" desde la Home). La entrada de la app (pedido a) sí saluda.
+  greet?: boolean;
 }
 
 const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
@@ -32,8 +35,8 @@ const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa 
 const GREETING_SHORT = "Decime qué tenés ganas de ver.";
 let greetedThisSession = false;
 
-export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss }: VoiceAgentProps) {
-  const [state, setState] = useState<AgentState>("speaking"); // starts speaking greeting
+export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss, greet = true }: VoiceAgentProps) {
+  const [state, setState] = useState<AgentState>(greet ? "speaking" : "listening");
   const [volume, setVolume] = useState(0);
   const [hint, setHint] = useState("...");
   const recorderRef = useRef<VoiceRecorder | null>(null);
@@ -97,43 +100,12 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     recorderRef.current = recorder;
 
     try {
+      // Press-to-speak / press-to-stop: NO corta por silencio. El usuario frena
+      // tocando el orbe (stopListeningManual). Solo medimos volumen para el visual.
       await recorder.start({
-        silenceMs: 2000,
+        autoStop: false,
         onVolume: (v) => {
           if (mountedRef.current) setVolume(v);
-        },
-        onAutoStop: async () => {
-          if (!mountedRef.current) return;
-          const blob = await recorder.stop();
-          recorderRef.current = null;
-          setVolume(0);
-          if (blob.size < 1) {
-            if (mountedRef.current) {
-              setState("idle");
-              setHint("No te escuché. Tocá para hablar.");
-            }
-            return;
-          }
-          if (mountedRef.current) {
-            setState("thinking");
-            setHint("Procesando...");
-          }
-          try {
-            const text = await transcribe(blob);
-            if (!text.trim()) {
-              if (mountedRef.current) {
-                setState("idle");
-                setHint("No te escuché bien. Intentá de nuevo.");
-              }
-              return;
-            }
-            await runRecommendation(text);
-          } catch {
-            if (mountedRef.current) {
-              setState("idle");
-              setHint("Algo salió mal. Tocá para intentar de nuevo.");
-            }
-          }
         },
       });
     } catch {
@@ -143,13 +115,18 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
         setHint("No se pudo acceder al micrófono.");
       }
     }
-  }, [runRecommendation]);
+  }, []);
 
-  // Al montar: saluda y arranca escuchando automáticamente
+  // Al montar: (pedido a) saluda por TTS y arranca escuchando; (pedido d) si
+  // greet=false, abre escuchando directo, sin saludo.
   useEffect(() => {
     mountedRef.current = true;
 
-    const greet = async () => {
+    const boot = async () => {
+      if (!greet) {
+        await startListening();
+        return;
+      }
       setState("speaking");
       setHint("...");
       const text = greetedThisSession ? GREETING_SHORT : GREETING;
@@ -160,7 +137,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       }
     };
 
-    void greet();
+    void boot();
 
     return () => {
       mountedRef.current = false;
@@ -222,7 +199,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
 
   const hintText =
     state === "idle" ? "Tocá el orbe para hablar"
-    : state === "listening" ? "Te escucho — hablá cuando quieras"
+    : state === "listening" ? "Te escucho… tocá para frenar"
     : state === "speaking" ? "Escuchame..."
     : hint;
 
@@ -236,6 +213,14 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
       >
         <X className="h-5 w-5" />
       </button>
+
+      {/* Chip de estado de escucha — indicación inequívoca grabando vs frenado */}
+      {state === "listening" && (
+        <div className="absolute top-7 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 ring-1 ring-red-400/40">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-xs font-semibold tracking-wide text-red-200">Grabando</span>
+        </div>
+      )}
 
       {/* Orbe */}
       <button

@@ -22,6 +22,8 @@ const DEFAULT_SILENCE_MS = 2000;
 const NO_SPEECH_MS = 8000;
 // Tope duro de grabación por seguridad.
 const MAX_RECORD_MS = 20000;
+// Tope de seguridad más largo para press-to-stop (el usuario controla el corte).
+const MAX_PRESS_MS = 60000;
 
 export class VoiceRecorder {
   private stream: MediaStream | null = null;
@@ -36,14 +38,19 @@ export class VoiceRecorder {
   private hasSpoken = false;
   private noSpeech = false; // cortó sin que el usuario hablara → no transcribir
   private lastLoudTime = 0;
+  private autoStopEnabled = true; // press-to-stop: si es false solo para con stop() manual
 
   async start(opts?: {
     onVolume?: (v: number) => void;
     onAutoStop?: () => void;
     onInterimText?: (text: string) => void; // no aplica con MediaRecorder, se ignora
     silenceMs?: number;
+    // Press-to-speak / press-to-stop: con autoStop:false NO corta por silencio ni
+    // por no-speech ni por el tope duro — solo para cuando el caller llama stop().
+    autoStop?: boolean;
   }): Promise<void> {
     this.onAutoStopCb = opts?.onAutoStop;
+    this.autoStopEnabled = opts?.autoStop !== false;
     this.autoStopped = false;
     this.hasSpoken = false;
     this.noSpeech = false;
@@ -92,7 +99,9 @@ export class VoiceRecorder {
       }
 
       // Solo cortamos por silencio una vez que el usuario habló de verdad.
-      if (this.hasSpoken && now - this.lastLoudTime > silenceMs && !this.autoStopped) {
+      // Con press-to-stop (autoStopEnabled=false) NO cortamos por silencio: el
+      // usuario decide cuándo frenar, y seguimos midiendo volumen para el visual.
+      if (this.autoStopEnabled && this.hasSpoken && now - this.lastLoudTime > silenceMs && !this.autoStopped) {
         this.autoStopped = true;
         this.stopMonitoring();
         this.onAutoStopCb?.();
@@ -100,7 +109,7 @@ export class VoiceRecorder {
       }
 
       // Si nunca habló, cortamos temprano y marcamos noSpeech (no se transcribe).
-      if (!this.hasSpoken && now - this.lastLoudTime > NO_SPEECH_MS && !this.autoStopped) {
+      if (this.autoStopEnabled && !this.hasSpoken && now - this.lastLoudTime > NO_SPEECH_MS && !this.autoStopped) {
         this.autoStopped = true;
         this.noSpeech = true;
         this.stopMonitoring();
@@ -113,13 +122,14 @@ export class VoiceRecorder {
     this.rafId = requestAnimationFrame(tick);
 
     // Tope de seguridad: corta a los MAX_RECORD_MS hablado o no.
+    // En press-to-stop lo estiramos a MAX_PRESS_MS para no cortar al usuario.
     this.maxTimer = setTimeout(() => {
       if (!this.autoStopped) {
         this.autoStopped = true;
         this.stopMonitoring();
         this.onAutoStopCb?.();
       }
-    }, MAX_RECORD_MS);
+    }, this.autoStopEnabled ? MAX_RECORD_MS : MAX_PRESS_MS);
   }
 
   private stopMonitoring(): void {

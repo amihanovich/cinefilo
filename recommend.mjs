@@ -224,3 +224,46 @@ export async function orbRespond({ transcript, title, platform }) {
   if (m) return { mode: "search", query: m[1].trim() || q };
   return { mode: "ask", answer: text };
 }
+
+const INTENT_SYSTEM =
+  "Sos Cinéfilo. Te llega el pedido en lenguaje libre de un usuario que quiere ver algo (peli o serie). " +
+  "Devolvé SOLO una frase MUY corta (máximo 6 palabras, sin punto final) que capture lo más importante " +
+  "de lo que pide, para mostrarla mientras busca. Español rioplatense, natural, sin comillas ni prefijos. " +
+  "Ejemplos: 'algo de terror liviano', 'comedia romántica para reír', 'documental corto de naturaleza', " +
+  "'acción de los 90'. Si el pedido es vago, devolvé algo genérico como 'algo bueno para hoy'.";
+
+/**
+ * Intención inferida: texto libre → frase corta (≤6 palabras) para el estado de
+ * búsqueda. Una sola llamada barata a Haiku, pensada para correr en paralelo con
+ * la recomendación real. NO devuelve JSON — solo la frase.
+ * @param {string} text
+ * @returns {Promise<string>}
+ */
+export async function inferIntent(text) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+  const q = String(text || "").trim().slice(0, 500);
+  if (!q) return "";
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 32,
+      system: INTENT_SYSTEM,
+      messages: [{ role: "user", content: q }],
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
+  }
+  const data = await res.json();
+  const out = ((data.content && data.content[0] && data.content[0].text) || "").trim();
+  // Limpieza defensiva: sin comillas ni punto final, una sola línea.
+  return out.replace(/^["'«]|["'».]$/g, "").split("\n")[0].trim().slice(0, 80);
+}

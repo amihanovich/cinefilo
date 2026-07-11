@@ -5,9 +5,12 @@
 // el splash lleva directo a una reco fresca ("Sorprendeme" automático).
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Mic, Send, Loader2, Shuffle } from "lucide-react";
+import { Sparkles, Send, Loader2, Shuffle } from "lucide-react";
 import { Orb } from "./Orb";
 import { VoiceRecorder, transcribe } from "../lib/stt";
+import { speak, stopSpeaking } from "../lib/tts";
+
+const GREETING = "Hola, soy Cinéfilo. ¿Listo para que encontremos algo para que veas hoy?";
 
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
@@ -33,7 +36,18 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
   const [phase, setPhase] = useState<"splash" | "agent">("splash");
   const [text, setText] = useState("");
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [volume, setVolume] = useState(0);
   const micRef = useRef<VoiceRecorder | null>(null);
+  const greetedRef = useRef(false);
+
+  // (a) Al aparecer el agente, Cinéfilo te recibe por voz (TTS). Best-effort:
+  // si el WebView bloquea el autoplay sin gesto, falla en silencio.
+  useEffect(() => {
+    if (phase !== "agent" || greetedRef.current) return;
+    greetedRef.current = true;
+    void speak(GREETING);
+    return () => stopSpeaking();
+  }, [phase]);
 
   // Splash → agente (1ª vez) o directo a reco fresca (aperturas siguientes).
   useEffect(() => {
@@ -50,12 +64,14 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
     if (q) onSubmit(q);
   };
 
-  // Micrófono: graba → transcribe → dispara la búsqueda directo.
+  // Micrófono press-to-speak / press-to-stop: 1er toque graba, 2º toque frena →
+  // transcribe → dispara la búsqueda directo. Sin auto-stop por silencio.
   const toggleMic = async () => {
     if (micState === "rec") {
       const rec = micRef.current;
       micRef.current = null;
       setMicState("processing");
+      setVolume(0);
       if (!rec) { setMicState("idle"); return; }
       const blob = await rec.stop();
       if (blob.size < 500) { setMicState("idle"); return; }
@@ -65,25 +81,13 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
         if (t.trim()) submit(t.trim());
       } catch { setMicState("idle"); }
     } else if (micState === "idle") {
+      stopSpeaking(); // corta el saludo si todavía suena
       const rec = new VoiceRecorder();
       micRef.current = rec;
       try {
         await rec.start({
-          silenceMs: 2500,
-          onAutoStop: async () => {
-            micRef.current = null;
-            setMicState("processing");
-            const blob = await rec.stop();
-            if (blob.size >= 500) {
-              try {
-                const t = await transcribe(blob);
-                setMicState("idle");
-                if (t.trim()) submit(t.trim());
-                return;
-              } catch { /* noop */ }
-            }
-            setMicState("idle");
-          },
+          autoStop: false,
+          onVolume: (v) => setVolume(v),
         });
         setMicState("rec");
       } catch {
@@ -110,10 +114,26 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
   }
 
   // ── Agente (solo 1ª vez) ────────────────────────────────────────────────────
+  const orbPhase = micState === "rec" ? "listening" : micState === "processing" ? "thinking" : "idle";
+
   return (
     <div className="flex h-[100dvh] flex-col items-center justify-center gap-7 bg-background px-8 text-center safe-top safe-bottom">
       <div className="flex flex-col items-center gap-5">
-        <Orb phase="idle" size="full" />
+        {/* Orbe = control press-to-speak. Tocá para hablar / tocá para frenar. */}
+        <button
+          onClick={() => void toggleMic()}
+          className="relative flex items-center justify-center active:scale-95 transition-transform select-none"
+          aria-label={micState === "rec" ? "Frenar" : "Hablar"}
+          style={{ WebkitTapHighlightColor: "transparent" }}
+        >
+          {micState === "rec" && (
+            <span className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-red-500/20 px-3 py-1 ring-1 ring-red-400/40">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[10px] font-semibold tracking-wide text-red-200">Grabando</span>
+            </span>
+          )}
+          <Orb phase={orbPhase} size="full" volume={volume} />
+        </button>
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo</h1>
           <p className="text-base text-muted-foreground leading-snug">
@@ -130,11 +150,11 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
           onClick={() => void toggleMic()}
           className={cn(
             "flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-base font-semibold text-white transition-transform active:scale-95",
-            micState === "rec" ? "bg-primary/80" : "bg-primary",
+            micState === "rec" ? "bg-red-500/80" : "bg-primary",
           )}
         >
-          {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
-          {micState === "rec" ? "Escuchando…" : micState === "processing" ? "Un segundo…" : "Tocá para hablar"}
+          {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+          {micState === "rec" ? "Tocá para frenar" : micState === "processing" ? "Un segundo…" : "Tocá para hablar"}
         </button>
 
         <div className="flex w-full items-center gap-2 rounded-2xl bg-muted px-3">

@@ -82,34 +82,18 @@ export function ControlVoiceAgent({
     const recorder = new VoiceRecorder();
     recorderRef.current = recorder;
     try {
+      // Press-to-speak / press-to-stop: sin auto-stop, el usuario frena tocando.
       await recorder.start({
-        silenceMs: 2000,
+        autoStop: false,
         onVolume: (v) => {
           if (mountedRef.current) setVolume(v);
-        },
-        onAutoStop: async () => {
-          if (!mountedRef.current) return;
-          const blob = await recorder.stop();
-          recorderRef.current = null;
-          setVolume(0);
-          if (blob.size < 1) {
-            if (mountedRef.current) setState("idle");
-            return;
-          }
-          if (mountedRef.current) setState("thinking");
-          try {
-            const text = await transcribe(blob);
-            await handleTranscript(text);
-          } catch {
-            if (mountedRef.current) setState("idle");
-          }
         },
       });
     } catch {
       recorderRef.current = null;
       if (mountedRef.current) setState("idle");
     }
-  }, [handleTranscript]);
+  }, []);
 
   // Al montar: saluda y arranca a escuchar.
   useEffect(() => {
