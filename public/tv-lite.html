@@ -62,6 +62,10 @@
   .hero .hreason { max-width:640px; margin:2px 0 0; font-size:17px; line-height:1.4; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
+  /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
+  .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
+  .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
+  .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -266,6 +270,8 @@
   var controlUrl = origin + "/control?session=" + sessionId;
   var items = [];
   var focusedIndex = 0;
+  var heroIndex = 0; // banner visible del carrusel de 5 (modo home)
+  var TOP = 5;       // cantidad de recomendaciones grandes en el carrusel
   var screen = "home";
   var query = "";
   var mode = "home"; // "home" | "search" | "list"
@@ -391,10 +397,21 @@
       elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
       return;
     }
-    // Home = jerárquico (héroe + resto). Búsqueda / lista = grilla plana (pares).
+    // Home = carrusel de 5 grandes (arriba) + "más opciones" (grilla debajo).
+    // Búsqueda / lista = grilla plana (sin cambios).
     if (mode === "home") {
-      var html = heroHTML(items[0], focusedIndex === 0);
-      if (items.length > 1) html += '<h3 class="sec">Más opciones para vos</h3>' + cardsGridHTML(1);
+      var top = Math.min(TOP, items.length);
+      var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
+      // Banner grande del ítem enfocado del carrusel (o el último visto).
+      var html = heroHTML(items[hi], focusedIndex < top && focusedIndex === hi);
+      // Dots de posición del carrusel.
+      if (top > 1) {
+        html += '<div class="hdots">';
+        for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
+        html += "</div>";
+      }
+      // "Más opciones para vos": el resto, desde el ítem 5.
+      if (items.length > top) html += '<h3 class="sec">Más opciones para vos</h3>' + cardsGridHTML(top);
       elContent.innerHTML = html;
     } else {
       elContent.innerHTML = gridHTML(0);
@@ -527,7 +544,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (query) return; // si el usuario ya buscó, no piso sus resultados
-        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; }
+        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; heroIndex = 0; }
         render();
         emitScreen();
         loadPosters();
@@ -641,10 +658,29 @@
   function moveFocus(dir) {
     if (items.length === 0) return;
     var n = focusedIndex;
-    if (dir === "right") n = Math.min(n + 1, items.length - 1);
-    else if (dir === "left") n = Math.max(n - 1, 0);
-    else if (dir === "down") n = Math.min(n + 6, items.length - 1);
-    else if (dir === "up") n = Math.max(n - 6, 0);
+    if (mode === "home") {
+      var top = Math.min(TOP, items.length);
+      if (focusedIndex < top) {
+        // En el carrusel: ←/→ recorre los 5 banners; ↓ baja a la grilla.
+        if (dir === "right") n = Math.min(focusedIndex + 1, top - 1);
+        else if (dir === "left") n = Math.max(focusedIndex - 1, 0);
+        else if (dir === "down") n = (items.length > top) ? top : focusedIndex;
+        else n = focusedIndex; // ↑ no hace nada arriba
+        if (n < top) heroIndex = n; // el carrusel sigue al foco
+      } else {
+        // En la grilla (índices ≥ top): ←/→ ±1, ↓ +6, ↑ −6 (y si sube del tope, vuelve al carrusel).
+        if (dir === "right") n = Math.min(focusedIndex + 1, items.length - 1);
+        else if (dir === "left") n = Math.max(focusedIndex - 1, top);
+        else if (dir === "down") n = Math.min(focusedIndex + 6, items.length - 1);
+        else { n = focusedIndex - 6; if (n < top) n = heroIndex; } // ↑ del tope → carrusel
+      }
+    } else {
+      // Búsqueda / lista: grilla plana, como siempre.
+      if (dir === "right") n = Math.min(n + 1, items.length - 1);
+      else if (dir === "left") n = Math.max(n - 1, 0);
+      else if (dir === "down") n = Math.min(n + 6, items.length - 1);
+      else if (dir === "up") n = Math.max(n - 6, 0);
+    }
     if (n !== focusedIndex) { focusedIndex = n; updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen(); }
   }
 
