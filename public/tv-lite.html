@@ -50,7 +50,7 @@
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): la recomendación principal a lo grande === */
-  .hero { position:relative; height:52vh; min-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  .hero { position:relative; height:40vh; min-height:240px; max-height:340px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
@@ -59,8 +59,8 @@
   .hero .htitle { font-family:inherit; font-size:44px; font-weight:600; line-height:1.05; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
   .hero .hsub { font-size:16px; color:#B4B4BC; }
-  .hero .hreason { max-width:640px; margin:2px 0 0; font-size:17px; line-height:1.4; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:16px; line-height:1.38; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
+    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
   .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
@@ -210,6 +210,7 @@
   var SUPABASE_KEY = "sb_publishable_Rr1Xw4no3qdm2uFSI1kVYg_4asF5n6o";
 
   var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+  var userPlatforms = null; // plataformas heredadas del control (SET_PLATFORMS); null = todas
   var COLORS = {
     "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
     "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
@@ -220,18 +221,25 @@
 
   // Estado de búsqueda: barra que se llena + chips de plataformas que pasan.
   function searchingHTML() {
+    // Plataformas del usuario (heredadas por SET_PLATFORMS) o todas; deduplicadas
+    // por label para no repetir "Disney+" (Star+ → Disney+).
+    var plats = userPlatforms && userPlatforms.length ? userPlatforms : PLATFORMS;
+    var seen = {}, list = [];
+    for (var i = 0; i < plats.length; i++) { var l = platLabel(plats[i]); if (!seen[l]) { seen[l] = 1; list.push(plats[i]); } }
     var chip = function (p) {
       var col = colorFor(p);
-      return '<span class="schip" style="border-color:' + col + ';color:' + col + '">' + esc(p) + "</span>";
+      return '<span class="schip" style="border-color:' + col + ';color:' + col + '">' + esc(platLabel(p)) + "</span>";
     };
     var row = "";
-    // Duplicado para que el marquee sea continuo (-50%).
-    for (var k = 0; k < 2; k++) {
-      for (var i = 0; i < PLATFORMS.length; i++) row += chip(PLATFORMS[i]);
-    }
+    for (var k = 0; k < 2; k++) { for (var j = 0; j < list.length; j++) row += chip(list[j]); }
+    var names = [];
+    for (var m = 0; m < list.length && m < 4; m++) names.push(platLabel(list[m]));
+    // Literal del pedido (como el móvil).
+    var head = query ? ("Buscando <b>«" + esc(query) + "»</b>") : "Buscando lo mejor para vos";
     return (
       '<div class="searching">' +
-      '<div class="sline">Buscando en <b>Netflix, Disney+, Max, Prime Video…</b></div>' +
+      '<div class="sline">' + head + "</div>" +
+      '<div class="sline" style="font-size:16px;color:#8A8A93;margin-top:-8px">en ' + esc(names.join(", ")) + "…</div>" +
       '<div class="sbar"><i></i></div>' +
       '<div class="schips"><span class="row">' + row + "</span></div>" +
       "</div>"
@@ -752,6 +760,11 @@
     else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
     else if (cmd.type === "BACK") goBack();
+    else if (cmd.type === "SET_PLATFORMS") {
+      // Fix: antes la TV descartaba esto → nunca heredaba las plataformas del usuario.
+      if (cmd.platforms && cmd.platforms.length) userPlatforms = cmd.platforms;
+      if (loading) renderContent(); // refrescar el loader si está en pantalla
+    }
   }
 
   // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
