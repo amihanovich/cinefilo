@@ -4,19 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cinéfilo TV</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   /* Paleta oscura / cinematográfica: casi-negro + texto claro + acento coral. */
   * { box-sizing: border-box; }
   body { margin:0; background:#0E0E10; color:#F5F5F7;
-    font-family:'Inter', system-ui, -apple-system, Arial, sans-serif; -webkit-font-smoothing:antialiased; }
-  .serif { font-family:'Newsreader', Georgia, serif; }
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing:antialiased; }
+  /* Misma tipografía que la app móvil (stack del sistema, sin serif de marca). */
+  .serif { font-family:inherit; }
   .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #26262A; background:#141416; }
-  .brand { font-family:'Newsreader', Georgia, serif; font-size:30px; font-weight:600; letter-spacing:-.01em; color:#F5F5F7; }
+  .brand { font-family:inherit; font-size:30px; font-weight:600; letter-spacing:-.01em; color:#F5F5F7; }
   .brand span { color:#CC785C; }
-  .ai { font-size:13px; color:#8A8A93; margin-left:10px; font-family:'Inter',sans-serif; }
+  .ai { font-size:13px; color:#8A8A93; margin-left:10px; font-family:inherit; }
   .badge { font-size:16px; color:#C9C9CE; background:#1C1C1F; border:1px solid #2A2A2E; border-radius:999px; padding:7px 15px; }
   .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
   .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
@@ -25,8 +23,8 @@
   .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
   .pairleft { width:42%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:18px; padding:0 52px; border-right:1px solid #1E1E22; }
   .qrbox { align-self:flex-start; background:#fff; padding:16px; border-radius:22px; box-shadow:0 18px 60px rgba(204,120,92,.28); }
-  .qrbox img { display:block; width:300px; height:300px; }
-  .pairleft h1 { font-family:'Newsreader', Georgia, serif; font-size:38px; font-weight:600; margin:6px 0 0; color:#F5F5F7; }
+  .qrbox img { display:block; width:200px; height:200px; }
+  .pairleft h1 { font-family:inherit; font-size:38px; font-weight:600; margin:6px 0 0; color:#F5F5F7; }
   .pairleft .sub { font-size:19px; color:#B4B4BC; margin:0; max-width:460px; line-height:1.4; }
   .taglines { margin:2px 0 0; }
   .taglines p { margin:6px 0; font-size:17px; color:#9A9AA2; line-height:1.35; }
@@ -48,7 +46,7 @@
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:'Newsreader', Georgia, serif; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
+  .sec { font-family:inherit; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): la recomendación principal a lo grande === */
@@ -58,7 +56,7 @@
   .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
   .hero .g2 { position:absolute; inset:0; background:linear-gradient(to top, #0E0E10 2%, rgba(14,14,16,.15) 46%, rgba(14,14,16,0) 78%); }
   .hero .info { position:relative; z-index:2; max-width:56%; height:100%; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 48px; }
-  .hero .htitle { font-family:'Newsreader', Georgia, serif; font-size:44px; font-weight:600; line-height:1.05; margin:0; color:#F5F5F7; }
+  .hero .htitle { font-family:inherit; font-size:44px; font-weight:600; line-height:1.05; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
   .hero .hsub { font-size:16px; color:#B4B4BC; }
   .hero .hreason { max-width:640px; margin:2px 0 0; font-size:17px; line-height:1.4; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
@@ -773,9 +771,8 @@
           (function (it) {
             var tile = document.createElement("div");
             tile.className = "ptile";
-            var cap = '<div class="cap"><span class="tt">' + esc(it.title) + "</span>";
-            if (it.platform) cap += '<span class="pl" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
-            cap += "</div>";
+            // Sin "Disponible en" en el landing (pedido): solo el título sobre el póster.
+            var cap = '<div class="cap"><span class="tt">' + esc(it.title) + "</span></div>";
             tile.innerHTML = cap;
             box.appendChild(tile);
             cinemetaPoster(it.title, it.type, function (url) {
