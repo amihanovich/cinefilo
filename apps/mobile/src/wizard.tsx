@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouch
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
   User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
+  Volume2, VolumeX,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
+import { fetchRecommendation, fetchPosters, fetchAsk, fetchIntent, warmupBackend } from "./lib/api";
+import { speak, stopSpeaking, isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
@@ -124,7 +126,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
 
   // Búsqueda en curso → pantalla de loading (Bloque 3). null = sin búsqueda activa.
-  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice" } | null>(null);
+  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice"; intent?: string | null } | null>(null);
+  const [ttsMuted, setTtsMuted] = useState(() => { try { return isMuted(); } catch { return false; } });
+
+  const toggleMute = () => {
+    const next = !ttsMuted;
+    setTtsMuted(next);
+    setMuted(next); // persiste + corta lo que esté sonando si se mutea
+  };
 
   // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
@@ -233,7 +242,12 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     // Feedback inmediato (≤100ms): plataformas activas + eco del pedido.
-    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
+    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType, intent: null });
+    // (a.i) En paralelo, inferimos "lo más importante del pedido" con una llamada
+    // chica y la mostramos arriba mientras la reco (más lenta) sigue en curso.
+    void fetchIntent(userQuery).then((intent) => {
+      if (intent) setSearchInfo((prev) => (prev ? { ...prev, intent } : prev));
+    });
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -264,6 +278,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setSearchInfo(null);
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
+
+      // (e) Cinéfilo explica por voz por qué eligió estas opciones (respeta el mute).
+      void speak(
+        data.cinephile_note ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`,
+      );
 
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
@@ -436,23 +455,12 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         if (text.trim()) setChatText(text.trim());
       } catch { /* silencioso */ }
     } else {
+      // Press-to-speak / press-to-stop: sin auto-stop por silencio, el usuario frena.
       const recorder = new VoiceRecorder();
       micRecorderRef.current = recorder;
       setMicRecording(true);
       try {
-        await recorder.start({
-          onAutoStop: async () => {
-            setMicRecording(false);
-            const blob = await recorder.stop();
-            micRecorderRef.current = null;
-            if (blob.size < 500) return;
-            try {
-              const text = await transcribe(blob);
-              if (text.trim()) setChatText(text.trim());
-            } catch { /* silencioso */ }
-          },
-          silenceMs: 2500,
-        });
+        await recorder.start({ autoStop: false });
       } catch {
         setMicRecording(false);
         micRecorderRef.current = null;
@@ -578,7 +586,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
   // Búsqueda en curso: pantalla de loading (reemplaza el resultado, con fade-in).
   if (searchInfo) {
-    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} />;
+    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} intent={searchInfo.intent} />;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -760,6 +768,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             platforms={platforms.length > 0 ? platforms : PLATFORMS}
             excludeTitles={items.map((i) => i.title)}
             history={messages}
+            greet={false} /* (d) desde la Home no saluda: escucha directo */
             onResult={(result) => { handleVoiceResult(result); setVoiceMode(false); }}
             onDismiss={() => setVoiceMode(false)}
           />
@@ -841,16 +850,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           )}
         </div>
 
-        {/* Hablar con Cinéfilo: plantado full-width arriba de las tarjetas */}
-        <div className="shrink-0 px-5 pb-3">
+        {/* Pedile a Cinéfilo: plantado arriba de las tarjetas + toggle de mute de la voz */}
+        <div className="shrink-0 px-5 pb-3 flex items-center gap-2">
           <button
             onClick={() => { track("voice_used"); setVoiceMode(true); }}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-all active:scale-95"
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-all active:scale-95"
           >
             <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full">
               <Orb phase="idle" size="mini" />
             </span>
-            <span className="text-sm font-semibold text-primary">Hablar con Cinéfilo</span>
+            <span className="text-sm font-semibold text-primary">Pedile a Cinéfilo</span>
+          </button>
+          <button
+            onClick={toggleMute}
+            aria-label={ttsMuted ? "Activar la voz de Cinéfilo" : "Silenciar la voz de Cinéfilo"}
+            title={ttsMuted ? "Voz silenciada" : "Voz activada"}
+            className={`flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95 ${
+              ttsMuted
+                ? "border-border bg-muted text-muted-foreground"
+                : "border-primary/30 bg-primary/5 text-primary"
+            }`}
+          >
+            {ttsMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
           </button>
         </div>
 
@@ -861,85 +882,86 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               <Check className="h-4 w-4 text-primary" /> Para ver hoy ({cart.length})
             </p>
           )}
-          {/* Tarjetas grandes: carrito (si tiene ítems) o top-5, swipe ←/→ */}
+          {/* Tarjetas grandes (cinematográficas): póster de fondo + info sobre gradiente.
+              Carrito (si tiene ítems) o top-5, swipe ←/→. */}
           <div
             key={current.title}
             onTouchStart={onHeroTouchStart}
             onTouchEnd={(e) => onHeroTouchEnd(e, heroItems.length)}
-            className="fade-in h-[46vh] min-h-[300px] overflow-hidden rounded-2xl border border-border bg-muted/30 select-none"
+            className="fade-in relative h-[52vh] min-h-[340px] overflow-hidden rounded-3xl border border-border bg-muted select-none"
           >
-            <div className="flex h-full">
-              {/* Poster */}
-              <div className="w-28 shrink-0 overflow-hidden">
-                {poster ? (
-                  <img src={poster} alt={current.title} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="h-full w-full animate-pulse bg-muted" />
+            {/* Póster de fondo (con fallback tintado de la plataforma si no hay póster) */}
+            {poster ? (
+              <img src={poster} alt={current.title} className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <div
+                className="absolute inset-0"
+                style={{ background: `linear-gradient(160deg, ${platformColor}66, ${platformColor}22 45%, hsl(var(--background)))` }}
+              />
+            )}
+            {/* Gradiente cinematográfico: base sólida oscura que sube a transparente */}
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
+
+            {/* Copiar título (sutil, arriba a la derecha) */}
+            <button
+              onClick={() => copyTitle(current.title, current.platform)}
+              className={cn(
+                "absolute right-3 top-3 z-10 rounded-full bg-black/40 p-2 backdrop-blur-sm transition-transform active:scale-90",
+                copied ? "text-green-400" : "text-white/70",
+              )}
+              aria-label={copied ? "¡Copiado!" : "Copiar título"}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </button>
+
+            {/* Info abajo, sobre el gradiente */}
+            <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-5">
+              <h2 className="text-2xl font-bold leading-tight text-white">{current.title}</h2>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold text-white" style={{ backgroundColor: platformColor }}>{label}</span>
+                <span className="text-[12px] text-white/70">{current.type} · {current.duration}{current.year && ` · ${current.year}`}</span>
+                {current.ageRating && (
+                  <span className="rounded border border-white/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-white/70">{current.ageRating}</span>
                 )}
+                {avail === undefined ? (
+                  <span className="text-[10px] text-white/40">Verificando…</span>
+                ) : avail.confirmed ? (
+                  <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
+                ) : null}
               </div>
 
-              {/* Info */}
-              <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
-                <div className="flex items-start gap-2">
-                  <h2 className="flex-1 text-base font-bold leading-tight text-foreground">{current.title}</h2>
-                  <button
-                    onClick={() => copyTitle(current.title, current.platform)}
-                    className={cn("mt-0.5 shrink-0 transition-transform active:scale-90", copied ? "text-green-400" : "text-muted-foreground/40")}
-                    aria-label={copied ? "¡Copiado!" : "Copiar título"}
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </button>
-                </div>
+              <p className="text-[13px] leading-relaxed text-white/85 line-clamp-2">{current.reason}</p>
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: platformColor }}>{label}</span>
-                  <span className="text-[11px] text-muted-foreground">{current.type} · {current.duration}{current.year && ` · ${current.year}`}</span>
-                  {current.ageRating && (
-                    <span className="rounded border border-muted-foreground/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-muted-foreground">{current.ageRating}</span>
-                  )}
-                </div>
+              <button
+                onClick={() => openStreaming(current, avail)}
+                className="mt-1 w-full rounded-full py-3 text-center text-sm font-bold text-white shadow-lg transition-transform active:scale-95"
+                style={{ backgroundColor: platformColor }}
+              >
+                ▶ Ver ahora en {label}
+              </button>
 
-                <div className="mt-0.5">
-                  {avail === undefined ? (
-                    <span className="text-[10px] text-muted-foreground/50">Verificando disponibilidad...</span>
-                  ) : avail.confirmed ? (
-                    <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground/50">Verificalo al abrir la app</span>
-                  )}
-                </div>
-
-                <p className="mt-1 flex-1 text-[13px] leading-relaxed text-foreground/70 line-clamp-3">{current.reason}</p>
-
+              {/* Me gustó · Ver hoy (carrito) · Ver luego */}
+              <div className="flex gap-2">
                 <button
-                  onClick={() => openStreaming(current, avail)}
-                  className="mt-2 w-full rounded-full py-2.5 text-center text-xs font-bold text-white active:scale-95 transition-transform"
-                  style={{ backgroundColor: platformColor }}
+                  onClick={() => toggleLike(current)}
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", liked.has(current.title) ? "border-primary bg-primary/25 text-white" : "border-white/20 bg-black/40 text-white/90")}
                 >
-                  ▶ Ver ahora en {label}
+                  <ThumbsUp className="h-3.5 w-3.5" /> {liked.has(current.title) ? "¡Gustó!" : "Me gustó"}
                 </button>
-
-                {/* Me gustó · Ver hoy (carrito) · Ver luego */}
-                <div className="mt-2 flex gap-1.5">
-                  <button
-                    onClick={() => toggleLike(current)}
-                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", liked.has(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
-                  >
-                    <ThumbsUp className="h-3 w-3" /> {liked.has(current.title) ? "¡Gustó!" : "Me gustó"}
-                  </button>
-                  <button
-                    onClick={() => toggleCart(current)}
-                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}
-                  >
-                    {inCart(current.title) ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />} Ver hoy
-                  </button>
-                  <button
-                    onClick={() => toggleWatchlist(current)}
-                    className={cn("flex flex-1 items-center justify-center gap-1 rounded-full border py-2 text-[10px] font-semibold transition-all active:scale-95", watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/10 text-amber-500" : "border-border text-muted-foreground")}
-                  >
-                    <Bookmark className="h-3 w-3" /> Ver luego
-                  </button>
-                </div>
+                <button
+                  onClick={() => toggleCart(current)}
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
+                >
+                  {inCart(current.title) ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} Ver hoy
+                </button>
+                <button
+                  onClick={() => toggleWatchlist(current)}
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/25 text-amber-300" : "border-white/20 bg-black/40 text-white/90")}
+                >
+                  <Bookmark className="h-3.5 w-3.5" /> Ver luego
+                </button>
               </div>
             </div>
           </div>

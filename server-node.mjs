@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
-import { recommend, askAboutTitle, orbRespond } from "./recommend.mjs";
+import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsAudio } from "./tts.mjs";
 
@@ -202,6 +202,28 @@ http
       return;
     }
     if (urlPath === "/api/orb" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Intención inferida: texto libre → frase corta para el estado de búsqueda
+    // (corre en paralelo con /api/recommend en el cliente).
+    if (urlPath === "/api/intent" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (c) => { body += c; if (body.length > 8192) req.destroy(); });
+      req.on("end", () => {
+        let p = {};
+        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+        sendJson(inferIntent(p.text || "").then((intent) => ({ intent })));
+      });
+      return;
+    }
+    if (urlPath === "/api/intent" && req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");

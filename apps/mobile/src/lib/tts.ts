@@ -7,6 +7,27 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-producti
 
 let currentAudio: HTMLAudioElement | null = null;
 
+// Mute global de la voz de Cinéfilo (saludo + explicación de resultados).
+// Persistido para que la elección del usuario sobreviva entre sesiones.
+const MUTE_KEY = "cinefilo:tts_muted";
+
+export function isMuted(): boolean {
+  try {
+    return localStorage.getItem(MUTE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setMuted(muted: boolean): void {
+  try {
+    localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
+  } catch {
+    /* localStorage no disponible: mute solo en memoria de esta sesión */
+  }
+  if (muted) stopSpeaking();
+}
+
 export function stopSpeaking(): void {
   if (currentAudio) {
     currentAudio.pause();
@@ -20,7 +41,7 @@ export async function speak(
   onStart?: () => void,
   onEnd?: () => void,
 ): Promise<void> {
-  if (!text.trim()) {
+  if (!text.trim() || isMuted()) {
     onEnd?.();
     return;
   }
