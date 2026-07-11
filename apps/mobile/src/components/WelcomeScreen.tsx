@@ -105,7 +105,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-8 text-center safe-top safe-bottom">
         <div className="flex items-center gap-2">
           <Sparkles className="h-7 w-7 text-primary" />
-          <span className="font-brand text-2xl font-bold tracking-tight text-foreground">Cinéfilo</span>
+          <span className="text-2xl font-bold tracking-tight text-foreground">Cinéfilo</span>
         </div>
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
         <p className="max-w-xs text-sm text-muted-foreground">

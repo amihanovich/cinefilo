@@ -32,7 +32,7 @@ const GREETING_SHORT = "Decime qué tenés ganas de ver.";
 let greetedThisSession = false;
 
 export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, onDismiss, greet = true }: VoiceAgentProps) {
-  const [state, setState] = useState<AgentState>(greet ? "speaking" : "listening");
+  const [state, setState] = useState<AgentState>(greet ? "speaking" : "idle");
   const [volume, setVolume] = useState(0);
   const [hint, setHint] = useState("...");
   const recorderRef = useRef<VoiceRecorder | null>(null);
@@ -77,7 +77,8 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
 
     const boot = async () => {
       if (!greet) {
-        await startListening();
+        // Sin auto-escucha: igual que la bienvenida, esperamos que el usuario toque
+        // el orbe (press-to-speak). Recién ahí graba, y al tocar de nuevo busca.
         return;
       }
       setState("speaking");

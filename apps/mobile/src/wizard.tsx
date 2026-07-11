@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent, type UIEvent as ReactUIEvent } from "react";
 import {
   Sparkles, ChevronLeft, ChevronRight, Send, Mic,
-  User, Bookmark, ThumbsUp, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
+  User, Bookmark, ThumbsUp, ThumbsDown, Copy, Check, LayoutGrid, Loader2, QrCode, X, Plus,
   Volume2, VolumeX, Keyboard, ChevronDown, ShoppingCart,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
@@ -24,6 +24,7 @@ import type { JwResult } from "./lib/justwatch";
 // ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "cinefilo:watchlist";
 const LIKED_KEY = "cinefilo:liked";
+const DISLIKED_KEY = "cinefilo:disliked";
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable,
 // pero los mapeos internos (color, label, deeplink) se mantienen para datos viejos.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
@@ -166,6 +167,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [copied, setCopied] = useState(false);
   const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
+  const [disliked, setDisliked] = useState<Set<string>>(() => loadSet(DISLIKED_KEY));
   const [tvBanner, setTvBanner] = useState(() => localStorage.getItem(TV_BANNER_KEY) !== "1");
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
   const [controlSession, setControlSession] = useState<string | null>(null);
@@ -492,7 +494,23 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const isIn = liked.has(item.title);
     setLiked((prev) => { const n = new Set(prev); isIn ? n.delete(item.title) : n.add(item.title); return n; });
     if (isIn) removeFromStore(LIKED_KEY, item.title);
-    else { addToStore(LIKED_KEY, { title: item.title, platform: item.platform, type: item.type }); track("liked", { title: item.title, platform: item.platform }); }
+    else {
+      addToStore(LIKED_KEY, { title: item.title, platform: item.platform, type: item.type });
+      track("liked", { title: item.title, platform: item.platform });
+      // Mutuamente excluyente con "no me gustó".
+      if (disliked.has(item.title)) { setDisliked((prev) => { const n = new Set(prev); n.delete(item.title); return n; }); removeFromStore(DISLIKED_KEY, item.title); }
+    }
+  };
+
+  const toggleDislike = (item: Recommendation) => {
+    const isIn = disliked.has(item.title);
+    setDisliked((prev) => { const n = new Set(prev); isIn ? n.delete(item.title) : n.add(item.title); return n; });
+    if (isIn) removeFromStore(DISLIKED_KEY, item.title);
+    else {
+      addToStore(DISLIKED_KEY, { title: item.title, platform: item.platform, type: item.type });
+      track("disliked", { title: item.title, platform: item.platform });
+      if (liked.has(item.title)) { setLiked((prev) => { const n = new Set(prev); n.delete(item.title); return n; }); removeFromStore(LIKED_KEY, item.title); }
+    }
   };
 
   const copyTitle = (title: string, platform: string) => {
@@ -808,7 +826,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="font-brand text-base font-bold text-foreground">Cinéfilo</span>
+            <span className="text-base font-bold text-foreground">Cinéfilo</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -943,25 +961,26 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
 
-            {/* Flechas ←/→ para dejar CLARO que se puede deslizar entre las 5 */}
+            {/* Flechas ←/→ (deslizar entre las 5) — plantadas abajo, en el hueco entre
+                "Ver ahora" y los botones, para NO tapar la razón de la recomendación. */}
             {heroItems.length > 1 && (
               <>
                 {heroIndex > 0 && (
                   <button
                     onClick={() => navigate(heroIndex - 1)}
                     aria-label="Anterior"
-                    className="absolute left-2 top-1/2 z-10 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-90"
+                    className="absolute bottom-[70px] left-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm active:scale-90"
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
                 )}
                 {heroIndex < heroItems.length - 1 && (
                   <button
                     onClick={() => navigate(heroIndex + 1)}
                     aria-label="Siguiente"
-                    className="absolute right-2 top-1/2 z-10 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-90"
+                    className="absolute bottom-[70px] right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm active:scale-90"
                   >
-                    <ChevronRight className="h-5 w-5" />
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 )}
               </>
@@ -1001,25 +1020,27 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 ▶ Ver ahora en {label}
               </button>
 
-              {/* Me gustó · Ver hoy (carrito) · Ver luego */}
+              {/* 👍 · 👎 (solo íconos) · + Para hoy (carrito). "Ver más tarde" vive en la ficha. */}
               <div className="flex gap-2">
                 <button
                   onClick={() => toggleLike(current)}
-                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", liked.has(current.title) ? "border-primary bg-primary/25 text-white" : "border-white/20 bg-black/40 text-white/90")}
+                  aria-label="Me gustó"
+                  className={cn("flex items-center justify-center rounded-full border px-4 py-2.5 backdrop-blur-sm transition-all active:scale-95", liked.has(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
                 >
-                  <ThumbsUp className="h-3.5 w-3.5" /> {liked.has(current.title) ? "¡Gustó!" : "Me gustó"}
+                  <ThumbsUp className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => toggleDislike(current)}
+                  aria-label="No me gustó"
+                  className={cn("flex items-center justify-center rounded-full border px-4 py-2.5 backdrop-blur-sm transition-all active:scale-95", disliked.has(current.title) ? "border-red-500 bg-red-500/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
+                >
+                  <ThumbsDown className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => toggleCart(current)}
-                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
+                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold backdrop-blur-sm transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
                 >
-                  {inCart(current.title) ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} {inCart(current.title) ? "Guardado" : "Guardar hoy"}
-                </button>
-                <button
-                  onClick={() => toggleWatchlist(current)}
-                  className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", watchlisted.has(current.title) ? "border-amber-500 bg-amber-500/25 text-amber-300" : "border-white/20 bg-black/40 text-white/90")}
-                >
-                  <Bookmark className="h-3.5 w-3.5" /> Ver luego
+                  {inCart(current.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {inCart(current.title) ? "En Para hoy" : "Para hoy"}
                 </button>
               </div>
             </div>
@@ -1057,7 +1078,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
               >
                 <ShoppingCart className="h-3.5 w-3.5 text-primary" />
-                {cart.length} guardadas para hoy
+{cart.length} en Para hoy
                 <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
               </button>
 
@@ -1068,7 +1089,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     return (
                       <div key={c.title} className="relative w-14 shrink-0">
                         <button
-                          onClick={() => handleCardTap(c, cart)}
+                          onClick={() => openDetail(c, cart)}
                           className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
                         >
                           {p ? (
@@ -1090,7 +1111,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 </div>
               )}
               {cartOpen && cart.length > 0 && (
-                <p className="mt-1 text-[10px] text-muted-foreground/60">Tocá dos veces para ver la ficha · la ✕ la quita</p>
+                <p className="mt-1 text-[10px] text-muted-foreground/60">Tocá para ver la ficha · la ✕ la quita</p>
               )}
             </div>
           )}
@@ -1138,7 +1159,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           {gridItems.length > 0 && (
             <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
-1 toque = guardar para hoy (otro lo saca) · 2 toques = ver la ficha
+1 toque = Para hoy (otro lo saca) · 2 toques = ver la ficha
             </p>
           )}
         </div>
@@ -1158,8 +1179,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 {canNav && <span className="ml-auto text-xs font-semibold text-muted-foreground">{dIdx + 1} / {dTotal}</span>}
               </div>
               <div className="flex-1 overflow-y-auto p-5" onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd}>
-                <div className="relative overflow-hidden rounded-2xl border border-border bg-muted/30">
-                  <div className="h-56 w-full overflow-hidden bg-muted" onClick={onFichaDoubleTap}>
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-muted/30" onClick={onFichaDoubleTap}>
+                  <div className="h-56 w-full overflow-hidden bg-muted">
                     {posterFor(detailItem.title) ? (
                       <img src={posterFor(detailItem.title)!} alt={detailItem.title} className="h-full w-full object-cover" />
                     ) : null}
@@ -1168,7 +1189,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   {canNav && (
                     <>
                       <button
-                        onClick={() => detailGo(-1)}
+                        onClick={(e) => { e.stopPropagation(); detailGo(-1); }}
                         disabled={dIdx === 0}
                         className="absolute left-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
                         aria-label="Anterior"
@@ -1176,7 +1197,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                         <ChevronLeft className="h-5 w-5" />
                       </button>
                       <button
-                        onClick={() => detailGo(1)}
+                        onClick={(e) => { e.stopPropagation(); detailGo(1); }}
                         disabled={dIdx === dTotal - 1}
                         className="absolute right-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
                         aria-label="Siguiente"
@@ -1193,19 +1214,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     </div>
                     <p className="mt-3 text-sm leading-relaxed text-foreground/75">{detailItem.reason}</p>
                     <button
-                      onClick={() => void openStreaming(detailItem, availability[detailItem.title])}
+                      onClick={(e) => { e.stopPropagation(); void openStreaming(detailItem, availability[detailItem.title]); }}
                       className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"
                       style={{ backgroundColor: colorForPlatform(detailItem.platform) }}
                     >
                       ▶ Ver ahora en {platformLabel(detailItem.platform)}
                     </button>
-                    <button
-                      onClick={() => toggleCart(detailItem)}
-                      className={cn("mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-2.5 text-sm font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
-                    >
-                      {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                      {inCart(detailItem.title) ? "Guardada para hoy" : "Guardar para hoy"}
-                    </button>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleCart(detailItem); }}
+                        className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[13px] font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
+                      >
+                        {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                        {inCart(detailItem.title) ? "En Para hoy" : "Para hoy"}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleWatchlist(detailItem); }}
+                        className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[13px] font-semibold active:scale-95", watchlisted.has(detailItem.title) ? "border-amber-500 bg-amber-500/15 text-amber-400" : "border-border text-foreground")}
+                      >
+                        <Bookmark className="h-4 w-4" />
+                        {watchlisted.has(detailItem.title) ? "En mi lista" : "Ver más tarde"}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
