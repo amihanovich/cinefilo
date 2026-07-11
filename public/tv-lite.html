@@ -13,7 +13,7 @@
   .serif { font-family:inherit; }
   .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #26262A; background:#141416; }
   .brand { font-family:inherit; font-size:30px; font-weight:600; letter-spacing:-.01em; color:#F5F5F7; }
-  .brand span { color:#CC785C; }
+  .brand span { color:#8852E0; }
   .ai { font-size:13px; color:#8A8A93; margin-left:10px; font-family:inherit; }
   .badge { font-size:16px; color:#C9C9CE; background:#1C1C1F; border:1px solid #2A2A2E; border-radius:999px; padding:7px 15px; }
   .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
@@ -22,13 +22,13 @@
   /* === Landing / vinculación: 2 mitades (QR+copy | grilla de pósters) === */
   .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
   .pairleft { width:42%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:18px; padding:0 52px; border-right:1px solid #1E1E22; }
-  .qrbox { align-self:flex-start; background:#fff; padding:16px; border-radius:22px; box-shadow:0 18px 60px rgba(204,120,92,.28); }
+  .qrbox { align-self:flex-start; background:#fff; padding:16px; border-radius:22px; box-shadow:0 18px 60px rgba(136,82,224,.28); }
   .qrbox img { display:block; width:200px; height:200px; }
   .pairleft h1 { font-family:inherit; font-size:38px; font-weight:600; margin:6px 0 0; color:#F5F5F7; }
   .pairleft .sub { font-size:19px; color:#B4B4BC; margin:0; max-width:460px; line-height:1.4; }
   .taglines { margin:2px 0 0; }
   .taglines p { margin:6px 0; font-size:17px; color:#9A9AA2; line-height:1.35; }
-  .taglines .a { color:#CC785C; font-weight:600; }
+  .taglines .a { color:#8852E0; font-weight:600; }
   .sess { margin-top:6px; color:#6A6A72; font-size:15px; }
   /* Grilla de pósters reales de tendencias, mitad derecha (estilo operadora). */
   .pairgrid { flex:1; display:grid; grid-template-columns:repeat(4, 1fr); grid-auto-rows:1fr; gap:14px; padding:26px; }
@@ -42,7 +42,7 @@
   .wrap { padding:18px 34px 44px; }
   .topline { font-size:20px; color:#B4B4BC; margin-bottom:14px; }
   .topline b { color:#F5F5F7; }
-  .topline .hint { color:#CC785C; font-weight:600; }
+  .topline .hint { color:#8852E0; font-weight:600; }
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
@@ -51,7 +51,7 @@
 
   /* === Héroe (home): la recomendación principal a lo grande === */
   .hero { position:relative; height:52vh; min-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
-  .hero.foc { border-color:#CC785C; box-shadow:0 0 0 3px rgba(204,120,92,.55), 0 20px 60px rgba(204,120,92,.30); }
+  .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
   .hero .g2 { position:absolute; inset:0; background:linear-gradient(to top, #0E0E10 2%, rgba(14,14,16,.15) 46%, rgba(14,14,16,0) 78%); }
@@ -61,35 +61,41 @@
   .hero .hsub { font-size:16px; color:#B4B4BC; }
   .hero .hreason { max-width:640px; margin:2px 0 0; font-size:17px; line-height:1.4; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .hero .hreason b { color:#CC785C; margin-right:6px; }
+  .hero .hreason b { color:#8852E0; margin-right:6px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
+  /* Cards cinematográficas: póster de fondo + gradiente + info superpuesta abajo
+     (mismo look que el héroe y las tarjetas del móvil). */
   .card { position:relative; width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
-  .card.foc { opacity:1; border-color:#CC785C; box-shadow:0 12px 34px rgba(204,120,92,.4); transform:scale(1.08); z-index:4; }
-  /* Detalle (solo la razón): overlay sobre la parte baja del póster enfocado. */
-  .card .det { display:none; position:absolute; left:0; right:0; bottom:0; background:rgba(10,10,12,.92); padding:8px 9px; border-top:1px solid rgba(204,120,92,.35); }
-  .card.foc .det { display:block; }
-  .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
-    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
-  .card .det .why b { color:#CC785C; }
+  .card.foc { opacity:1; border-color:#8852E0; box-shadow:0 12px 34px rgba(136,82,224,.4); transform:scale(1.08); z-index:4; }
   .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
   .card .ph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
   .card .ph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; color:#9A9AA2; font-size:13px; font-weight:500; }
-  .card .meta { padding:8px 10px; }
-  .card .meta .t { display:flex; align-items:baseline; gap:5px; font-size:14px; font-weight:600; }
-  .card .meta .t .tt { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#F5F5F7; }
-  .card .meta .t .y { flex:0 0 auto; font-size:11px; font-weight:500; color:#8A8A93; }
-  .card .meta .p { font-size:12px; margin-top:2px; }
+  /* Gradiente cinematográfico que sube desde abajo. */
+  .card .cgrad { position:absolute; left:0; right:0; bottom:0; height:62%; pointer-events:none;
+    background:linear-gradient(to top, rgba(10,10,12,.97) 0%, rgba(10,10,12,.6) 42%, rgba(10,10,12,0) 100%); }
+  /* Info sobre el gradiente: título + meta + plataforma. */
+  .card .cinfo { position:absolute; left:0; right:0; bottom:0; z-index:1; padding:9px 10px; }
+  .card .cinfo .tt { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; font-weight:600; line-height:1.2; color:#fff; }
+  .card .cinfo .csub { display:block; margin-top:3px; font-size:10px; color:#C9C9CE; }
+  .card .cinfo .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
+  /* Detalle (razón de Cinéfilo): al enfocar, reemplaza la info con el "por qué". */
+  .card .det { display:none; position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,10,12,.94); padding:9px 10px; border-top:1px solid rgba(136,82,224,.35); }
+  .card.foc .det { display:block; }
+  .card.foc .cinfo { display:none; }
+  .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .why b { color:#8852E0; }
   .center { text-align:center; color:#9A9AA2; font-size:21px; padding:60px 20px; }
   .more { text-align:center; color:#9A9AA2; font-size:18px; padding:20px; width:100%; }
   .hidden { display:none; }
   /* Estado de búsqueda: barra que se llena + plataformas pasando */
   .searching { max-width:680px; margin:12vh auto 0; text-align:center; padding:0 24px; }
   .searching .sline { font-size:22px; color:#F5F5F7; margin-bottom:18px; }
-  .searching .sline b { color:#CC785C; }
+  .searching .sline b { color:#8852E0; }
   .sbar { height:12px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; }
-  .sbar i { display:block; height:100%; width:8%; border-radius:999px; background:#CC785C; animation:sfill 7s ease-out forwards; }
+  .sbar i { display:block; height:100%; width:8%; border-radius:999px; background:#8852E0; animation:sfill 7s ease-out forwards; }
   @keyframes sfill { from { width:8%; } to { width:95%; } }
   .schips { overflow:hidden; margin-top:22px; }
   .schips .row { display:inline-flex; gap:10px; white-space:nowrap; animation:schipmove 9s linear infinite; }
@@ -304,17 +310,25 @@
     return '<div class="det"><p class="why"><b>✦</b> ' + esc(it.reason) + "</p></div>";
   }
 
-  function cardHTML(it, foc) {
-    var h = '<div class="card' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
-    h += '<div class="ph">' + posterHTML(it) + detHTML(it) + "</div>";
-    h += '<div class="meta"><div class="t"><span class="tt">' + esc(it.title) + "</span>";
+  // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
+  // cardHTML y también al recargar el póster (loadPosters), para no perder la info.
+  function cardPh(it) {
+    var h = posterHTML(it) + '<div class="cgrad"></div>';
+    // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
+    h += '<div class="cinfo"><span class="tt">' + esc(it.title) + "</span>";
     var sub = [];
+    if (it.type) sub.push(it.type);
     if (it.year) sub.push(it.year);
     if (it.ageRating) sub.push(it.ageRating);
-    if (sub.length) h += '<span class="y">' + esc(sub.join(" ")) + "</span>";
+    if (sub.length) h += '<span class="csub">' + esc(sub.join(" · ")) + "</span>";
+    if (it.platform) h += '<span class="pl" style="background:' + colorFor(it.platform) + '">' + esc(platLabel(it.platform)) + "</span>";
     h += "</div>";
-    if (it.platform) h += '<div class="p" style="color:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</div>";
-    h += "</div></div>";
+    return h + detHTML(it);
+  }
+
+  function cardHTML(it, foc) {
+    var h = '<div class="card' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
+    h += '<div class="ph">' + cardPh(it) + "</div></div>";
     return h;
   }
 
@@ -400,7 +414,7 @@
         : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
-      elTopline.innerHTML = '<span class="hint">Usá tu teléfono para buscar</span> — más práctico que el control de la TV.';
+      elTopline.innerHTML = '<span class="hint">Pedile a Cinéfilo desde tu App o Web Control</span> — buscá y controlá desde el teléfono.';
     }
     renderSpot();
     renderContent();
@@ -464,8 +478,8 @@
         loaded++;
         it.posterUrl = url;
         var ph = document.querySelector("#card-" + it.id + " .ph");
-        // Importante: regenerar también el detalle, si no la carátula lo pisa.
-        if (ph) ph.innerHTML = posterHTML(it) + detHTML(it);
+        // Regenerar todo el contenido del ph (póster + gradiente + info + detalle).
+        if (ph) ph.innerHTML = cardPh(it);
         // Si el ítem es el héroe (home), su póster va como fondo (.bg).
         var bg = document.querySelector("#card-" + it.id + " .bg");
         if (bg) bg.src = url;
