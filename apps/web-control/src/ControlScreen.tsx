@@ -7,7 +7,7 @@
 
 import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
-  Search, Play, CornerDownLeft, Loader2, Mic, Smartphone, Sparkles, ArrowRight, Bookmark,
+  Search, Play, CornerDownLeft, Loader2, Mic, Smartphone, Sparkles, ArrowRight, Bookmark, Plus, Check,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { useTvChannel } from "./hooks/use-tv-channel";
@@ -46,6 +46,8 @@ export function ControlScreen({ session }: ControlScreenProps) {
   const [centeredId, setCenteredId] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [todayTitles, setTodayTitles] = useState<string[]>([]);
+  const [tvScreen, setTvScreen] = useState<string>("home");
   const micRef = useRef<VoiceRecorder | null>(null);
 
   const { status, paired, sendCommand } = useTvChannel({
@@ -56,6 +58,8 @@ export function ControlScreen({ session }: ControlScreenProps) {
         setItems(state.items);
         // La TV es dueña del foco: reflejamos su cursor en el preview.
         if (state.focusedId) setCenteredId(state.focusedId);
+        setTodayTitles(state.todayTitles ?? []);
+        setTvScreen(state.screen);
         setNowPlaying(null);
       } else if (state.type === "NOW_PLAYING") {
         setNowPlaying(state.media);
@@ -66,6 +70,23 @@ export function ControlScreen({ session }: ControlScreenProps) {
   const send = useCallback((cmd: ControlCommandMessage) => sendCommand(cmd), [sendCommand]);
   const centered = items.find((i) => i.id === centeredId) ?? null;
   const previewItem = nowPlaying ?? centered;
+  const inToday = (item: MediaItem | null) => !!item && todayTitles.indexOf(item.title) >= 0;
+
+  // OK contextual (espeja el móvil): en la ficha OK = ver ahora; en el carrito 1 OK =
+  // ficha; fuera del carrito 1 OK = "Para hoy", doble OK (<350ms) = ficha.
+  const okTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const okPress = () => {
+    const item = centered;
+    if (!item) { send({ type: "SELECT", mediaId: centeredId ?? undefined }); return; }
+    if (tvScreen === "detail") { send({ type: "PLAY", mediaId: item.id }); return; }
+    if (inToday(item)) { send({ type: "OPEN_DETAIL", mediaId: item.id }); return; }
+    if (okTimerRef.current) {
+      clearTimeout(okTimerRef.current); okTimerRef.current = null;
+      send({ type: "OPEN_DETAIL", mediaId: item.id }); return;
+    }
+    okTimerRef.current = setTimeout(() => { okTimerRef.current = null; send({ type: "ADD_TODAY", mediaId: item.id }); }, 350);
+  };
+  const addToday = () => { if (centeredId) send({ type: "ADD_TODAY", mediaId: centeredId }); };
 
   const runSearch = useCallback(
     (q: string) => {
@@ -258,7 +279,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
             <ChevronLeft className="h-7 w-7" />
           </button>
           <button
-            onClick={() => send({ type: "SELECT", mediaId: centeredId ?? undefined })}
+            onClick={okPress}
             disabled={!paired}
             aria-label="OK"
             className="flex aspect-square items-center justify-center rounded-2xl bg-primary text-sm font-bold text-white transition-transform active:scale-90 disabled:opacity-40"
@@ -295,11 +316,11 @@ export function ControlScreen({ session }: ControlScreenProps) {
             <Play className="h-5 w-5" /> Play
           </button>
           <button
-            onClick={showMyList}
-            disabled={!paired}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-3 text-sm font-semibold text-foreground active:scale-95 disabled:opacity-40"
+            onClick={addToday}
+            disabled={!paired || !centeredId}
+            className={"flex flex-1 items-center justify-center gap-1.5 rounded-2xl border py-3 text-sm font-semibold active:scale-95 disabled:opacity-40 " + (inToday(centered) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
           >
-            <Bookmark className="h-5 w-5" /> Mi lista
+            {inToday(centered) ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />} Para hoy
           </button>
         </div>
       </div>

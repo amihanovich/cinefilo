@@ -50,6 +50,10 @@ export const ControlCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("SELECT"), mediaId: z.string().optional() }),
   z.object({ type: z.literal("BACK") }),
   z.object({ type: z.literal("PLAY"), mediaId: z.string() }),
+  // ADD_TODAY: agregar/quitar el ítem del carrito "Para hoy" de la TV.
+  z.object({ type: z.literal("ADD_TODAY"), mediaId: z.string() }),
+  // OPEN_DETAIL: abrir la ficha (banner grande) del ítem en la TV.
+  z.object({ type: z.literal("OPEN_DETAIL"), mediaId: z.string() }),
 ]);
 export type ControlCommandMessage = z.infer<typeof ControlCommand>;
 
@@ -61,6 +65,9 @@ export const TvState = z.discriminatedUnion("type", [
     screen: z.enum(["home", "search", "detail", "player"]),
     focusedId: z.string().nullable(),
     items: z.array(mediaItemSchema),
+    // Títulos que están en "Para hoy" (carrito de la TV), para que el control
+    // conozca el contexto del OK (fuera del carrito = agregar; dentro = ficha).
+    todayTitles: z.array(z.string()).optional(),
   }),
   z.object({ type: z.literal("NOW_PLAYING"), media: mediaItemSchema }),
 ]);
