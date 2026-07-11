@@ -66,6 +66,13 @@
   .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
   .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
   .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
+  /* Tira "Para ver hoy" (carrito de la TV). */
+  .todayrow { display:flex; gap:12px; overflow:hidden; margin-bottom:4px; }
+  .ttile { width:92px; height:138px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; }
+  .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:5px; font-size:11px; color:#9A9AA2; }
+  /* Ficha (ítem a lo grande). */
+  .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -283,6 +290,9 @@
   var screen = "home";
   var query = "";
   var mode = "home"; // "home" | "search" | "list"
+  var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
+  var TODAY_KEY = "cinefilo:tv:today";
+  var today = loadToday(); // ids en "Para hoy" (carrito de la TV, persistido en la sesión)
   var history = []; // pila de pantallas anteriores (para "Volver")
   var loading = false;
   var loadingMore = false;
@@ -399,7 +409,39 @@
     return html;
   }
 
+  // --- Carrito "Para ver hoy" (identidad por título, estable entre listas) ---
+  function loadToday() { try { var v = localStorage.getItem("cinefilo:tv:today"); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function saveToday() { try { localStorage.setItem(TODAY_KEY, JSON.stringify(today)); } catch (e) {} }
+  function isToday(item) { if (!item) return false; for (var i = 0; i < today.length; i++) if (today[i].title === item.title) return true; return false; }
+  function toggleToday(item) {
+    if (!item) return;
+    var found = -1;
+    for (var i = 0; i < today.length; i++) if (today[i].title === item.title) { found = i; break; }
+    if (found >= 0) today.splice(found, 1);
+    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating });
+    saveToday(); render(); emitScreen();
+  }
+  function todayStripHTML() {
+    if (!today.length) return "";
+    var h = '<h3 class="sec">Para ver hoy</h3><div class="todayrow">';
+    for (var i = 0; i < today.length; i++) {
+      var it = today[i];
+      var p = it.posterUrl ? '<img src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
+      h += '<div class="ttile">' + p + "</div>";
+    }
+    return h + "</div>";
+  }
+
+  // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
+  function openDetail(item) { if (!item) return; detailItem = item; screen = "detail"; render(); emitScreen(); }
+  function closeDetail() { detailItem = null; screen = mode; render(); emitScreen(); }
+  function detailHTML(it) {
+    return heroHTML(it, true) + '<div class="detailhint">OK = ver ahora · Volver = salir</div>';
+  }
+
   function renderContent() {
+    // Ficha abierta: mostramos el ítem elegido a lo grande (estilo banner).
+    if (detailItem) { elContent.innerHTML = detailHTML(detailItem); return; }
     if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); return; }
     if (items.length === 0) {
       elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
@@ -418,6 +460,8 @@
         for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
         html += "</div>";
       }
+      // Tira "Para ver hoy" (carrito), debajo del carrusel.
+      html += todayStripHTML();
       // "Más opciones para vos": el resto, desde el ítem 5.
       if (items.length > top) html += '<h3 class="sec">Más opciones para vos</h3>' + cardsGridHTML(top);
       elContent.innerHTML = html;
@@ -472,7 +516,11 @@
   }
   function emitScreen() {
     var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
-    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items });
+    // todayTitles: qué está en "Para hoy" (por título, estable) para que el control
+    // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
+    var todayTitles = [];
+    for (var i = 0; i < today.length; i++) todayTitles.push(today[i].title);
+    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles });
   }
 
   // --- Pósters vía Cinemeta (catálogo público de Stremio: con CORS y sin clave). ---
@@ -767,6 +815,26 @@
     }
   }
 
+  // OK contextual (mismo modelo que el móvil), válido para el remoto nativo y el
+  // control móvil (que manda "SELECT"). Ficha abierta: OK = ver ahora. En el carrito:
+  // 1 OK = ficha. Fuera del carrito: doble OK (<400ms) = ficha; 1 OK = agregar a "Para hoy".
+  var okTimer = null, okTitle = "";
+  function okPress() {
+    if (detailItem) { play(detailItem.id); return; }
+    var it = items[focusedIndex];
+    if (!it) return;
+    if (isToday(it)) { openDetail(it); return; }
+    if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → ficha
+      clearTimeout(okTimer); okTimer = null; okTitle = "";
+      openDetail(it); return;
+    }
+    if (okTimer) clearTimeout(okTimer);
+    okTitle = it.title;
+    okTimer = setTimeout((function (target) {
+      return function () { okTimer = null; okTitle = ""; toggleToday(target); };
+    })(it), 380);
+  }
+
   // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
   // 415=Play, 10252=Play/Pause, 10009=Return).
   document.addEventListener("keydown", function (e) {
@@ -776,10 +844,10 @@
     else if (k === 38) moveFocus("up");
     else if (k === 40) moveFocus("down");
     else if (k === 13 || k === 415 || k === 10252) {
-      var it = items[focusedIndex];
-      if (it) play(it.id);
+      okPress();
     } else if (k === 10009 || k === 8 || k === 27) {
-      goBack();
+      if (detailItem) { closeDetail(); }
+      else goBack();
     } else return;
     e.preventDefault();
   });
