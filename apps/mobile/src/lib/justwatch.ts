@@ -132,25 +132,28 @@ export async function openInApp(platform: string, webUrl: string, title?: string
   window.open(webUrl, "_system");
 }
 
-export async function openNative(result: JwResult): Promise<void> {
+// Devuelve true si logró abrir/lanzar algo; false si no tenía nada usable (para
+// que el caller pueda caer a un fallback web y el botón nunca quede sin efecto).
+export async function openNative(result: JwResult): Promise<boolean> {
   // Para títulos confirmados, JustWatch da la URL exacta del título. Esa URL
   // suele estar registrada como App Link y abre la app directo en ese título.
   if (isAndroid()) {
     // 1) Deeplink nativo exacto de JustWatch (scheme custom → app, no http)
     if (result.deeplinkAndroid && !/^https?:/i.test(result.deeplinkAndroid)) {
-      if (await launch(result.deeplinkAndroid)) return;
+      if (await launch(result.deeplinkAndroid)) return true;
     }
     // 2) URL de título (App Link) → abre la app en ese título si está instalada
     if (result.standardWebURL) {
-      if (await launch(result.standardWebURL)) return;
+      if (await launch(result.standardWebURL)) return true;
       window.open(result.standardWebURL, "_system");
-      return;
+      return true;
     }
-    return;
+    return false;
   }
   // iOS: los Universal Links abren la app desde la URL https
   const url = result.deeplinkIos ?? result.standardWebURL;
-  if (url) window.open(url, "_system");
+  if (url) { window.open(url, "_system"); return true; }
+  return false;
 }
 
 export async function jwSearch(

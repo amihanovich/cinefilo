@@ -1,7 +1,6 @@
 // Estado de carga de una búsqueda. Aparece INMEDIATAMENTE al disparar (no espera
-// al backend). Comunica dos cosas del pedido a-i / a-ii:
-//   (i)  ARRIBA: la intención inferida ("lo más importante del pedido") — llega en
-//        paralelo vía /api/intent; hasta que llega, mostramos "Entendiendo tu pedido…".
+// al backend):
+//   (i)  ARRIBA: solo el literal del pedido (sin llamada extra — el más liviano).
 //   (ii) EN EL MEDIO: una rueda girando que cicla las plataformas ("Buscando en X…")
 //        para transmitir que ya está barriendo todo el universo de plataformas.
 
@@ -13,10 +12,9 @@ interface SearchLoadingProps {
   query: string;
   platforms: string[];
   type: "auto" | "text" | "voice";
-  intent?: string | null;
 }
 
-export function SearchLoading({ query, platforms, type, intent }: SearchLoadingProps) {
+export function SearchLoading({ query, platforms, type }: SearchLoadingProps) {
   const list = platforms.length > 0 ? platforms : ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
   const [idx, setIdx] = useState(0);
 
@@ -29,27 +27,13 @@ export function SearchLoading({ query, platforms, type, intent }: SearchLoadingP
   const current = list[idx];
   const color = colorForPlatform(current);
 
-  // (i) Texto de arriba: intención inferida si llegó; si no, el eco literal o un
-  // placeholder mientras se infiere.
-  const topText =
-    type === "auto"
-      ? "Eligiendo lo mejor para vos…"
-      : intent
-        ? intent
-        : query.trim()
-          ? `«${query}»`
-          : "Entendiendo tu pedido…";
-
   return (
     <div className="fade-in flex h-[100dvh] flex-col items-center justify-center gap-8 bg-background px-8 text-center safe-top safe-bottom">
-      {/* (i) Intención inferida, arriba */}
-      <div className="flex max-w-sm flex-col items-center gap-1.5">
-        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {intent && type !== "auto" ? "Entendí que querés" : "Tu pedido"}
-        </span>
+      {/* (i) Solo el literal del pedido (inmediato, sin llamada extra) */}
+      <div className="flex max-w-sm flex-col items-center gap-2">
         <p className="flex items-center justify-center gap-1.5 text-lg font-semibold leading-snug text-foreground">
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-          <span className={intent ? "text-primary" : ""}>{topText}</span>
+          {type === "auto" ? "Eligiendo lo mejor para vos…" : query.trim() ? `«${query}»` : "Procesando lo que dijiste…"}
         </p>
       </div>
 

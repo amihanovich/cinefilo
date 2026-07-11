@@ -5,7 +5,7 @@ import {
   Volume2, VolumeX, Keyboard, ChevronDown, ShoppingCart,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters, fetchAsk, fetchIntent, warmupBackend } from "./lib/api";
+import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
 import { speak, stopSpeaking, isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
@@ -126,9 +126,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [cartOpen, setCartOpen] = useState(false); // carrito discreto expandible
   const [chatOpen, setChatOpen] = useState(false); // buscador de texto (secundario) colapsado
   const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
+  // Lista de origen de la ficha (carrito o grilla) para poder deslizar ←/→ dentro de ella.
+  const [detailList, setDetailList] = useState<Recommendation[]>([]);
 
   // Búsqueda en curso → pantalla de loading (Bloque 3). null = sin búsqueda activa.
-  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice"; intent?: string | null } | null>(null);
+  const [searchInfo, setSearchInfo] = useState<{ query: string; platforms: string[]; type: "auto" | "text" | "voice" } | null>(null);
   const [ttsMuted, setTtsMuted] = useState(() => { try { return isMuted(); } catch { return false; } });
 
   const toggleMute = () => {
@@ -243,13 +245,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
-    // Feedback inmediato (≤100ms): plataformas activas + eco del pedido.
-    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType, intent: null });
-    // (a.i) En paralelo, inferimos "lo más importante del pedido" con una llamada
-    // chica y la mostramos arriba mientras la reco (más lenta) sigue en curso.
-    void fetchIntent(userQuery).then((intent) => {
-      if (intent) setSearchInfo((prev) => (prev ? { ...prev, intent } : prev));
-    });
+    // Feedback inmediato (≤100ms): plataformas activas + eco literal del pedido.
+    // (Sin inferencia: era una llamada extra que agregaba latencia; el literal alcanza.)
+    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -288,8 +286,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
+      // "Más opciones": ESCALONADO. Antes se disparaba en paralelo con la reco
+      // principal (2 llamadas pesadas a la vez) y saturaba red/backend, colgando la
+      // app —sobre todo la 1ª vez con backend frío—. Ahora esperamos a que rindan la
+      // reco principal + pósters y recién ahí cargamos la grilla, en segundo plano.
       setGalleryItems([]);
-      void loadGallery(); // precargar "más opciones" para la grilla continua
+      galleryDryRef.current = false;
+      setGalleryLoading(false);
+      window.setTimeout(() => { void loadGallery(); }, 1500);
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
@@ -320,7 +324,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: excludeList(),
-        alternativesCount: 15,
+        alternativesCount: 9,
       });
 
       if (!data?.main) throw new Error("Sin resultado");
@@ -352,7 +356,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: excludeList(),
-        alternativesCount: 12,
+        alternativesCount: 9,
       });
       const all = data?.main ? [data.main, ...(data.alternatives ?? [])] : [];
       const existing = new Set([...items, ...galleryItems].map((i) => i.title));
@@ -493,29 +497,30 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     });
   };
 
-  const openStreaming = (current: Recommendation, avail: JwResult | undefined) => {
+  const openStreaming = async (current: Recommendation, avail: JwResult | undefined) => {
     track("watch_now_tapped", {
       title: current.title,
       platform: current.platform,
       availability_confirmed: !!avail?.confirmed,
     });
-    if (avail?.confirmed) {
-      void openNative(avail);
-    } else {
-      const q = encodeURIComponent(current.title);
-      const urls: Record<string, string> = {
-        Netflix: `https://www.netflix.com/search?q=${q}`,
-        "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
-        "Disney+": `https://www.disneyplus.com/search`,
-        "Star+": `https://www.disneyplus.com/search`,
-        Max: `https://play.max.com/search?q=${q}`,
-        "Apple TV+": `https://tv.apple.com/search?term=${q}`,
-        "Paramount+": `https://www.paramountplus.com/search/${q}/`,
-      };
-      const webUrl = urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`;
-      // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
-      void openInApp(current.platform, webUrl, current.title);
-    }
+    // Si hay disponibilidad confirmada, intentamos abrir la app/URL exacta. Si eso
+    // no logra abrir NADA (p.ej. sin standardWebURL ni deeplink), caemos al fallback
+    // web de la plataforma para que el botón nunca quede sin reaccionar.
+    if (avail?.confirmed && (await openNative(avail))) return;
+
+    const q = encodeURIComponent(current.title);
+    const urls: Record<string, string> = {
+      Netflix: `https://www.netflix.com/search?q=${q}`,
+      "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
+      "Disney+": `https://www.disneyplus.com/search`,
+      "Star+": `https://www.disneyplus.com/search`,
+      Max: `https://play.max.com/search?q=${q}`,
+      "Apple TV+": `https://tv.apple.com/search?term=${q}`,
+      "Paramount+": `https://www.paramountplus.com/search/${q}/`,
+    };
+    const webUrl = urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`;
+    // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
+    void openInApp(current.platform, webUrl, current.title);
   };
 
   // ── Carrito "Para ver hoy" + long-press de la grilla ──────────────────────
@@ -533,14 +538,39 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   };
   const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
 
+  // Abre la ficha guardando su lista de origen (carrito o grilla) para poder
+  // deslizar ←/→ dentro de ella (la ficha es un "zoom" de esa lista).
+  const openDetail = (item: Recommendation, list: Recommendation[]) => {
+    setDetailList(list.some((i) => i.title === item.title) ? list : [item]);
+    setDetailItem(item);
+  };
+  // Navegar dentro de la lista de origen de la ficha.
+  const detailGo = (delta: number) => {
+    if (!detailItem || detailList.length <= 1) return;
+    const idx = detailList.findIndex((d) => d.title === detailItem.title);
+    if (idx < 0) return;
+    const next = Math.min(detailList.length - 1, Math.max(0, idx + delta));
+    if (next !== idx) setDetailItem(detailList[next]);
+  };
+  const onDetailTouchStart = (e: ReactTouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const onDetailTouchEnd = (e: ReactTouchEvent) => {
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+    detailGo(dx < 0 ? 1 : -1);
+  };
+
   // Tap corto = sumar/quitar del carrito; mantener presionado = abrir la ficha.
   const longPressRef = useRef(false);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startPress = (item: Recommendation) => {
+  const startPress = (item: Recommendation, list: Recommendation[]) => {
     longPressRef.current = false;
     pressTimerRef.current = setTimeout(() => {
       longPressRef.current = true;
-      setDetailItem(item);
+      openDetail(item, list);
     }, 450);
   };
   const endPress = () => {
@@ -570,7 +600,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
   // Búsqueda en curso: pantalla de loading (reemplaza el resultado, con fade-in).
   if (searchInfo) {
-    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} intent={searchInfo.intent} />;
+    return <SearchLoading query={searchInfo.query} platforms={searchInfo.platforms} type={searchInfo.type} />;
   }
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -579,7 +609,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   if (screen === "welcome") {
     return (
       <WelcomeScreen
-        firstTime={!localStorage.getItem(OPENED_KEY)}
+        firstTime={true} /* Cinéfilo te recibe en CADA apertura (no solo la 1ª) */
         busy={loading}
         error={error}
         onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
@@ -748,9 +778,16 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {voiceMode && (
           <VoiceAgentOverlay
             greet={false} /* desde la Home no saluda: escucha directo */
-            /* Al soltar la voz, cerramos el overlay y usamos el MISMO flujo que el
-               texto: getReco → SearchLoading (rueda + intención) → resultados + TTS. */
-            onTranscript={(text) => { setVoiceMode(false); void getReco(text, "voice"); }}
+            /* Apenas soltás: cerramos el overlay y mostramos YA la rueda de plataformas
+               (SearchLoading). La transcripción corre por detrás; cuando llega el texto,
+               getReco actualiza la rueda con el literal y trae los resultados + TTS. */
+            onListeningStopped={() => {
+              setVoiceMode(false);
+              setSearchInfo({ query: "", platforms: platforms.length > 0 ? platforms : PLATFORMS, type: "voice" });
+              setLoading(true);
+            }}
+            onTranscript={(text) => { void getReco(text, "voice"); }}
+            onError={() => { setLoading(false); setSearchInfo(null); showError("No te escuché. Probá de nuevo."); }}
             onDismiss={() => setVoiceMode(false)}
           />
         )}
@@ -995,7 +1032,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     return (
                       <div key={c.title} className="relative w-14 shrink-0">
                         <button
-                          onClick={() => setDetailItem(c)}
+                          onClick={() => openDetail(c, cart)}
                           className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
                         >
                           {p ? (
@@ -1029,7 +1066,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 <button
                   key={item.title}
                   onClick={() => onTileClick(item)}
-                  onTouchStart={() => startPress(item)}
+                  onTouchStart={() => startPress(item, gridItems)}
                   onTouchEnd={endPress}
                   onTouchMove={endPress}
                   className="relative overflow-hidden rounded-xl active:scale-95 transition-transform"
@@ -1070,48 +1107,78 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           )}
         </div>
 
-        {/* Ficha completa (long-press en la grilla) */}
-        {detailItem && (
-          <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
-            <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
-              <button onClick={() => setDetailItem(null)} className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90" aria-label="Cerrar">
-                <X className="h-5 w-5" />
-              </button>
-              <p className="text-base font-bold text-foreground">Ficha</p>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="overflow-hidden rounded-2xl border border-border bg-muted/30">
-                <div className="h-56 w-full overflow-hidden bg-muted">
-                  {posterFor(detailItem.title) ? (
-                    <img src={posterFor(detailItem.title)!} alt={detailItem.title} className="h-full w-full object-cover" />
-                  ) : null}
-                </div>
-                <div className="p-4">
-                  <h2 className="text-xl font-bold text-foreground">{detailItem.title}</h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: colorForPlatform(detailItem.platform) }}>{platformLabel(detailItem.platform)}</span>
-                    <span className="text-[11px] text-muted-foreground">{detailItem.type} · {detailItem.duration}{detailItem.year && ` · ${detailItem.year}`}</span>
+        {/* Ficha — swipeable dentro de su lista de origen (carrito o grilla) */}
+        {detailItem && (() => {
+          const dIdx = detailList.findIndex((d) => d.title === detailItem.title);
+          const dTotal = detailList.length;
+          const canNav = dTotal > 1 && dIdx >= 0;
+          return (
+            <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
+              <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
+                <button onClick={() => setDetailItem(null)} className="flex h-9 items-center gap-1 rounded-full bg-muted px-3 text-muted-foreground active:scale-90" aria-label="Volver">
+                  <ChevronLeft className="h-5 w-5" /> <span className="text-sm font-semibold">Volver</span>
+                </button>
+                <p className="text-base font-bold text-foreground">Ficha</p>
+                {canNav && <span className="ml-auto text-xs font-semibold text-muted-foreground">{dIdx + 1} / {dTotal}</span>}
+              </div>
+              <div className="flex-1 overflow-y-auto p-5" onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd}>
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-muted/30">
+                  <div className="h-56 w-full overflow-hidden bg-muted">
+                    {posterFor(detailItem.title) ? (
+                      <img src={posterFor(detailItem.title)!} alt={detailItem.title} className="h-full w-full object-cover" />
+                    ) : null}
                   </div>
-                  <p className="mt-3 text-sm leading-relaxed text-foreground/75">{detailItem.reason}</p>
-                  <button
-                    onClick={() => openStreaming(detailItem, availability[detailItem.title])}
-                    className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"
-                    style={{ backgroundColor: colorForPlatform(detailItem.platform) }}
-                  >
-                    ▶ Ver ahora en {platformLabel(detailItem.platform)}
-                  </button>
-                  <button
-                    onClick={() => toggleCart(detailItem)}
-                    className={cn("mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-2.5 text-sm font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
-                  >
-                    {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {inCart(detailItem.title) ? "En tu lista de hoy" : "Agregar a Para ver hoy"}
-                  </button>
+                  {/* Flechas prev/next sobre el póster */}
+                  {canNav && (
+                    <>
+                      <button
+                        onClick={() => detailGo(-1)}
+                        disabled={dIdx === 0}
+                        className="absolute left-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
+                        aria-label="Anterior"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => detailGo(1)}
+                        disabled={dIdx === dTotal - 1}
+                        className="absolute right-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
+                        aria-label="Siguiente"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </button>
+                    </>
+                  )}
+                  <div className="p-4">
+                    <h2 className="text-xl font-bold text-foreground">{detailItem.title}</h2>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: colorForPlatform(detailItem.platform) }}>{platformLabel(detailItem.platform)}</span>
+                      <span className="text-[11px] text-muted-foreground">{detailItem.type} · {detailItem.duration}{detailItem.year && ` · ${detailItem.year}`}</span>
+                    </div>
+                    <p className="mt-3 text-sm leading-relaxed text-foreground/75">{detailItem.reason}</p>
+                    <button
+                      onClick={() => void openStreaming(detailItem, availability[detailItem.title])}
+                      className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"
+                      style={{ backgroundColor: colorForPlatform(detailItem.platform) }}
+                    >
+                      ▶ Ver ahora en {platformLabel(detailItem.platform)}
+                    </button>
+                    <button
+                      onClick={() => toggleCart(detailItem)}
+                      className={cn("mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-2.5 text-sm font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
+                    >
+                      {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      {inCart(detailItem.title) ? "En tu lista de hoy" : "Agregar a Para ver hoy"}
+                    </button>
+                  </div>
                 </div>
+                {canNav && (
+                  <p className="mt-3 text-center text-[10px] text-muted-foreground/60">Deslizá ←/→ para ver las {dTotal} opciones</p>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     );
   }

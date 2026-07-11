@@ -13,8 +13,13 @@ import { X } from "lucide-react";
 type AgentState = "idle" | "listening" | "thinking" | "speaking" | "done";
 
 interface VoiceAgentProps {
-  // Al soltar la voz: el wizard cierra el overlay y dispara getReco(text, "voice").
+  // Apenas soltás la voz: el wizard cierra el overlay y muestra YA la rueda de
+  // plataformas (no dejamos el orbe girando mientras transcribe).
+  onListeningStopped: () => void;
+  // Transcripción lista → getReco(text, "voice") (la rueda ya está en pantalla).
   onTranscript: (text: string) => void;
+  // No se pudo transcribir / no se escuchó → limpiar la rueda y avisar.
+  onError: () => void;
   onDismiss: () => void;
   // Si es false, NO saluda por TTS: abre escuchando directo (pedido d — "Pedile a
   // Cinéfilo" desde la Home). La entrada de la app sí saluda.
@@ -26,7 +31,7 @@ const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa 
 const GREETING_SHORT = "Decime qué tenés ganas de ver.";
 let greetedThisSession = false;
 
-export function VoiceAgentOverlay({ onTranscript, onDismiss, greet = true }: VoiceAgentProps) {
+export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, onDismiss, greet = true }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>(greet ? "speaking" : "listening");
   const [volume, setVolume] = useState(0);
   const [hint, setHint] = useState("...");
@@ -93,35 +98,25 @@ export function VoiceAgentOverlay({ onTranscript, onDismiss, greet = true }: Voi
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopListeningManual = useCallback(async () => {
-    // Feedback visual inmediato mientras transcribimos.
-    setState("thinking");
-    setHint("Transcribiendo...");
     setVolume(0);
-
     const recorder = recorderRef.current;
     recorderRef.current = null;
     if (!recorder) return;
 
+    // Cedemos YA a la rueda de plataformas: cerramos el overlay al instante y la
+    // transcripción sigue por detrás (no dejamos el orbe girando unos segundos).
+    onListeningStopped();
+
     try {
       const blob = await recorder.stop();
-      if (blob.size < 1000) {
-        setState("idle");
-        setHint("Tocá para hablar.");
-        return;
-      }
+      if (blob.size < 1000) { onError(); return; }
       const text = await transcribe(blob);
-      if (!text.trim()) {
-        setState("idle");
-        setHint("No te escuché. Intentá de nuevo.");
-        return;
-      }
-      // Delegamos: el wizard cierra el overlay y muestra SearchLoading (getReco).
+      if (!text.trim()) { onError(); return; }
       onTranscript(text.trim());
     } catch {
-      setState("idle");
-      setHint("Error al transcribir. Intentá de nuevo.");
+      onError();
     }
-  }, [onTranscript]);
+  }, [onListeningStopped, onTranscript, onError]);
 
   const handleOrbClick = useCallback(() => {
     if (state === "listening") {
