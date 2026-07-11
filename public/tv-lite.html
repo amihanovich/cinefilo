@@ -50,7 +50,7 @@
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): la recomendación principal a lo grande === */
-  .hero { position:relative; height:40vh; min-height:240px; max-height:340px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  .hero { position:relative; height:44vh; min-height:260px; max-height:400px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
@@ -64,9 +64,12 @@
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
-  .hbtn { border:1px solid rgba(255,255,255,.25); background:rgba(0,0,0,.42); color:#fff; border-radius:999px; padding:8px 15px; font-size:16px; font-weight:600; }
-  .hbtn.on { border-color:#8852E0; background:rgba(136,82,224,.3); }
-  .hbtn.ondown { border-color:#E0554E; background:rgba(224,85,78,.28); }
+  /* Íconos sutiles (gris minimalista): 👍/👎/Para hoy. "Ver en X" queda prominente. */
+  .hbtn { border:none; border-radius:999px; font-weight:600; }
+  .hbtn.ico { width:42px; height:42px; padding:0; font-size:19px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
+  .hbtn.ico.ondown { color:#fff; background:rgba(224,85,78,.3); }
+  .hbtn.play { padding:9px 18px; font-size:16px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
   .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
@@ -386,10 +389,10 @@
     var af = foc ? actionFocus : -1;
     var td = isToday(it), lk = inList(tvLiked, it), dk = inList(tvDisliked, it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn' + (af === 0 ? " bfoc" : "") + (lk ? " on" : "") + '">👍</button>';
-    h += '<button class="hbtn' + (af === 1 ? " bfoc" : "") + (dk ? " ondown" : "") + '">👎</button>';
-    h += '<button class="hbtn wide' + (af === 2 ? " bfoc" : "") + (td ? " on" : "") + '">' + (td ? "✓ En Para hoy" : "+ Para hoy") + "</button>";
-    h += '<button class="hbtn wide play' + (af === 3 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (lk ? " on" : "") + '" title="Me gustó">👍</button>';
+    h += '<button class="hbtn ico' + (af === 1 ? " bfoc" : "") + (dk ? " ondown" : "") + '" title="No me gustó">👎</button>';
+    h += '<button class="hbtn ico' + (af === 2 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    h += '<button class="hbtn play' + (af === 3 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += "</div></div>";
     return h;
