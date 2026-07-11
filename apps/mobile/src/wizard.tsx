@@ -293,7 +293,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setGalleryItems([]);
       galleryDryRef.current = false;
       setGalleryLoading(false);
-      window.setTimeout(() => { void loadGallery(); }, 1500);
+      // Stagger corto: que el héroe pinte primero y la grilla entre enseguida. La
+      // grilla ahora pide 6 alternativas (1200 tokens, rápida como la principal),
+      // así que ya no compite fuerte — no hace falta el 1.5s de antes.
+      window.setTimeout(() => { void loadGallery(); }, 400);
     } catch (e) {
       console.error("[wizard]", e);
       setLoading(false);
@@ -324,7 +327,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: excludeList(),
-        alternativesCount: 9,
+        // 6 alternativas → queda en 1200 tokens (umbral >6 = 3500). Evita la 2ª
+        // generación pesada que colgaba "más opciones" 5-6s. La carga infinita
+        // sigue trayendo más tandas al scrollear.
+        alternativesCount: 6,
       });
 
       if (!data?.main) throw new Error("Sin resultado");
@@ -356,7 +362,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: excludeList(),
-        alternativesCount: 9,
+        alternativesCount: 6,
       });
       const all = data?.main ? [data.main, ...(data.alternatives ?? [])] : [];
       const existing = new Set([...items, ...galleryItems].map((i) => i.title));
@@ -563,25 +569,31 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     detailGo(dx < 0 ? 1 : -1);
   };
 
-  // Tap corto = sumar/quitar del carrito; mantener presionado = abrir la ficha.
-  const longPressRef = useRef(false);
-  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startPress = (item: Recommendation, list: Recommendation[]) => {
-    longPressRef.current = false;
-    pressTimerRef.current = setTimeout(() => {
-      longPressRef.current = true;
+  // Interacción con las tarjetas: 1 tap = acción corta (ej. guardar en el carrito);
+  // DOBLE tap = abrir la ficha ("zoom"). Desambiguamos con una ventana de 280ms.
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTapRef = useRef<{ title: string; t: number }>({ title: "", t: 0 });
+  const DBL_TAP_MS = 280;
+  const handleCardTap = (item: Recommendation, list: Recommendation[], onSingle?: () => void) => {
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    if (prev.title === item.title && now - prev.t < DBL_TAP_MS) {
+      // Doble tap → ficha (cancela el single-tap pendiente).
+      if (singleTapTimerRef.current) { clearTimeout(singleTapTimerRef.current); singleTapTimerRef.current = null; }
+      lastTapRef.current = { title: "", t: 0 };
       openDetail(item, list);
-    }, 450);
-  };
-  const endPress = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
+      return;
     }
+    lastTapRef.current = { title: item.title, t: now };
+    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
+    if (onSingle) singleTapTimerRef.current = setTimeout(() => { onSingle(); singleTapTimerRef.current = null; }, DBL_TAP_MS);
   };
-  const onTileClick = (item: Recommendation) => {
-    if (longPressRef.current) { longPressRef.current = false; return; }
-    toggleCart(item);
+  // Doble tap dentro de la ficha (sobre el póster) = volver.
+  const fichaTapRef = useRef(0);
+  const onFichaDoubleTap = () => {
+    const now = Date.now();
+    if (now - fichaTapRef.current < DBL_TAP_MS) { fichaTapRef.current = 0; setDetailItem(null); }
+    else fichaTapRef.current = now;
   };
 
   // ── Inicio ────────────────────────────────────────────────────────────────
@@ -796,7 +808,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-base font-bold text-foreground">Cinéfilo</span>
+            <span className="font-brand text-base font-bold text-foreground">Cinéfilo</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -931,6 +943,30 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
 
+            {/* Flechas ←/→ para dejar CLARO que se puede deslizar entre las 5 */}
+            {heroItems.length > 1 && (
+              <>
+                {heroIndex > 0 && (
+                  <button
+                    onClick={() => navigate(heroIndex - 1)}
+                    aria-label="Anterior"
+                    className="absolute left-2 top-1/2 z-10 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-90"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                )}
+                {heroIndex < heroItems.length - 1 && (
+                  <button
+                    onClick={() => navigate(heroIndex + 1)}
+                    aria-label="Siguiente"
+                    className="absolute right-2 top-1/2 z-10 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm active:scale-90"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                )}
+              </>
+            )}
+
             {/* Copiar título (sutil, arriba a la derecha) */}
             <button
               onClick={() => copyTitle(current.title, current.platform)}
@@ -977,7 +1013,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   onClick={() => toggleCart(current)}
                   className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[11px] font-semibold backdrop-blur-sm transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
                 >
-                  {inCart(current.title) ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} Ver hoy
+                  {inCart(current.title) ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} {inCart(current.title) ? "Guardado" : "Guardar hoy"}
                 </button>
                 <button
                   onClick={() => toggleWatchlist(current)}
@@ -1021,7 +1057,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
               >
                 <ShoppingCart className="h-3.5 w-3.5 text-primary" />
-                {cart.length} para ver hoy
+                {cart.length} guardadas para hoy
                 <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
               </button>
 
@@ -1032,7 +1068,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     return (
                       <div key={c.title} className="relative w-14 shrink-0">
                         <button
-                          onClick={() => openDetail(c, cart)}
+                          onClick={() => handleCardTap(c, cart)}
                           className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
                         >
                           {p ? (
@@ -1053,6 +1089,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   })}
                 </div>
               )}
+              {cartOpen && cart.length > 0 && (
+                <p className="mt-1 text-[10px] text-muted-foreground/60">Tocá dos veces para ver la ficha · la ✕ la quita</p>
+              )}
             </div>
           )}
 
@@ -1065,10 +1104,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               return (
                 <button
                   key={item.title}
-                  onClick={() => onTileClick(item)}
-                  onTouchStart={() => startPress(item, gridItems)}
-                  onTouchEnd={endPress}
-                  onTouchMove={endPress}
+                  onClick={() => handleCardTap(item, gridItems, () => toggleCart(item))}
                   className="relative overflow-hidden rounded-xl active:scale-95 transition-transform"
                   style={{ WebkitTapHighlightColor: "transparent" }}
                 >
@@ -1102,7 +1138,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           {gridItems.length > 0 && (
             <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
-              Tocá para sumar a "Para ver hoy" · mantené presionado para ver la ficha
+1 toque = guardar para hoy (otro lo saca) · 2 toques = ver la ficha
             </p>
           )}
         </div>
@@ -1123,7 +1159,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               </div>
               <div className="flex-1 overflow-y-auto p-5" onTouchStart={onDetailTouchStart} onTouchEnd={onDetailTouchEnd}>
                 <div className="relative overflow-hidden rounded-2xl border border-border bg-muted/30">
-                  <div className="h-56 w-full overflow-hidden bg-muted">
+                  <div className="h-56 w-full overflow-hidden bg-muted" onClick={onFichaDoubleTap}>
                     {posterFor(detailItem.title) ? (
                       <img src={posterFor(detailItem.title)!} alt={detailItem.title} className="h-full w-full object-cover" />
                     ) : null}
@@ -1168,13 +1204,13 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                       className={cn("mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border py-2.5 text-sm font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
                     >
                       {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                      {inCart(detailItem.title) ? "En tu lista de hoy" : "Agregar a Para ver hoy"}
+                      {inCart(detailItem.title) ? "Guardada para hoy" : "Guardar para hoy"}
                     </button>
                   </div>
                 </div>
-                {canNav && (
-                  <p className="mt-3 text-center text-[10px] text-muted-foreground/60">Deslizá ←/→ para ver las {dTotal} opciones</p>
-                )}
+                <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
+                  {canNav ? `Deslizá ←/→ para ver las ${dTotal} · ` : ""}Tocá dos veces el póster o "Volver" para salir
+                </p>
               </div>
             </div>
           );

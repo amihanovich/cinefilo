@@ -180,6 +180,10 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
         <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">
           {hintText}
         </p>
+        {/* Instrucción explícita del modelo de interacción (siempre visible) */}
+        <p className="mt-2 text-[11px] leading-relaxed text-white/40">
+          Tocá y soltá para hablar, tocá de nuevo para frenar.
+        </p>
       </div>
     </div>
   );

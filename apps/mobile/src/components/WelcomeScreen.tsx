@@ -11,6 +11,8 @@ import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
 const GREETING = "Hola, soy Cinéfilo. ¿Listo para que encontremos algo para que veas hoy?";
+// Ejemplos tocables para arrancar (anti-parálisis): muestran QUÉ se puede pedir.
+const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto", "Documental"];
 
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
@@ -103,7 +105,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-8 text-center safe-top safe-bottom">
         <div className="flex items-center gap-2">
           <Sparkles className="h-7 w-7 text-primary" />
-          <span className="text-2xl font-bold tracking-tight text-foreground">Cinéfilo</span>
+          <span className="font-brand text-2xl font-bold tracking-tight text-foreground">Cinéfilo</span>
         </div>
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
         <p className="max-w-xs text-sm text-muted-foreground">
@@ -156,6 +158,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
           {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
           {micState === "rec" ? "Tocá para frenar" : micState === "processing" ? "Un segundo…" : "Tocá para hablar"}
         </button>
+        <p className="text-[11px] text-muted-foreground/50">Tocá y soltá para hablar, tocá de nuevo para frenar.</p>
 
         <div className="flex w-full items-center gap-2 rounded-2xl bg-muted px-3">
           <input
@@ -174,6 +177,19 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
           >
             <Send className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Ejemplos tocables: muestran QUÉ se puede pedir (anti-parálisis inicial). */}
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              onClick={() => submit(ex)}
+              className="rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] text-muted-foreground transition-transform active:scale-95"
+            >
+              {ex}
+            </button>
+          ))}
         </div>
 
         <button

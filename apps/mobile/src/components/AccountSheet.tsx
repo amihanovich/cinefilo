@@ -179,7 +179,8 @@ function MainSection({
         <p className="mb-4 text-xs text-muted-foreground/70">
           Usadas en cada búsqueda. Si no elegís ninguna, busca en todas.
         </p>
-        <div className="flex flex-col gap-2">
+        {/* Chips compactos: entran en 2-3 líneas en vez de ocupar toda la pantalla. */}
+        <div className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => {
             const active = platforms.includes(p);
             const color = colorForPlatform(p);
@@ -187,26 +188,19 @@ function MainSection({
               <button
                 key={p}
                 onClick={() => onToggle(p)}
-                className="flex items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition-all active:scale-[0.98]"
+                className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95"
                 style={
                   active
-                    ? { borderColor: color, backgroundColor: `${color}18` }
-                    : { borderColor: "transparent", backgroundColor: "var(--color-muted)" }
+                    ? { borderColor: color, backgroundColor: `${color}22`, color }
+                    : { borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)", color: "var(--color-muted-foreground)" }
                 }
               >
                 <span
-                  className="h-2.5 w-2.5 rounded-full shrink-0"
-                  style={{ backgroundColor: active ? color : "var(--color-muted-foreground)", opacity: active ? 1 : 0.3 }}
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: active ? color : "var(--color-muted-foreground)", opacity: active ? 1 : 0.35 }}
                 />
-                <span
-                  className="text-sm font-semibold"
-                  style={{ color: active ? color : undefined }}
-                >
-                  {platformLabel(p)}
-                </span>
-                {active && (
-                  <span className="ml-auto text-[10px] font-bold" style={{ color }}>✓</span>
-                )}
+                {platformLabel(p)}
+                {active && <span className="text-[10px] font-bold">✓</span>}
               </button>
             );
           })}
