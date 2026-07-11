@@ -43,6 +43,35 @@ function stripArticle(title: string): string {
   return title.replace(/^(el|la|los|las|un|una|the|a|an)\s+/i, "").trim();
 }
 
+// Cinemeta (Stremio): fuente PRINCIPAL de pósters. Anda server-side sin el
+// IP-block que sufre iTunes. Estándar único en todo Cinéfilo (ver ARCHITECTURE.md).
+async function searchCinemeta(title: string, type: string): Promise<string | null> {
+  const cType = isSeries(type) ? "series" : "movie";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const url = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(title)}.json`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { metas?: Array<{ name?: string; poster?: string }> };
+    const metas = data.metas ?? [];
+    if (metas.length === 0) return null;
+    const tl = title.toLowerCase();
+    const best = metas.reduce((a, b) => {
+      const aN = (a.name ?? "").toLowerCase();
+      const bN = (b.name ?? "").toLowerCase();
+      const aS = aN === tl ? 2 : aN.includes(tl) || tl.includes(aN) ? 1 : 0;
+      const bS = bN === tl ? 2 : bN.includes(tl) || tl.includes(bN) ? 1 : 0;
+      return bS > aS ? b : a;
+    });
+    return best.poster ?? null;
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
 async function searchItunes(
   title: string,
   entity: "movie" | "tvShow",
@@ -116,6 +145,11 @@ async function fetchPosterForTitle(title: string, type: string, year?: string): 
   const noArticle = stripArticle(clean);
   const entity: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const alt: "movie" | "tvShow" = entity === "movie" ? "tvShow" : "movie";
+
+  // Ronda 0: Cinemeta (fuente principal). Probamos el tipo y el alterno (la IA a
+  // veces marca mal película/serie) antes de caer a iTunes.
+  const cine = (await searchCinemeta(clean, type)) ?? (await searchCinemeta(clean, isSeries(type) ? "Película" : "Serie"));
+  if (cine) return cine;
 
   // Round 1: all iTunes combos in parallel
   const [usMain, arMain, usAlt, arAlt, esMain] = await Promise.all([

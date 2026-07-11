@@ -1,8 +1,17 @@
-// Client-side poster fetcher: iTunes first, Wikipedia fallback.
-// Both APIs support CORS — no server hop needed.
+// Poster fetching (client-side): Cinemeta (catálogo de Stremio) como fuente
+// PRINCIPAL, con iTunes + Wikipedia como respaldo. Las tres soportan CORS desde
+// el browser. Estándar único de pósters en todo Cinéfilo (móvil, TV y web) — ver
+// ARCHITECTURE.md. Mantiene las firmas públicas `fetchPosterClient` /
+// `fetchPostersClient` (los consumidores no cambian).
+//
+// Cinemeta es mucho más confiable que iTunes: sin rate-limiting agresivo y los
+// pósters salen del CDN de Stremio (images.metahub.space). iTunes quedaba sin
+// póster cuando se disparaban muchas búsquedas en ráfaga.
+
+// Caché en memoria: una vez resuelto un título, no se vuelve a pedir.
+const posterCache = new Map<string, string | null>();
 
 function upscale(url: string): string {
-  // iTunes artwork URLs support square sizes reliably; 600x600bb covers movies and series.
   return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x600bb.$1");
 }
 
@@ -33,6 +42,29 @@ function titleScore(result: string, expected: string): number {
   return 0;
 }
 
+// Cinemeta (Stremio): fuente principal de pósters. Busca en el catálogo por título.
+async function searchCinemeta(title: string, type: string): Promise<string | null> {
+  const cType = isSeries(type) ? "series" : "movie";
+  try {
+    const url = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(title)}.json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { metas?: Array<{ name?: string; poster?: string }> };
+    const metas = data.metas ?? [];
+    if (metas.length === 0) return null;
+
+    let best = metas[0];
+    let bestScore = -1;
+    for (const m of metas) {
+      const score = titleScore(m.name ?? "", title);
+      if (score > bestScore) { bestScore = score; best = m; }
+    }
+    return best.poster ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function searchItunes(
   title: string,
   media: "movie" | "tvShow",
@@ -46,9 +78,8 @@ async function searchItunes(
       signal: AbortSignal.timeout(3000),
     });
     if (!res.ok) return null;
-    const data = await res.json();
-    const results: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> =
-      data.results ?? [];
+    const data = (await res.json()) as { results?: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> };
+    const results = data.results ?? [];
     if (results.length === 0) return null;
 
     let best = results[0];
@@ -56,10 +87,7 @@ async function searchItunes(
     for (const r of results) {
       const name = r.trackName ?? r.collectionName ?? "";
       const score = titleScore(name, title);
-      if (score > bestScore) {
-        bestScore = score;
-        best = r;
-      }
+      if (score > bestScore) { bestScore = score; best = r; }
     }
 
     const art = best.artworkUrl100;
@@ -71,7 +99,6 @@ async function searchItunes(
 }
 
 async function searchWikipedia(title: string, year?: string): Promise<string | null> {
-  // Try "{title} film" then "{title} year" in parallel, take first hit
   const queries: string[] = [`${title} film`];
   if (year) queries.push(`${title} ${year}`);
 
@@ -83,10 +110,9 @@ async function searchWikipedia(title: string, year?: string): Promise<string | n
         `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (!res.ok) return null;
-      const data = await res.json();
+      const data = (await res.json()) as { query?: { pages?: Record<string, { missing?: string; thumbnail?: { source?: string } }> } };
       const pages = data?.query?.pages ?? {};
-      type WikiPage = { missing?: string; thumbnail?: { source?: string } };
-      const page = Object.values(pages)[0] as WikiPage | undefined;
+      const page = Object.values(pages)[0];
       if (!page || "missing" in page) return null;
       return page.thumbnail?.source ?? null;
     } catch {
@@ -94,7 +120,6 @@ async function searchWikipedia(title: string, year?: string): Promise<string | n
     }
   };
 
-  // Run all wikipedia queries in parallel, return first non-null
   const results = await Promise.all([
     ...queries.map((q) => tryQuery(q, "en")),
     tryQuery(title, "es"),
@@ -102,28 +127,32 @@ async function searchWikipedia(title: string, year?: string): Promise<string | n
   return results.find(Boolean) ?? null;
 }
 
-export async function fetchPosterClient(
-  title: string,
-  type: string,
-  year?: string,
-): Promise<string | null> {
+export async function fetchPosterClient(title: string, type: string, year?: string): Promise<string | null> {
+  if (posterCache.has(title)) return posterCache.get(title) ?? null;
+
   const clean = normalizeTitle(title);
   const noArticle = stripArticle(clean);
   const media: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const altMedia: "movie" | "tvShow" = media === "movie" ? "tvShow" : "movie";
 
-  // Hard cap: give up after 5s total regardless of what's still in flight
-  const deadline = new Promise<null>((r) => setTimeout(() => r(null), 5000));
+  const deadline = new Promise<null>((r) => setTimeout(() => r(null), 7000));
 
   const search = async (): Promise<string | null> => {
-    // Round 1: primary media US + AR in parallel
+    // Ronda 1: Cinemeta (Stremio) — fuente principal, confiable.
+    const cineMain = await searchCinemeta(clean, type);
+    if (cineMain) return cineMain;
+    // Cinemeta con el otro tipo (a veces la IA marca mal película/serie)
+    const cineAlt = await searchCinemeta(clean, isSeries(type) ? "Película" : "Serie");
+    if (cineAlt) return cineAlt;
+
+    // Ronda 2: iTunes (US + AR) en paralelo — respaldo.
     const [usMain, arMain] = await Promise.all([
       searchItunes(clean, media, "us"),
       searchItunes(clean, media, "ar"),
     ]);
     if (usMain ?? arMain) return usMain ?? arMain;
 
-    // Round 2: alt media + no-article + ES store, all in parallel
+    // Ronda 3: iTunes media alternativo + sin artículo + ES.
     const [usAlt, arAlt, usNo, esMain] = await Promise.all([
       searchItunes(clean, altMedia, "us"),
       searchItunes(clean, altMedia, "ar"),
@@ -133,14 +162,16 @@ export async function fetchPosterClient(
     const itunesResult = usAlt ?? arAlt ?? usNo ?? esMain ?? null;
     if (itunesResult) return itunesResult;
 
-    // Round 3: Wikipedia fallback
+    // Ronda 4: Wikipedia fallback
     return searchWikipedia(clean, year);
   };
 
-  return Promise.race([search(), deadline]);
+  const result = await Promise.race([search(), deadline]);
+  posterCache.set(title, result);
+  return result;
 }
 
-// All items in parallel — each has its own 5s cap inside fetchPosterClient
+// Todos los ítems en paralelo — cada uno con su propio tope adentro de fetchPosterClient.
 export async function fetchPostersClient(
   items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
