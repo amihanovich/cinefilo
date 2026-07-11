@@ -1,41 +1,32 @@
 // VoiceAgent: overlay de voz opt-in. Se monta sobre la pantalla de cards.
-// Al montarse: saluda automáticamente y arranca escuchando sin que el usuario toque nada.
+// Escucha (press-to-speak / press-to-stop) y, al soltar, transcribe y DELEGA el
+// texto al wizard vía onTranscript → getReco, que muestra la misma SearchLoading
+// (rueda de plataformas + intención inferida) que el camino de texto. El overlay
+// NO hace la recomendación ni habla el resultado: de eso se encarga getReco.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
-import { fetchRecommendation, type Recommendation, type Message } from "../lib/api";
-import { inferContext, contextToPromptHint, seasonHintShort } from "../lib/context";
 import { X } from "lucide-react";
 
 type AgentState = "idle" | "listening" | "thinking" | "speaking" | "done";
 
-export type VoiceResult = {
-  items: Recommendation[];
-  cinephileNote: string | null;
-  messages: Message[];
-};
-
 interface VoiceAgentProps {
-  platforms: string[];
-  excludeTitles: string[];
-  history: Message[];
-  onResult: (result: VoiceResult) => void;
+  // Al soltar la voz: el wizard cierra el overlay y dispara getReco(text, "voice").
+  onTranscript: (text: string) => void;
   onDismiss: () => void;
   // Si es false, NO saluda por TTS: abre escuchando directo (pedido d — "Pedile a
-  // Cinéfilo" desde la Home). La entrada de la app (pedido a) sí saluda.
+  // Cinéfilo" desde la Home). La entrada de la app sí saluda.
   greet?: boolean;
 }
-
-const ALL_PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 
 const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa peli o serie que querés ver hoy. ¿Empezamos? Simplemente decime qué tenés ganas de ver.";
 // Aperturas siguientes en la misma sesión: saludo corto (menos costo TTS, menos espera).
 const GREETING_SHORT = "Decime qué tenés ganas de ver.";
 let greetedThisSession = false;
 
-export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult, onDismiss, greet = true }: VoiceAgentProps) {
+export function VoiceAgentOverlay({ onTranscript, onDismiss, greet = true }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>(greet ? "speaking" : "listening");
   const [volume, setVolume] = useState(0);
   const [hint, setHint] = useState("...");
@@ -47,48 +38,6 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     : state === "thinking" ? "thinking"
     : state === "speaking" ? "speaking"
     : "idle";
-
-  const runRecommendation = useCallback(async (userQuery: string) => {
-    if (!mountedRef.current) return;
-    setState("thinking");
-    setHint("Pensando...");
-
-    const effectivePlatforms = platforms.length > 0 ? platforms : ALL_PLATFORMS;
-    const ctx = inferContext();
-    const newMessages: Message[] = [...history, { role: "user", content: userQuery }];
-
-    try {
-      const data = await fetchRecommendation({
-        messages: newMessages,
-        platforms: effectivePlatforms,
-        contextHint: contextToPromptHint(ctx),
-        seasonHint: seasonHintShort(ctx),
-        weatherHint: null,
-        excludeTitles,
-      });
-
-      if (!data?.main) throw new Error("Sin resultado");
-
-      const allItems = [data.main, ...(data.alternatives ?? []).slice(0, 4)];
-      const assistantSummary = `Recomendé: ${data.main.title} y ${(data.alternatives ?? []).slice(0, 4).map((a) => a.title).join(", ")}.`;
-      const updatedMessages: Message[] = [...newMessages, { role: "assistant", content: assistantSummary }];
-
-      // Cerrar overlay — las cards aparecen mientras el audio sigue en background
-      onResult({ items: allItems, cinephileNote: data.cinephile_note ?? null, messages: updatedMessages });
-      onDismiss();
-
-      // Hablar en background: nota cinéfila si hay, sino el título principal
-      const speechText = data.cinephile_note
-        ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`;
-      void speak(speechText);
-    } catch (e) {
-      console.error("[VoiceAgent]", e);
-      if (mountedRef.current) {
-        setState("idle");
-        setHint("Algo salió mal. Tocá para intentar de nuevo.");
-      }
-    }
-  }, [platforms, excludeTitles, history, onResult, onDismiss]);
 
   const startListening = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -117,8 +66,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
     }
   }, []);
 
-  // Al montar: (pedido a) saluda por TTS y arranca escuchando; (pedido d) si
-  // greet=false, abre escuchando directo, sin saludo.
+  // Al montar: saluda por TTS y arranca escuchando; si greet=false, escucha directo.
   useEffect(() => {
     mountedRef.current = true;
 
@@ -145,7 +93,7 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopListeningManual = useCallback(async () => {
-    // Feedback visual inmediato
+    // Feedback visual inmediato mientras transcribimos.
     setState("thinking");
     setHint("Transcribiendo...");
     setVolume(0);
@@ -167,13 +115,13 @@ export function VoiceAgentOverlay({ platforms, excludeTitles, history, onResult,
         setHint("No te escuché. Intentá de nuevo.");
         return;
       }
-      setHint(`"${text}"`);
-      await runRecommendation(text);
+      // Delegamos: el wizard cierra el overlay y muestra SearchLoading (getReco).
+      onTranscript(text.trim());
     } catch {
       setState("idle");
       setHint("Error al transcribir. Intentá de nuevo.");
     }
-  }, [runRecommendation]);
+  }, [onTranscript]);
 
   const handleOrbClick = useCallback(() => {
     if (state === "listening") {

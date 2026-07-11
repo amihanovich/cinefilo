@@ -10,7 +10,7 @@ import { speak, stopSpeaking, isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
-import { VoiceAgentOverlay, type VoiceResult } from "./components/VoiceAgent";
+import { VoiceAgentOverlay } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
 import { Orb } from "./components/Orb";
 import { WelcomeScreen } from "./components/WelcomeScreen";
@@ -470,24 +470,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   };
 
-  // ── Voice agent ───────────────────────────────────────────────────────────
-  const handleVoiceResult = (result: VoiceResult) => {
-    const allItems = result.items;
-    rememberShown(allItems);
-    setAgentReply(null);
-    setItems(allItems);
-    setPosters({});
-    setAvailability({});
-    setCurrentIndex(0);
-    setMessages(result.messages);
-    setScreen("magic");
-    track("recommendation_received", { query_type: "voice" });
-    void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
-    void loadAvailability(allItems);
-    setGalleryItems([]);
-    void loadGallery();
-  };
-
   // ── Acciones de cards ─────────────────────────────────────────────────────
   const toggleWatchlist = (item: Recommendation) => {
     const isIn = watchlisted.has(item.title);
@@ -765,11 +747,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {voiceMode && (
           <VoiceAgentOverlay
-            platforms={platforms.length > 0 ? platforms : PLATFORMS}
-            excludeTitles={items.map((i) => i.title)}
-            history={messages}
-            greet={false} /* (d) desde la Home no saluda: escucha directo */
-            onResult={(result) => { handleVoiceResult(result); setVoiceMode(false); }}
+            greet={false} /* desde la Home no saluda: escucha directo */
+            /* Al soltar la voz, cerramos el overlay y usamos el MISMO flujo que el
+               texto: getReco → SearchLoading (rueda + intención) → resultados + TTS. */
+            onTranscript={(text) => { setVoiceMode(false); void getReco(text, "voice"); }}
             onDismiss={() => setVoiceMode(false)}
           />
         )}
@@ -890,53 +871,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </div>
         )}
 
-        {/* Contenido en scroll continuo: héroe + grilla (con carga infinita) */}
+        {/* Contenido en scroll continuo: héroe + carrito + grilla (con carga infinita) */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8" onScroll={onGridScroll}>
-          {/* Carrito "Para ver hoy" — discreto y expandible (no invade el héroe) */}
-          {cart.length > 0 && (
-            <div className="mb-3">
-              <button
-                onClick={() => setCartOpen((v) => !v)}
-                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] font-semibold text-foreground active:scale-95 transition-transform"
-                aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
-              >
-                <ShoppingCart className="h-3.5 w-3.5 text-primary" />
-                {cart.length} para ver hoy
-                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
-              </button>
-
-              {cartOpen && (
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                  {cart.map((c) => {
-                    const p = posterFor(c.title);
-                    return (
-                      <div key={c.title} className="relative w-14 shrink-0">
-                        <button
-                          onClick={() => openStreaming(c, availability[c.title])}
-                          className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
-                        >
-                          {p ? (
-                            <img src={p} alt={c.title} className="h-full w-full object-cover" />
-                          ) : (
-                            <span className="flex h-full items-center justify-center p-1 text-center text-[8px] leading-tight text-muted-foreground">{c.title}</span>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => removeFromCart(c.title)}
-                          aria-label={`Quitar ${c.title}`}
-                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white active:scale-90 transition-transform"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
           {/* Tarjetas grandes (cinematográficas): póster de fondo + info sobre gradiente.
-              Carrito (si tiene ítems) o top-5, swipe ←/→. */}
+              SIEMPRE las recomendaciones de Cinéfilo (top-5), swipe ←/→. */}
           <div
             key={current.title}
             onTouchStart={onHeroTouchStart}
@@ -978,14 +916,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 {current.ageRating && (
                   <span className="rounded border border-white/30 px-1 py-0.5 text-[10px] font-semibold leading-none text-white/70">{current.ageRating}</span>
                 )}
-                {avail === undefined ? (
-                  <span className="text-[10px] text-white/40">Verificando…</span>
-                ) : avail.confirmed ? (
-                  <span className="text-[10px] font-semibold text-green-400">✓ Disponible en {getCountry()}</span>
-                ) : null}
               </div>
 
-              <p className="text-[13px] leading-relaxed text-white/85 line-clamp-2">{current.reason}</p>
+              <p className="text-[13px] leading-relaxed text-white/85 line-clamp-3">{current.reason}</p>
 
               <button
                 onClick={() => openStreaming(current, avail)}
@@ -1041,8 +974,50 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             </>
           )}
 
-          {/* (La tira chica "Para ver hoy" se quitó: las tarjetas grandes de arriba
-              ahora muestran el carrito en detalle cuando tiene ítems.) */}
+          {/* Carrito "Para ver hoy" — discreto y expandible, debajo del héroe y arriba
+              de la grilla. No invade las recomendaciones. */}
+          {cart.length > 0 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setCartOpen((v) => !v)}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] font-semibold text-foreground active:scale-95 transition-transform"
+                aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
+              >
+                <ShoppingCart className="h-3.5 w-3.5 text-primary" />
+                {cart.length} para ver hoy
+                <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
+              </button>
+
+              {cartOpen && (
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                  {cart.map((c) => {
+                    const p = posterFor(c.title);
+                    return (
+                      <div key={c.title} className="relative w-14 shrink-0">
+                        <button
+                          onClick={() => setDetailItem(c)}
+                          className="block h-20 w-14 overflow-hidden rounded-lg border border-border bg-muted active:scale-95 transition-transform"
+                        >
+                          {p ? (
+                            <img src={p} alt={c.title} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="flex h-full items-center justify-center p-1 text-center text-[8px] leading-tight text-muted-foreground">{c.title}</span>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => removeFromCart(c.title)}
+                          aria-label={`Quitar ${c.title}`}
+                          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white active:scale-90 transition-transform"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Grilla de opciones (scroll continuo, sin título ni botón) */}
           <div className="mt-4 grid grid-cols-3 gap-2.5">
