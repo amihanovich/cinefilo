@@ -310,8 +310,15 @@
 
   // --- Estado ---
   var sessionId = makeSessionId();
-  var origin = window.location.origin;
-  var controlUrl = origin + "/control?session=" + sessionId;
+  // El QR abre la web-control (apps/web-control, servicio Railway propio): la réplica
+  // del control remoto de la app móvil (D-pad, OK contextual, "Para hoy"). NO usar el
+  // origin de este host: ahí vive el /control viejo (lista scrolleable), que quedó atrás.
+  // Override para probar otro deploy: cargar tv-lite.html con ?control=<base-url>.
+  var controlOverride = /[?&]control=([^&]+)/.exec(window.location.search);
+  var CONTROL_BASE = controlOverride
+    ? decodeURIComponent(controlOverride[1])
+    : "https://cinefilo-copy-production.up.railway.app";
+  var controlUrl = CONTROL_BASE.replace(/\/+$/, "") + "/control?session=" + sessionId;
   var items = [];
   var focusedIndex = 0;
   var heroIndex = 0; // banner visible del carrusel de 5 (modo home)
