@@ -1,3 +1,5 @@
+import { fetchUpstream } from "./upstream.mjs";
+
 // Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
 // /api/tv-search y /api/tv-home. Llama directo a la API REST de Anthropic.
@@ -9,7 +11,7 @@ const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Par
 async function callAnthropic(prompt) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -21,7 +23,7 @@ async function callAnthropic(prompt) {
       max_tokens: 4500,
       messages: [{ role: "user", content: prompt }],
     }),
-  });
+  }, { timeoutMs: 60000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));

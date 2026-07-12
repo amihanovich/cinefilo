@@ -1,3 +1,5 @@
+import { fetchUpstream } from "./upstream.mjs";
+
 // Transcripción de audio via Groq Whisper. Módulo Node autónomo para server-node.mjs.
 // Recibe un Buffer con audio (webm/ogg/mp4) y devuelve el texto transcripto en español.
 
@@ -13,11 +15,11 @@ export async function transcribeAudio(audioBuffer, mimeType) {
   formData.append("language", "es");
   formData.append("response_format", "json");
 
-  const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+  const res = await fetchUpstream("https://api.groq.com/openai/v1/audio/transcriptions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}` },
     body: formData,
-  });
+  }, { timeoutMs: 45000 });
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
