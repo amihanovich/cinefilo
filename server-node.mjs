@@ -29,6 +29,73 @@ const MIME = {
 const ssrHandler = toNodeHandler((req) => serverModule.fetch(req, {}, {}));
 const port = parseInt(process.env.PORT || "3000", 10);
 
+// --- Rate limiting simple por IP (en memoria). La API es pública con CORS *
+// y varios endpoints llaman servicios pagos (Anthropic/Groq/ElevenLabs): sin
+// esto, cualquier script podía generar costo ilimitado desde cualquier origen.
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_GENERAL = 90; // todo /api/* (menos ping) por IP por minuto
+const RATE_MAX_AI = 20; // endpoints que pagan upstream, por IP por minuto
+const AI_PATHS = new Set([
+  "/api/recommend", "/api/tv-search", "/api/tv-home-more",
+  "/api/transcribe", "/api/tts", "/api/ask", "/api/orb", "/api/intent",
+]);
+const rateHits = new Map(); // ip → { all: number[], ai: number[] }
+function clientIp(req) {
+  const xf = req.headers["x-forwarded-for"];
+  if (typeof xf === "string" && xf.length) return xf.split(",")[0].trim();
+  return req.socket.remoteAddress || "?";
+}
+function rateLimited(req, urlPath) {
+  if (urlPath === "/api/ping" || req.method === "OPTIONS") return false;
+  const now = Date.now();
+  const cut = now - RATE_WINDOW_MS;
+  const ip = clientIp(req);
+  let rec = rateHits.get(ip);
+  if (!rec) { rec = { all: [], ai: [] }; rateHits.set(ip, rec); }
+  rec.all = rec.all.filter((t) => t > cut);
+  rec.ai = rec.ai.filter((t) => t > cut);
+  rec.all.push(now);
+  if (AI_PATHS.has(urlPath)) rec.ai.push(now);
+  return rec.all.length > RATE_MAX_GENERAL || rec.ai.length > RATE_MAX_AI;
+}
+setInterval(() => {
+  const cut = Date.now() - RATE_WINDOW_MS;
+  for (const [ip, rec] of rateHits) {
+    if (!rec.all.some((t) => t > cut)) rateHits.delete(ip);
+  }
+}, 5 * 60_000).unref();
+
+// Lector de body con tope: responde 413 explícito (antes se hacía req.destroy()
+// a secas y el cliente veía un error de red genérico). Resuelve null si cortó.
+function readBody(req, res, limit) {
+  return new Promise((resolve) => {
+    let body = "";
+    let done = false;
+    req.on("data", (c) => {
+      if (done) return;
+      body += c;
+      if (body.length > limit) {
+        done = true;
+        res.statusCode = 413;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ error: "Payload demasiado grande" }));
+        req.destroy();
+        resolve(null);
+      }
+    });
+    req.on("end", () => { if (!done) resolve(body); });
+    req.on("error", () => { if (!done) { done = true; resolve(null); } });
+  });
+}
+const asJson = (body) => { try { return JSON.parse(body || "{}"); } catch (e) { return {}; } };
+// Saneo defensivo de inputs (la API REST es la puerta más expuesta y no tenía
+// ningún tope: un "messages" gigante = prompt gigante = costo arbitrario).
+const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : null);
+const strArr = (v, maxItems, maxLen) =>
+  Array.isArray(v)
+    ? v.filter((x) => typeof x === "string").slice(0, maxItems).map((x) => x.slice(0, maxLen))
+    : [];
+
 console.log(`[static] clientDir = ${clientDir}`);
 console.log(`[static] exists = ${fs.existsSync(clientDir)}`);
 try {
@@ -55,49 +122,62 @@ http
         res.end();
         return;
       }
+      if (rateLimited(req, urlPath)) {
+        res.statusCode = 429;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Retry-After", "30");
+        res.end(JSON.stringify({ error: "Demasiadas solicitudes. Esperá un momento." }));
+        return;
+      }
     }
 
     // APIs JSON para la TV liviana (navegadores viejos).
-    function sendJson(promise) {
+    function sendJson(promise, cacheControl) {
       promise
         .then((result) => {
           res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.setHeader("Cache-Control", "no-store");
+          res.setHeader("Cache-Control", cacheControl || "no-store");
           res.end(JSON.stringify(result));
         })
         .catch((e) => {
+          // El detalle queda en el log del server; al cliente no se le filtra
+          // el mensaje crudo del upstream (traía fragmentos de Anthropic/Groq).
+          console.error(`[api] ${urlPath} error:`, (e && e.message) || e);
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.end(JSON.stringify({ error: String((e && e.message) || e) }));
+          res.end(JSON.stringify({ error: "El servicio está teniendo problemas. Probá de nuevo." }));
         });
     }
     if (urlPath === "/api/tv-search") {
       if (req.method === "POST") {
-        let body = "";
-        req.on("data", (c) => { body += c; });
-        req.on("end", () => {
-          let p = {};
-          try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
-          sendJson(tvSearch(p.q || "", p.exclude || [], p.liked || [], p.disliked || []));
+        readBody(req, res, 16384).then((body) => {
+          if (body === null) return;
+          const p = asJson(body);
+          sendJson(tvSearch(
+            str(p.q, 300) || "",
+            strArr(p.exclude, 60, 120),
+            strArr(p.liked, 50, 120),
+            strArr(p.disliked, 50, 120),
+          ));
         });
       } else {
-        const q = reqUrl.searchParams.get("q") || "";
-        const exclude = (reqUrl.searchParams.get("exclude") || "").split("|").filter(Boolean);
+        const q = (reqUrl.searchParams.get("q") || "").slice(0, 300);
+        const exclude = (reqUrl.searchParams.get("exclude") || "").split("|").filter(Boolean).slice(0, 60);
         sendJson(tvSearch(q, exclude, [], []));
       }
       return;
     }
     if (urlPath === "/api/tv-home") {
-      sendJson(tvHome());
+      // El home es idéntico para todos y se regenera cada 6h: dejar que el
+      // browser/CDN lo cachee 5 min evita regolpear el server en cada visita.
+      sendJson(tvHome(), "public, max-age=300");
       return;
     }
     if (urlPath === "/api/tv-home-more") {
-      let body = "";
-      req.on("data", (c) => { body += c; });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
-        sendJson(tvHomeMore(p.exclude || []));
+      readBody(req, res, 16384).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
+        sendJson(tvHomeMore(strArr(p.exclude, 60, 120)));
       });
       return;
     }
@@ -107,12 +187,24 @@ http
       res.setHeader("Access-Control-Allow-Origin", "*");
       const chunks = [];
       let size = 0;
+      let tooLarge = false;
       req.on("data", (c) => {
+        if (tooLarge) return;
         size += c.length;
-        if (size > 10 * 1024 * 1024) { req.destroy(); return; }
+        if (size > 10 * 1024 * 1024) {
+          // 413 explícito antes de cortar: el cliente veía un abort genérico.
+          tooLarge = true;
+          res.statusCode = 413;
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.end(JSON.stringify({ error: "Audio demasiado grande (máx 10MB)" }));
+          req.destroy();
+          return;
+        }
         chunks.push(c);
       });
+      req.on("error", () => {});
       req.on("end", () => {
+        if (tooLarge) return;
         const buffer = Buffer.concat(chunks);
         const mimeType = req.headers["content-type"] || "audio/webm";
         sendJson(transcribeAudio(buffer, mimeType));
@@ -162,15 +254,13 @@ http
     // Pregunta conversacional sobre un título (no re-recomienda).
     if (urlPath === "/api/ask" && req.method === "POST") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 65536) req.destroy(); });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+      readBody(req, res, 65536).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
         sendJson(askAboutTitle({
-          title: p.title || "",
-          platform: p.platform || "",
-          question: p.question || "",
+          title: str(p.title, 200) || "",
+          platform: str(p.platform, 60) || "",
+          question: str(p.question, 500) || "",
         }));
       });
       return;
@@ -188,15 +278,13 @@ http
     // centrado o buscar algo nuevo, y responde en consecuencia (una llamada).
     if (urlPath === "/api/orb" && req.method === "POST") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 65536) req.destroy(); });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+      readBody(req, res, 65536).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
         sendJson(orbRespond({
-          transcript: p.transcript || "",
-          title: p.title || "",
-          platform: p.platform || "",
+          transcript: str(p.transcript, 600) || "",
+          title: str(p.title, 200) || "",
+          platform: str(p.platform, 60) || "",
         }));
       });
       return;
@@ -214,12 +302,10 @@ http
     // (corre en paralelo con /api/recommend en el cliente).
     if (urlPath === "/api/intent" && req.method === "POST") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 8192) req.destroy(); });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
-        sendJson(inferIntent(p.text || "").then((intent) => ({ intent })));
+      readBody(req, res, 8192).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
+        sendJson(inferIntent(str(p.text, 500) || "").then((intent) => ({ intent })));
       });
       return;
     }
@@ -243,19 +329,25 @@ http
     // API REST para la app móvil (Capacitor).
     if (urlPath === "/api/recommend" && req.method === "POST") {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      let body = "";
-      req.on("data", (c) => { body += c; });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
+      readBody(req, res, 65536).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
+        // Solo los últimos 20 turnos, cada uno acotado: un historial gigante
+        // era prompt gigante → costo/latencia arbitrarios.
+        const messages = (Array.isArray(p.messages) ? p.messages : [])
+          .slice(-20)
+          .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+          .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+        let alt = typeof p.alternativesCount === "number" ? Math.floor(p.alternativesCount) : 4;
+        if (!(alt >= 0 && alt <= 14)) alt = 4;
         sendJson(recommend({
-          messages: p.messages || [],
-          platforms: p.platforms || [],
-          contextHint: p.contextHint || null,
-          seasonHint: p.seasonHint || null,
-          weatherHint: p.weatherHint || null,
-          excludeTitles: p.excludeTitles || [],
-          alternativesCount: typeof p.alternativesCount === "number" ? p.alternativesCount : 4,
+          messages,
+          platforms: strArr(p.platforms, 10, 40),
+          contextHint: str(p.contextHint, 300),
+          seasonHint: str(p.seasonHint, 60),
+          weatherHint: str(p.weatherHint, 60),
+          excludeTitles: strArr(p.excludeTitles, 100, 120),
+          alternativesCount: alt,
         }));
       });
       return;

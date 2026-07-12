@@ -1,3 +1,5 @@
+import { fetchUpstream } from "./upstream.mjs";
+
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs.
 // Replica la lógica de src/lib/recommendations.functions.ts → recommendConversational.
@@ -40,7 +42,7 @@ async function callAnthropic(messages, alternativesCount = 4) {
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
   // Galería necesita más tokens de salida
   const maxTokens = alternativesCount > 6 ? 3500 : 1200;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -53,7 +55,7 @@ async function callAnthropic(messages, alternativesCount = 4) {
       system: buildSystem(alternativesCount),
       messages,
     }),
-  });
+  }, { timeoutMs: 40000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
@@ -144,7 +146,7 @@ export async function askAboutTitle({ title, platform, question }) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -160,7 +162,7 @@ export async function askAboutTitle({ title, platform, question }) {
         content: `Título en pantalla: "${String(title)}" (en ${String(platform)}).\n\nPregunta del usuario: ${String(question)}`,
       }],
     }),
-  });
+  }, { timeoutMs: 20000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
@@ -197,7 +199,7 @@ export async function orbRespond({ transcript, title, platform }) {
   // Sin título en pantalla no hay nada sobre qué preguntar → siempre es búsqueda.
   if (!String(title || "").trim()) return { mode: "search", query: q };
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -213,7 +215,7 @@ export async function orbRespond({ transcript, title, platform }) {
         content: `Título en pantalla: "${String(title)}"${platform ? ` (en ${String(platform)})` : ""}.\n\nEl usuario dijo: ${q}`,
       }],
     }),
-  });
+  }, { timeoutMs: 20000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
@@ -244,7 +246,7 @@ export async function inferIntent(text) {
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
   const q = String(text || "").trim().slice(0, 500);
   if (!q) return "";
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -257,7 +259,7 @@ export async function inferIntent(text) {
       system: INTENT_SYSTEM,
       messages: [{ role: "user", content: q }],
     }),
-  });
+  }, { timeoutMs: 15000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
