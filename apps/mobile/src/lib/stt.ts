@@ -207,6 +207,9 @@ export async function transcribe(audioBlob: Blob): Promise<string> {
     method: "POST",
     headers: { "Content-Type": audioBlob.type || "audio/webm" },
     body: audioBlob,
+    // Corte duro: era el único fetch sin timeout — si Groq/red colgaba, el
+    // orbe quedaba esperando para siempre.
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`Transcripción fallida: ${res.status}`);
   const data = (await res.json()) as { text: string };

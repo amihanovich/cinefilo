@@ -6,6 +6,9 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
 
 let currentAudio: HTMLAudioElement | null = null;
+// Generación de habla: si llega un speak()/stopSpeaking() nuevo, los pasos
+// pendientes del anterior (p.ej. el fallback nativo) no deben ejecutarse.
+let speakGen = 0;
 
 // Mute global de la voz de Cinéfilo (saludo + explicación de resultados).
 // Persistido para que la elección del usuario sobreviva entre sesiones.
@@ -37,6 +40,7 @@ function nativeSynth(): SpeechSynthesis | null {
 }
 
 export function stopSpeaking(): void {
+  speakGen++;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio.src = "";
@@ -90,36 +94,55 @@ export async function speak(
   }
 
   stopSpeaking();
+  const gen = ++speakGen;
 
-  // 1) Intento ElevenLabs (voz premium) vía backend.
-  try {
-    const res = await fetch(`${API_BASE}/api/tts`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(20000),
-    });
-
-    if (!res.ok) throw new Error(`TTS ${res.status}`);
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
+  // 1) ElevenLabs (voz premium) vía backend, EN STREAMING: audio.src apunta
+  //    directo al endpoint GET y el <audio> arranca apenas bufferea el
+  //    principio. Antes se descargaba el blob completo y el usuario esperaba
+  //    toda la síntesis en silencio. Sin blob tampoco hay objectURL que filtrar.
+  const ok = await new Promise<boolean>((resolve) => {
+    let settled = false;
+    let started = false;
+    const audio = new Audio(`${API_BASE}/api/tts?text=${encodeURIComponent(text)}`);
+    audio.preload = "auto";
     currentAudio = audio;
-
-    onStart?.();
-    await new Promise<void>((resolve) => {
-      audio.onended = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); currentAudio = null; resolve(); };
-      audio.play().catch(() => resolve());
-    });
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(stallTimer);
+      if (currentAudio === audio) currentAudio = null;
+      resolve(result);
+    };
+    // Guard anti-silencio: si en 8s no empezó a sonar (server frío, 4xx/5xx,
+    // sin red), caemos a la voz nativa en vez de dejar al usuario esperando.
+    const stallTimer = setTimeout(() => {
+      if (!started) {
+        try { audio.pause(); audio.src = ""; } catch { /* noop */ }
+        finish(false);
+      }
+    }, 8000);
+    audio.onplaying = () => {
+      if (!started) { started = true; onStart?.(); }
+    };
+    // Si ya sonó algo, un corte (stopSpeaking / error de red a mitad) cuenta
+    // como terminado: NO se repite el texto con la voz nativa.
+    audio.onended = () => finish(started);
+    audio.onpause = () => finish(started);
+    audio.onerror = () => finish(started);
+    audio.play().catch(() => finish(started));
+  });
+  if (ok) {
     onEnd?.();
     return;
-  } catch (e) {
-    // 2) Falló ElevenLabs (sin créditos, sin key, o red) → voz nativa del teléfono.
-    console.warn("[tts] ElevenLabs no disponible, uso voz nativa:", e);
+  }
+  if (gen !== speakGen) {
+    // Interrumpido por otro speak()/stopSpeaking(): no hablar el texto viejo.
+    onEnd?.();
+    return;
   }
 
+  // 2) Falló ElevenLabs (sin créditos, sin key, o red) → voz nativa del teléfono.
+  console.warn("[tts] ElevenLabs no disponible, uso voz nativa");
   onStart?.();
   await speakNative(text);
   onEnd?.();

@@ -6,8 +6,9 @@ import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
 import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
+import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
-import { ttsAudio } from "./tts.mjs";
+import { ttsStream } from "./tts.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -221,25 +222,36 @@ http
     }
 
     // TTS via ElevenLabs, proxied (la API key vive solo en el servidor).
-    if (urlPath === "/api/tts" && req.method === "POST") {
+    // Streaming end-to-end: el MP3 se pipea al cliente a medida que ElevenLabs
+    // lo sintetiza (antes se esperaba el buffer completo → segundos de silencio).
+    // GET con ?text= permite que el cliente apunte audio.src directo a la URL
+    // y el <audio> reproduzca progresivamente. POST se mantiene por compat.
+    if (urlPath === "/api/tts" && (req.method === "POST" || req.method === "GET")) {
       res.setHeader("Access-Control-Allow-Origin", "*");
-      let body = "";
-      req.on("data", (c) => { body += c; if (body.length > 16384) req.destroy(); });
-      req.on("end", () => {
-        let p = {};
-        try { p = JSON.parse(body || "{}"); } catch (e) { p = {}; }
-        ttsAudio(p.text || "")
-          .then((buffer) => {
+      const speak = (text) => {
+        ttsStream(text || "")
+          .then((upstream) => {
+            res.statusCode = 200;
             res.setHeader("Content-Type", "audio/mpeg");
             res.setHeader("Cache-Control", "no-store");
-            res.end(buffer);
+            if (upstream.body) Readable.fromWeb(upstream.body).pipe(res);
+            else res.end();
           })
           .catch((e) => {
+            console.error("[api] /api/tts error:", (e && e.message) || e);
             res.statusCode = 500;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ error: String((e && e.message) || e) }));
+            res.end(JSON.stringify({ error: "No se pudo generar la voz." }));
           });
-      });
+      };
+      if (req.method === "GET") {
+        speak((reqUrl.searchParams.get("text") || "").slice(0, 1200));
+      } else {
+        readBody(req, res, 16384).then((body) => {
+          if (body === null) return;
+          speak(str(asJson(body).text, 1200) || "");
+        });
+      }
       return;
     }
     if (urlPath === "/api/tts" && req.method === "OPTIONS") {
