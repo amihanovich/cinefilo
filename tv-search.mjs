@@ -18,7 +18,7 @@ async function callAnthropic(prompt) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 3500,
+      max_tokens: 4500,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -55,7 +55,11 @@ const ITEM_RULES =
   PLATFORMS.join(", ") +
   '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
   '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
-  '- "reason": por qué encaja (máx 16 palabras).\n- Títulos conocidos con disponibilidad estable.';
+  '- "reason": 2 o 3 frases (40 a 60 palabras) que enganchen y den ganas de darle play: ' +
+  "por qué encaja con lo que se busca o con el momento, qué tono/clima tiene (tenso, luminoso, " +
+  "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional). " +
+  "Cálido y conversacional en rioplatense, como un amigo cinéfilo que te la recomienda; sin spoilers " +
+  "ni frases hechas repetidas entre ítems.\n- Títulos conocidos con disponibilidad estable.";
 
 export async function tvSearch(query, exclude, liked, disliked) {
   if (!query || !query.trim()) return { items: [] };
