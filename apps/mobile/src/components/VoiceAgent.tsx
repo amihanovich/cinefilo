@@ -94,7 +94,13 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
     void boot();
 
     return () => {
+      // Si el overlay se desmonta por fuera de handleDismiss (re-render del
+      // padre), cortar el saludo TTS y soltar el micrófono: antes el audio
+      // seguía sonando y el MediaStream quedaba caliente.
       mountedRef.current = false;
+      stopSpeaking();
+      recorderRef.current?.cancel();
+      recorderRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -152,7 +158,8 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
       {/* Cerrar */}
       <button
         onClick={handleDismiss}
-        className="absolute top-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 active:scale-90 transition-transform"
+        className="absolute right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 active:scale-90 transition-transform"
+        style={{ top: "calc(1.5rem + env(safe-area-inset-top))" }}
         aria-label="Cerrar"
       >
         <X className="h-5 w-5" />
@@ -160,7 +167,10 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
 
       {/* Chip de estado de escucha — indicación inequívoca grabando vs frenado */}
       {state === "listening" && (
-        <div className="absolute top-7 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 ring-1 ring-red-400/40">
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 ring-1 ring-red-400/40"
+          style={{ top: "calc(1.75rem + env(safe-area-inset-top))" }}
+        >
           <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
           <span className="text-xs font-semibold tracking-wide text-red-200">Grabando</span>
         </div>

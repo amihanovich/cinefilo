@@ -78,58 +78,89 @@ export function useTvChannel({
     if (!sessionId) return;
 
     const peerRole: ChannelRole = role === "tv" ? "control" : "tv";
-    const channel = supabase.channel(channelName(sessionId), {
-      config: {
-        broadcast: { self: false },
-        presence: { key: role },
-      },
-    });
-    channelRef.current = channel;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelay = 2000;
 
-    channel.on("broadcast", { event: EVENT_COMMAND }, ({ payload }) => {
-      if (role !== "tv") return; // solo la TV consume comandos
-      const parsed = ControlCommand.safeParse(payload);
-      if (!parsed.success) {
-        console.warn("[tv-channel] comando inválido descartado:", parsed.error.issues);
-        return;
-      }
-      onCommandRef.current?.(parsed.data);
-    });
+    const connect = () => {
+      if (disposed) return;
+      setStatus("connecting");
+      const channel = supabase.channel(channelName(sessionId), {
+        config: {
+          broadcast: { self: false },
+          presence: { key: role },
+        },
+      });
+      channelRef.current = channel;
 
-    channel.on("broadcast", { event: EVENT_STATE }, ({ payload }) => {
-      if (role !== "control") return; // solo el teléfono consume estado
-      const parsed = TvState.safeParse(payload);
-      if (!parsed.success) {
-        console.warn("[tv-channel] estado inválido descartado:", parsed.error.issues);
-        return;
-      }
-      onStateRef.current?.(parsed.data);
-    });
+      channel.on("broadcast", { event: EVENT_COMMAND }, ({ payload }) => {
+        if (role !== "tv") return; // solo la TV consume comandos
+        const parsed = ControlCommand.safeParse(payload);
+        if (!parsed.success) {
+          console.warn("[tv-channel] comando inválido descartado:", parsed.error.issues);
+          return;
+        }
+        onCommandRef.current?.(parsed.data);
+      });
 
-    const syncPaired = () => {
-      const state = channel.presenceState();
-      const peerPresent = Object.prototype.hasOwnProperty.call(state, peerRole);
-      setPaired((prev) => {
-        if (peerPresent && !prev) onPeerJoinRef.current?.();
-        return peerPresent;
+      channel.on("broadcast", { event: EVENT_STATE }, ({ payload }) => {
+        if (role !== "control") return; // solo el teléfono consume estado
+        const parsed = TvState.safeParse(payload);
+        if (!parsed.success) {
+          console.warn("[tv-channel] estado inválido descartado:", parsed.error.issues);
+          return;
+        }
+        onStateRef.current?.(parsed.data);
+      });
+
+      const syncPaired = () => {
+        const state = channel.presenceState();
+        const peerPresent = Object.prototype.hasOwnProperty.call(state, peerRole);
+        setPaired((prev) => {
+          if (peerPresent && !prev) onPeerJoinRef.current?.();
+          return peerPresent;
+        });
+      };
+      channel.on("presence", { event: "sync" }, syncPaired);
+      channel.on("presence", { event: "join" }, syncPaired);
+      channel.on("presence", { event: "leave" }, syncPaired);
+
+      channel.subscribe((channelStatus) => {
+        // Callbacks de un canal ya reemplazado o de un hook desmontado: ignorar.
+        if (disposed || channelRef.current !== channel) return;
+        if (channelStatus === "SUBSCRIBED") {
+          reconnectDelay = 2000;
+          setStatus("connected");
+          void channel.track({ role, online_at: new Date().toISOString() });
+        } else if (
+          channelStatus === "CHANNEL_ERROR" ||
+          channelStatus === "TIMED_OUT" ||
+          channelStatus === "CLOSED"
+        ) {
+          // Reconexión con backoff (2s→30s): antes el primer error dejaba el
+          // control "muerto" (status error fijo) hasta salir y volver a entrar.
+          setStatus("error");
+          setPaired(false);
+          if (reconnectTimer) return;
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+            channelRef.current = null;
+            void supabase.removeChannel(channel);
+            connect();
+          }, reconnectDelay);
+        }
       });
     };
-    channel.on("presence", { event: "sync" }, syncPaired);
-    channel.on("presence", { event: "join" }, syncPaired);
-    channel.on("presence", { event: "leave" }, syncPaired);
 
-    channel.subscribe((channelStatus) => {
-      if (channelStatus === "SUBSCRIBED") {
-        setStatus("connected");
-        void channel.track({ role, online_at: new Date().toISOString() });
-      } else if (channelStatus === "CHANNEL_ERROR" || channelStatus === "TIMED_OUT") {
-        setStatus("error");
-      }
-    });
+    connect();
 
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      const ch = channelRef.current;
       channelRef.current = null;
-      void supabase.removeChannel(channel);
+      if (ch) void supabase.removeChannel(ch);
     };
   }, [sessionId, role]);
 

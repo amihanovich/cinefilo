@@ -13,6 +13,7 @@ interface OrbProps {
 export function Orb({ phase, size, volume = 0, onClick }: OrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
+  const timerRef = useRef<number>(0);
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
 
@@ -224,11 +225,24 @@ export function Orb({ phase, size, volume = 0, onClick }: OrbProps) {
         ctx.fill();
       }
 
-      animRef.current = requestAnimationFrame(draw);
+      // El orbe mini idle es decoración (botón del home / control): a 60fps
+      // era un canvas drenando CPU/batería todo el tiempo en la pantalla
+      // principal. Su única animación es la respiración (sin(t*0.75)), que a
+      // ~8fps se ve igual. Los estados activos de voz siguen a 60fps.
+      if (isMini && phase === "idle") {
+        timerRef.current = window.setTimeout(() => {
+          animRef.current = requestAnimationFrame(draw);
+        }, 125);
+      } else {
+        animRef.current = requestAnimationFrame(draw);
+      }
     };
 
     animRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(animRef.current);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [phase, px, isMini]);
 
   return (

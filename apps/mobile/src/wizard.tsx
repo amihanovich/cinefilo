@@ -590,6 +590,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // Interacción con las tarjetas: 1 tap = acción corta (ej. guardar en el carrito);
   // DOBLE tap = abrir la ficha ("zoom"). Desambiguamos con una ventana de 280ms.
   const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingTapRef = useRef<{ title: string; fire: () => void } | null>(null);
   const lastTapRef = useRef<{ title: string; t: number }>({ title: "", t: 0 });
   const DBL_TAP_MS = 280;
   const handleCardTap = (item: Recommendation, list: Recommendation[], onSingle?: () => void) => {
@@ -598,13 +599,29 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     if (prev.title === item.title && now - prev.t < DBL_TAP_MS) {
       // Doble tap → ficha (cancela el single-tap pendiente).
       if (singleTapTimerRef.current) { clearTimeout(singleTapTimerRef.current); singleTapTimerRef.current = null; }
+      pendingTapRef.current = null;
       lastTapRef.current = { title: "", t: 0 };
       openDetail(item, list);
       return;
     }
+    // Tap sobre OTRA tarjeta con un single-tap pendiente: ejecutarlo ya.
+    // Antes se cancelaba a secas y la acción de la primera tarjeta se perdía.
+    if (singleTapTimerRef.current) {
+      clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = null;
+      const pending = pendingTapRef.current;
+      pendingTapRef.current = null;
+      if (pending && pending.title !== item.title) pending.fire();
+    }
     lastTapRef.current = { title: item.title, t: now };
-    if (singleTapTimerRef.current) clearTimeout(singleTapTimerRef.current);
-    if (onSingle) singleTapTimerRef.current = setTimeout(() => { onSingle(); singleTapTimerRef.current = null; }, DBL_TAP_MS);
+    if (onSingle) {
+      pendingTapRef.current = { title: item.title, fire: onSingle };
+      singleTapTimerRef.current = setTimeout(() => {
+        singleTapTimerRef.current = null;
+        pendingTapRef.current = null;
+        onSingle();
+      }, DBL_TAP_MS);
+    }
   };
   // Doble tap dentro de la ficha (sobre el póster) = volver.
   const fichaTapRef = useRef(0);
