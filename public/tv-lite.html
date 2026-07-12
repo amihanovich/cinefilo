@@ -68,7 +68,6 @@
   .hbtn { border:none; border-radius:999px; font-weight:600; }
   .hbtn.ico { width:42px; height:42px; padding:0; font-size:19px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
-  .hbtn.ico.ondown { color:#fff; background:rgba(224,85,78,.3); }
   .hbtn.play { padding:9px 18px; font-size:16px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
@@ -82,6 +81,8 @@
   .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:5px; font-size:11px; color:#9A9AA2; }
   /* Ficha (ítem a lo grande). */
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
+  /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
+  .okhint { text-align:center; color:#5C5C64; font-size:13px; margin:2px 0 6px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -320,8 +321,7 @@
   var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
   var TODAY_KEY = "cinefilo:tv:today";
   var today = loadToday(); // ítems en "Para hoy" (carrito de la TV, persistido en la sesión)
-  var actionFocus = -1;    // -1 = banner (sin botón); 0..3 = botón enfocado del banner
-  var tvLiked = [], tvDisliked = []; // like/dislike local (por título; el feed al motor está diferido)
+  var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Para hoy", 1 = "Ver en X"
   var history = []; // pila de pantallas anteriores (para "Volver")
   var loading = false;
   var loadingMore = false;
@@ -432,13 +432,13 @@
     h += "</div>";
     if (it.reason) h += '<p class="hreason"><b>✦</b> ' + esc(it.reason) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
+    // Solo 2 acciones: "Para hoy" y "Ver en X". El feedback de gustos (👍/👎)
+    // vive únicamente en el control del teléfono — el banner queda limpio.
     var af = foc ? actionFocus : -1;
-    var td = isToday(it), lk = inList(tvLiked, it), dk = inList(tvDisliked, it);
+    var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (lk ? " on" : "") + '" title="Me gustó">👍</button>';
-    h += '<button class="hbtn ico' + (af === 1 ? " bfoc" : "") + (dk ? " ondown" : "") + '" title="No me gustó">👎</button>';
-    h += '<button class="hbtn ico' + (af === 2 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
-    h += '<button class="hbtn play' + (af === 3 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += "</div></div>";
     return h;
@@ -487,10 +487,8 @@
     else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating });
     saveToday(); render(); emitScreen(true);
   }
-  function inList(list, item) { if (!item) return false; for (var i = 0; i < list.length; i++) if (list[i] === item.title) return true; return false; }
-  function toggleInList(list, item) { var idx = list.indexOf(item.title); if (idx >= 0) list.splice(idx, 1); else list.push(item.title); }
-  function toggleLike(item) { if (!item) return; if (inList(tvDisliked, item)) toggleInList(tvDisliked, item); toggleInList(tvLiked, item); render(); emitScreen(true); }
-  function toggleDislike(item) { if (!item) return; if (inList(tvLiked, item)) toggleInList(tvLiked, item); toggleInList(tvDisliked, item); render(); emitScreen(true); }
+  // El like/dislike local de la TV (tvLiked/tvDisliked) se eliminó: el feedback
+  // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
   function todayStripHTML() {
     if (!today.length) return "";
     var h = '<h3 class="sec">Para ver hoy</h3><div class="todayrow">';
@@ -547,6 +545,8 @@
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
       html += "</div>";
     }
+    // El gesto del OK sobre tarjetas no tiene botón visible: documentarlo acá.
+    html += '<div class="okhint">OK = guardar para hoy · OK doble = abrir ficha</div>';
     return html;
   }
 
@@ -848,7 +848,7 @@
       if (focusedIndex < top) {
         if (actionFocus >= 0) {
           // En la fila de botones del banner: ←/→ entre botones; ↑ vuelve al banner; ↓ a la grilla.
-          if (dir === "right") { var nr = Math.min(actionFocus + 1, 3); if (nr !== actionFocus) { actionFocus = nr; changed = true; } }
+          if (dir === "right") { var nr = Math.min(actionFocus + 1, 1); if (nr !== actionFocus) { actionFocus = nr; changed = true; } }
           else if (dir === "left") { var nl = Math.max(actionFocus - 1, 0); if (nl !== actionFocus) { actionFocus = nl; changed = true; } }
           else if (dir === "up") { actionFocus = -1; changed = true; }
           else if (dir === "down") { actionFocus = -1; if (items.length > top) n = top; changed = true; }
@@ -963,10 +963,8 @@
     if (!it) return;
     // Si el foco está en un botón del banner, activarlo (👍/👎/Para hoy/Ver en X).
     if (mode === "home" && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
-      if (actionFocus === 0) toggleLike(it);
-      else if (actionFocus === 1) toggleDislike(it);
-      else if (actionFocus === 2) toggleToday(it);
-      else if (actionFocus === 3) play(it.id);
+      if (actionFocus === 0) toggleToday(it);
+      else if (actionFocus === 1) play(it.id);
       return;
     }
     if (isToday(it)) { openDetail(it); return; }
