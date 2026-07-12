@@ -127,7 +127,7 @@
 </head>
 <body>
   <div class="top">
-    <div class="brand">Cinéfilo <span>TV</span><span class="ai">✦ recomendado con Inteligencia Artificial</span></div>
+    <div class="brand">Cinéfilo <span>TV</span><span class="ai">✦ recomendado con IA</span></div>
     <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
   </div>
 
@@ -573,8 +573,10 @@
         : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
-      elTopline.innerHTML = '<span class="hint">Pedile a Cinéfilo desde tu App o Web Control</span> — buscá y controlá desde el teléfono.';
+      // Home: sin línea extra — el tagline de la barra y el okhint ya cumplen esa función.
+      elTopline.innerHTML = "";
     }
+    elTopline.style.display = elTopline.innerHTML ? "" : "none";
     renderSpot();
     renderContent();
   }

@@ -5,7 +5,7 @@
 // el splash lleva directo a una reco fresca ("Sorprendeme" automático).
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Loader2, Shuffle } from "lucide-react";
+import { Sparkles, Send, Loader2, Shuffle, QrCode } from "lucide-react";
 import { Orb } from "./Orb";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
@@ -24,11 +24,12 @@ interface WelcomeScreenProps {
   error: string | null;
   onSubmit: (text: string) => void; // pedido del usuario → 1ª búsqueda
   onSurprise: () => void; // reco automática ("lo mejor para vos")
+  onConnectTv?: () => void; // ir directo a escanear el QR de la TV (sin buscar antes)
 }
 
 const SPLASH_MSG = "Rastrillando las plataformas para encontrar lo tuyo…";
 
-export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: WelcomeScreenProps) {
+export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, onConnectTv }: WelcomeScreenProps) {
   // Congelamos firstTime en el mount: si el padre lo cambia (al marcar la key)
   // no queremos que el efecto del splash se vuelva a disparar.
   const firstTimeRef = useRef(firstTime);
@@ -118,8 +119,27 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
   // ── Agente (solo 1ª vez) ────────────────────────────────────────────────────
   const orbPhase = micState === "rec" ? "listening" : micState === "processing" ? "thinking" : "idle";
 
+  const connectTv = () => {
+    stopSpeaking(); // corta el saludo si todavía suena
+    if (micRef.current) {
+      micRef.current.cancel();
+      micRef.current = null;
+      setMicState("idle");
+    }
+    onConnectTv?.();
+  };
+
   return (
-    <div className="flex h-[100dvh] flex-col items-center justify-center gap-7 bg-background px-8 text-center safe-top safe-bottom">
+    <div className="relative flex h-[100dvh] flex-col items-center justify-center gap-7 bg-background px-8 text-center safe-top safe-bottom">
+      {onConnectTv && (
+        <button
+          onClick={connectTv}
+          className="absolute right-4 top-4 mt-[env(safe-area-inset-top)] flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] text-muted-foreground transition-transform active:scale-95"
+          aria-label="Conectar la TV"
+        >
+          <QrCode className="h-3.5 w-3.5" /> Conectar TV
+        </button>
+      )}
       <div className="flex flex-col items-center gap-5">
         {/* Orbe = control press-to-speak. Tocá para hablar / tocá para frenar. */}
         <button

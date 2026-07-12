@@ -661,6 +661,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         error={error}
         onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
         onSurprise={() => { localStorage.setItem(OPENED_KEY, "1"); handleStartReco(); }}
+        onConnectTv={() => void openTvRemote()}
       />
     );
   }
