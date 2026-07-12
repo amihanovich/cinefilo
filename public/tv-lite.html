@@ -216,6 +216,7 @@
 })();
 </script>
 <script src="/tv-supabase.js"></script>
+<script src="/tv-qrcode.js"></script>
 <script>
 /* === Cinéfilo TV liviana — JS clásico para navegadores viejos (Tizen 4.0). ===
    Sin spread {...} ni optional chaining ?. — ese navegador no los soporta. */
@@ -262,16 +263,33 @@
     );
   }
 
+  // Búsqueda directa DENTRO de cada plataforma: URL https que las apps de
+  // streaming registran como App Link en Android TV. Reemplaza la búsqueda de
+  // Google con btnI=1 (deprecada por Google), que en el WebView no abría nada.
   function deepLink(platform, title) {
     var t = encodeURIComponent(title);
-    var dom = {
-      "Netflix": "netflix.com", "Disney+": "disneyplus.com", "Max": "max.com",
-      "Prime Video": "primevideo.com", "Apple TV+": "tv.apple.com",
-      "Paramount+": "paramountplus.com", "Star+": "disneyplus.com"
+    var map = {
+      "Netflix": "https://www.netflix.com/search?q=" + t,
+      "Disney+": "https://www.disneyplus.com/search?q=" + t,
+      "Star+": "https://www.disneyplus.com/search?q=" + t,
+      "Max": "https://play.max.com/search?q=" + t,
+      "Prime Video": "https://www.primevideo.com/search/ref=atv_nb_sr?phrase=" + t,
+      "Apple TV+": "https://tv.apple.com/search?term=" + t,
+      "Paramount+": "https://www.paramountplus.com/search/"
     };
-    var d = dom[platform];
-    if (d) return "https://www.google.com/search?q=" + t + "+site%3A" + d + "&btnI=1";
-    return "https://www.google.com/search?q=" + t + "+ver+online";
+    return map[platform] || ("https://www.google.com/search?q=" + t + "+ver+online");
+  }
+
+  // Dentro de la cáscara Capacitor (Android TV) el bridge inyecta window.Capacitor:
+  // AppLauncher dispara un intent VIEW que captura la app de streaming instalada.
+  // Fuera de Capacitor (browser de prueba), fallback a window.open.
+  function openExternal(url) {
+    try {
+      var C = window.Capacitor;
+      var AL = C && C.Plugins && C.Plugins.AppLauncher;
+      if (AL && AL.openUrl) { AL.openUrl({ url: url }); return; }
+    } catch (e) {}
+    try { window.open(url, "_blank"); } catch (e2) {}
   }
 
   function makeSessionId() {
@@ -318,9 +336,21 @@
   var elBadge = document.getElementById("badge");
   var elDot = document.getElementById("dot");
 
-  // QR + sesión
-  document.getElementById("qr").src =
-    "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
+  // QR + sesión — generado localmente (tv-qrcode.js) para no depender de un
+  // servicio externo; si la lib no cargó, fallback al servicio remoto.
+  (function renderQr() {
+    var img = document.getElementById("qr");
+    try {
+      if (window.qrcode) {
+        var q = window.qrcode(0, "M");
+        q.addData(controlUrl);
+        q.make();
+        img.src = q.createDataURL(8, 8);
+        return;
+      }
+    } catch (e) {}
+    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
+  })();
   document.getElementById("sess").textContent = "Sesión " + sessionId;
 
   function setBadge(text, cls) {
@@ -472,7 +502,10 @@
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
   function openDetail(item) { if (!item) return; detailItem = item; screen = "detail"; render(); emitScreen(); }
-  function closeDetail() { detailItem = null; screen = mode; render(); emitScreen(); }
+  // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
+  // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
+  // y quedaría desincronizado. "Mi lista" siempre viaja como screen "search".
+  function closeDetail() { detailItem = null; screen = (mode === "list" ? "search" : mode); render(); emitScreen(); }
   function detailHTML(it) {
     return heroHTML(it, true) + '<div class="detailhint">OK = ver ahora · Volver = salir</div>';
   }
@@ -627,6 +660,7 @@
     return out;
   }
 
+  var homeRetryDelay = 4000;
   function loadHome() {
     if (homeLoaded) return;
     homeLoaded = true;
@@ -635,9 +669,10 @@
     query = "";
     render();
     fetch("/api/tv-home")
-      .then(function (r) { return r.json(); })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (data) {
         if (query) return; // si el usuario ya buscó, no piso sus resultados
+        homeRetryDelay = 4000;
         if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; }
         render();
         emitScreen();
@@ -645,7 +680,16 @@
         autoDry = false;
         autoFill();
       })
-      .catch(function () {});
+      .catch(function () {
+        // API caída / sin red: antes quedaba "Cargando…" para siempre. La TV no
+        // tiene input propio, así que avisamos y reintentamos con backoff.
+        homeLoaded = false;
+        if (items.length === 0 && !query && paired) {
+          elContent.innerHTML = '<div class="center">No pudimos cargar las recomendaciones.<br>Reintentando…</div>';
+        }
+        setTimeout(loadHome, homeRetryDelay);
+        homeRetryDelay = Math.min(homeRetryDelay * 2, 30000);
+      });
   }
 
   var lastLiked = [], lastDisliked = [];
@@ -844,7 +888,7 @@
     if (!it) it = items[focusedIndex];
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
-    if (it.platform) { try { window.open(deepLink(it.platform, it.title), "_blank"); } catch (e) {} }
+    if (it.platform) openExternal(deepLink(it.platform, it.title));
   }
 
   function handleCommand(cmd) {
@@ -907,7 +951,8 @@
       okPress();
     } else if (k === 10009 || k === 8 || k === 27 || k === 4) {
       if (detailItem) { closeDetail(); }
-      else goBack();
+      else if (history.length) { goBack(); }
+      else return; // home sin historial: no interceptar (que el sistema pueda salir de la app)
     } else return;
     e.preventDefault();
   });
@@ -930,22 +975,45 @@
     }
   }
 
+  // Reconexión con backoff: las TVs quedan encendidas horas y el WiFi parpadea.
+  // Antes, un CHANNEL_ERROR dejaba "Error de conexión" para siempre; ahora se
+  // recrea el canal solo (2s → 4s → … → 30s máx) hasta volver a suscribir.
+  var sb = null;
+  var reconnectTimer = null;
+  var reconnectDelay = 2000;
+  function scheduleReconnect() {
+    if (reconnectTimer) return;
+    setBadge("Reconectando…", "wait");
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connect();
+    }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  }
   function connect() {
     if (!window.CinefiloSB || !window.CinefiloSB.createClient) {
       setBadge("Error cargando librería", "wait");
       return;
     }
-    var sb = window.CinefiloSB.createClient(SUPABASE_URL, SUPABASE_KEY);
-    channel = sb.channel("cinefilo:" + sessionId, {
+    if (!sb) sb = window.CinefiloSB.createClient(SUPABASE_URL, SUPABASE_KEY);
+    if (channel) { try { sb.removeChannel(channel); } catch (e) {} channel = null; }
+    var ch = sb.channel("cinefilo:" + sessionId, {
       config: { broadcast: { self: false }, presence: { key: "tv" } }
     });
-    channel.on("broadcast", { event: "command" }, function (msg) { handleCommand(msg && msg.payload); });
-    channel.on("presence", { event: "sync" }, updatePaired);
-    channel.on("presence", { event: "join" }, updatePaired);
-    channel.on("presence", { event: "leave" }, updatePaired);
-    channel.subscribe(function (status) {
-      if (status === "SUBSCRIBED") { setBadge("Esperando teléfono", "wait"); channel.track({ role: "tv" }); }
-      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setBadge("Error de conexión", "wait"); }
+    channel = ch;
+    ch.on("broadcast", { event: "command" }, function (msg) { handleCommand(msg && msg.payload); });
+    ch.on("presence", { event: "sync" }, updatePaired);
+    ch.on("presence", { event: "join" }, updatePaired);
+    ch.on("presence", { event: "leave" }, updatePaired);
+    ch.subscribe(function (status) {
+      if (ch !== channel) return; // callback de un canal viejo ya reemplazado
+      if (status === "SUBSCRIBED") {
+        reconnectDelay = 2000;
+        setBadge(paired ? "Teléfono vinculado" : "Esperando teléfono", paired ? "on" : "wait");
+        ch.track({ role: "tv" });
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        scheduleReconnect();
+      }
     });
   }
 
