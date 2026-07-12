@@ -30,8 +30,8 @@ recomendación principal + N alternativas, con refinamiento conversacional, feed
 |---|---|---|
 | **`apps/mobile`** | La app principal (recomendador por voz/texto + control de TV) | APK Capacitor, bundlea el front, `com.cinefilo.app` |
 | **`apps/tv`** | App de TV = **cáscara WebView** que carga `public/tv-lite.html` (remoto) | APK Capacitor, `server.url`, `com.cinefilo.tv` |
-| **`apps/web-control`** | Control web (D-pad) que abre el QR de la TV | Servicio Railway propio |
-| **`src/` (web)** | Recomendador web (TanStack Start). **Legacy/secundaria**, salvo `/control` (D-pad web, vivo) | Sirve la web + el backend `/api/*` |
+| **`apps/web-control`** | Control web (D-pad) que abre el QR de la TV — **réplica del control remoto de la móvil**. Es el único control web vivo | Servicio Railway propio |
+| **`src/` (web)** | Recomendador web (TanStack Start). **Legacy/secundaria** (incluido su `/control` viejo, que ya no abre el QR) | Sirve la web + el backend `/api/*` |
 | **`apps/landing`** | Landing de descargas (QRs desde un manifest en Supabase) | Servicio Railway propio |
 
 **Backend (raíz):** `server-node.mjs` rutea `/api/recommend`, `/api/intent`, `/api/orb`, `/api/ask`,
@@ -61,8 +61,11 @@ memorias viejas o en tu cabeza, ignorarlos:
 - **`apps/tv/src` (SPA React de TV):** abandonada. El APK de TV es una **cáscara** que carga `tv-lite.html`
   remoto, no ese bundle. `apps/tv/src` quedó como placeholder mínimo (solo para que `cap sync` no falle).
 - **UI web del recomendador** (`src/routes/index.tsx`, `wizard.tsx`): legacy/secundaria, anterior a la app
-  móvil. Se mantiene funcionando pero NO es el foco. (El backend y `/control` que sirve ese mismo server SÍ
-  son esenciales.)
+  móvil. Se mantiene funcionando pero NO es el foco. (El backend `/api/*` que sirve ese mismo server SÍ es
+  esencial.)
+- **`/control` viejo** (`src/routes/control.tsx`, lista scrolleable + FOCUS): superado por `apps/web-control`
+  (D-pad, réplica del control móvil). El QR de la TV ya apunta a la web-control, así que esta ruta quedó
+  huérfana — no agregarle features; si algo falta, va en `apps/web-control`.
 - **Componentes web huérfanos** borrados: `VoiceOrb`, `PlatformOrbit`, `PlatformLogo`, `Onboarding`.
 - **Cloudflare / Workers:** evaluado, no se usa. Deploy es Node/Railway (`server-node.mjs`), NO
   `.output/...`. `wrangler.jsonc` borrado.

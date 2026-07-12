@@ -86,12 +86,18 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 
 ### C. `apps/web-control` — control web standalone (D-pad)
 - SPA Vite servida por su propio `server.mjs` en un **servicio Railway aparte**. `src/ControlScreen.tsx` +
-  `use-tv-channel.ts` + `tv-protocol.ts`. Es la página que abre el QR de la TV cuando NO se usa la app móvil.
+  `use-tv-channel.ts` + `tv-protocol.ts`. Es la página que abre el QR de la TV cuando NO se usa la app móvil,
+  y es la **réplica del control remoto de la app móvil** (preview + D-pad + OK contextual + "Para hoy"). La
+  única diferencia deliberada: la voz acá es solo dictado de búsqueda (el agente conversacional vive en la
+  app móvil) y hay un CTA para descargarla.
 
 ### D. `src/` — web app del recomendador (TanStack Start, SSR) — LEGACY/secundaria
 - La misma que sirve `server-node.mjs`. Rutas vivas: `_authenticated/index.tsx` (home + resultados),
-  `wizard.tsx`, `login.tsx`, `reset-password.tsx`, y **`control.tsx`** (`/control`, el D-pad web que abre el
-  QR — este SÍ es central para el pairing). Lógica AI en `src/lib/recommendations.functions.ts` (server fns).
+  `wizard.tsx`, `login.tsx`, `reset-password.tsx`. Lógica AI en `src/lib/recommendations.functions.ts`
+  (server fns).
+- **`control.tsx` (`/control`) quedó viejo** (lista scrolleable + FOCUS, sin D-pad ni "Para hoy") y **el QR de
+  la TV ya no lo abre**: apunta a la web-control (C). Se mantiene solo por links viejos; el control web que se
+  mantiene es `apps/web-control`.
 - La UI del recomendador (`index.tsx`/`wizard.tsx`) es legacy; se mantiene pero no es el foco.
 
 ### E. `apps/landing` — landing de descargas
@@ -108,9 +114,13 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 - **Roles / presence:** `"tv"` y `"control"`; `broadcast.self=false`; el pairing se detecta por presencia.
 - **Eventos:** `"command"` (control→TV) y `"state"` (TV→control). Validados con Zod (`discriminatedUnion`).
   - Control→TV: `SEARCH`, `FOCUS`, `LOAD_MORE`, `REMOVE`, `SET_PLATFORMS`, `SHOW_LIST`, `NAVIGATE`, `SELECT`,
-    `BACK`, `PLAY`.
-  - TV→Control: `PAIRED`, `SCREEN` (home/search/detail/player + items + focusedId), `NOW_PLAYING`.
-- **QR:** la TV genera `<CONTROL_BASE>/control?session=<id>`. Lo abre la web-control, o lo escanea la app móvil.
+    `BACK`, `PLAY`, `ADD_TODAY`, `OPEN_DETAIL`.
+  - TV→Control: `PAIRED`, `SCREEN` (home/search/detail/player + items + focusedId + todayTitles), `NOW_PLAYING`.
+- **QR:** la TV genera `<CONTROL_BASE>/control?session=<id>`, donde `CONTROL_BASE` es el **servicio
+  web-control** (`cinefilo-copy-production.up.railway.app`), definido en `public/tv-lite.html` (override para
+  dev: abrir tv-lite con `?control=<base-url>`). ⚠️ NO usar el origin del backend: ahí vive el `/control`
+  viejo. Ese QR lo abre la web-control, o lo escanea la app móvil (`parseSession()` saca el `session` de
+  cualquier URL, así que el host no le importa).
 - **⚠️ Deuda:** `tv-protocol.ts`, `use-tv-channel.ts` y `stt.ts` están **copiados a mano** en `src/lib/`,
   `apps/web-control/src/lib/` y `apps/mobile/src/lib/`, y **ya divergieron**. Cualquier drift rompe el pairing
   en silencio. Candidato a paquete compartido (pendiente).
