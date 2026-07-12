@@ -360,7 +360,9 @@
 
   // --- Render ---
   function posterHTML(it) {
-    if (it.posterUrl) return '<img src="' + esc(it.posterUrl) + '" alt="">';
+    // lazy + async: con hasta 60 tarjetas, decodificar todas de entrada era
+    // costoso en TVs de gama baja (Chrome viejo ignora los atributos sin romper).
+    if (it.posterUrl) return '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '" alt="">';
     return '<div class="txt">' + esc(it.title) + "</div>";
   }
 
@@ -483,29 +485,29 @@
     for (var i = 0; i < today.length; i++) if (today[i].title === item.title) { found = i; break; }
     if (found >= 0) today.splice(found, 1);
     else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating });
-    saveToday(); render(); emitScreen();
+    saveToday(); render(); emitScreen(true);
   }
   function inList(list, item) { if (!item) return false; for (var i = 0; i < list.length; i++) if (list[i] === item.title) return true; return false; }
   function toggleInList(list, item) { var idx = list.indexOf(item.title); if (idx >= 0) list.splice(idx, 1); else list.push(item.title); }
-  function toggleLike(item) { if (!item) return; if (inList(tvDisliked, item)) toggleInList(tvDisliked, item); toggleInList(tvLiked, item); render(); emitScreen(); }
-  function toggleDislike(item) { if (!item) return; if (inList(tvLiked, item)) toggleInList(tvLiked, item); toggleInList(tvDisliked, item); render(); emitScreen(); }
+  function toggleLike(item) { if (!item) return; if (inList(tvDisliked, item)) toggleInList(tvDisliked, item); toggleInList(tvLiked, item); render(); emitScreen(true); }
+  function toggleDislike(item) { if (!item) return; if (inList(tvLiked, item)) toggleInList(tvLiked, item); toggleInList(tvDisliked, item); render(); emitScreen(true); }
   function todayStripHTML() {
     if (!today.length) return "";
     var h = '<h3 class="sec">Para ver hoy</h3><div class="todayrow">';
     for (var i = 0; i < today.length; i++) {
       var it = today[i];
-      var p = it.posterUrl ? '<img src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
+      var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
       h += '<div class="ttile">' + p + "</div>";
     }
     return h + "</div>";
   }
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
-  function openDetail(item) { if (!item) return; detailItem = item; screen = "detail"; render(); emitScreen(); }
+  function openDetail(item) { if (!item) return; detailItem = item; screen = "detail"; render(); emitScreen(true); }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
   // y quedaría desincronizado. "Mi lista" siempre viaja como screen "search".
-  function closeDetail() { detailItem = null; screen = (mode === "list" ? "search" : mode); render(); emitScreen(); }
+  function closeDetail() { detailItem = null; screen = (mode === "list" ? "search" : mode); render(); emitScreen(true); }
   function detailHTML(it) {
     return heroHTML(it, true) + '<div class="detailhint">OK = ver ahora · Volver = salir</div>';
   }
@@ -522,15 +524,9 @@
     // Búsqueda / lista = grilla plana (sin cambios).
     if (mode === "home") {
       var top = Math.min(TOP, items.length);
-      var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
-      // Banner grande del ítem enfocado del carrusel (o el último visto).
-      var html = heroHTML(items[hi], focusedIndex < top && focusedIndex === hi);
-      // Dots de posición del carrusel.
-      if (top > 1) {
-        html += '<div class="hdots">';
-        for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
-        html += "</div>";
-      }
+      // Banner + dots en un contenedor estable: al mover el foco solo se
+      // regenera #herobox (ver updateFocusClasses), no la grilla entera.
+      var html = '<div id="herobox">' + heroBoxHTML() + "</div>";
       // Tira "Para ver hoy" (carrito), debajo del carrusel.
       html += todayStripHTML();
       // "Más opciones para vos": el resto, desde el ítem 5.
@@ -539,6 +535,19 @@
     } else {
       elContent.innerHTML = gridHTML(0);
     }
+  }
+
+  // Banner grande del ítem enfocado del carrusel (o el último visto) + dots.
+  function heroBoxHTML() {
+    var top = Math.min(TOP, items.length);
+    var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
+    var html = heroHTML(items[hi], focusedIndex < top && focusedIndex === hi);
+    if (top > 1) {
+      html += '<div class="hdots">';
+      for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
+      html += "</div>";
+    }
+    return html;
   }
 
   function render() {
@@ -572,9 +581,21 @@
   }
 
   function updateFocusClasses() {
-    // En home conviven héroe (.hero) + tarjetas (.card): re-render simple para
-    // reflejar el foco correctamente al cruzar entre ellos.
-    if (mode === "home") { renderContent(); return; }
+    // En home conviven héroe (.hero) + tarjetas (.card). Antes cada flecha del
+    // D-pad reconstruía TODO el home (innerHTML de héroe + hasta 60 tarjetas):
+    // lag y parpadeo en TVs de gama baja. Ahora solo se regenera el banner
+    // (#herobox) y se togglean clases en la grilla.
+    if (mode === "home") {
+      var hb = document.getElementById("herobox");
+      if (!hb) { renderContent(); return; }
+      hb.innerHTML = heroBoxHTML();
+      var top = Math.min(TOP, items.length);
+      var hcards = elContent.getElementsByClassName("card");
+      for (var j = 0; j < hcards.length; j++) {
+        hcards[j].className = "card" + (top + j === focusedIndex ? " foc" : "");
+      }
+      return;
+    }
     var cards = elContent.getElementsByClassName("card");
     for (var i = 0; i < cards.length; i++) {
       cards[i].className = "card" + (i === focusedIndex ? " foc" : "");
@@ -585,13 +606,28 @@
   function sendState(payload) {
     if (channel) { try { channel.send({ type: "broadcast", event: "state", payload: payload }); } catch (e) {} }
   }
-  function emitScreen() {
+  function emitScreenNow() {
     var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
     // todayTitles: qué está en "Para hoy" (por título, estable) para que el control
     // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
     var todayTitles = [];
     for (var i = 0; i < today.length; i++) todayTitles.push(today[i].title);
     sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles });
+  }
+  // El SCREEN viaja con items completo (hasta 60 ítems con reason larga) para
+  // ser compatible con los controles ya desplegados. En ráfagas de navegación
+  // (flecha sostenida, scroll del /control) eso serializaba y transmitía
+  // decenas de KB por pulsación: se coalescen con un debounce corto. Los
+  // cambios de lista/pantalla siguen saliendo inmediatos (emitScreen(true)).
+  var emitTimer = null;
+  function emitScreen(immediate) {
+    if (immediate) {
+      if (emitTimer) { clearTimeout(emitTimer); emitTimer = null; }
+      emitScreenNow();
+      return;
+    }
+    if (emitTimer) return; // ya hay un envío agendado; saldrá con el estado más nuevo
+    emitTimer = setTimeout(function () { emitTimer = null; emitScreenNow(); }, 150);
   }
 
   // --- Pósters vía Cinemeta (catálogo público de Stremio: con CORS y sin clave). ---
@@ -615,7 +651,12 @@
   var posterRun = 0;
   function loadPosters() {
     var run = ++posterRun; // una nueva lista cancela el llenado anterior
-    var done = 0, total = 0, loaded = 0;
+    // Cola con concurrencia limitada: antes se disparaban hasta 60 fetches a
+    // Cinemeta simultáneos (memoria/red considerables en un TV de gama baja).
+    var CONC = 5;
+    var pending = [];
+    for (var i = 0; i < items.length; i++) { if (!items[i].posterUrl) pending.push(items[i]); }
+    var total = pending.length, done = 0, loaded = 0, idx = 0;
     function onPoster(it, url) {
       if (run !== posterRun) return;
       if (url) {
@@ -634,13 +675,14 @@
       if (done >= total && loaded === 0 && total > 0 && window.__showErr) {
         window.__showErr("Carátulas 0/" + total + " — Cinemeta: " + (lastPosterErr || "sin resultados"));
       }
+      next();
     }
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i];
-      if (it.posterUrl) continue;
-      total++;
-      (function (item) { cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); }); })(it);
+    function next() {
+      if (run !== posterRun || idx >= pending.length) return;
+      var item = pending[idx++];
+      cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
     }
+    for (var k = 0; k < CONC && k < pending.length; k++) next();
   }
 
   // --- Acciones ---
@@ -675,7 +717,7 @@
         homeRetryDelay = 4000;
         if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; }
         render();
-        emitScreen();
+        emitScreen(true);
         loadPosters();
         autoDry = false;
         autoFill();
@@ -714,14 +756,14 @@
     items = [];
     focusedIndex = 0;
     render();
-    emitScreen();
+    emitScreen(true);
     autoDry = false;
     postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked })
       .then(function (data) {
         loading = false;
         if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; }
         render();
-        emitScreen();
+        emitScreen(true);
         loadPosters();
         autoFill();
       })
@@ -775,7 +817,7 @@
         }
         if (added === 0) autoDry = true; // no hay más novedades: cortar el loop
         render();
-        emitScreen();
+        emitScreen(true);
         loadPosters();
         autoFill();
       })
@@ -841,7 +883,7 @@
     items.splice(idx, 1);
     if (focusedIndex >= items.length) focusedIndex = Math.max(0, items.length - 1);
     render();
-    emitScreen();
+    emitScreen(true);
   }
 
   function snapshot() {
@@ -865,7 +907,7 @@
     items = assignIds(listItems || [], 0); // conserva section "Mi lista"
     focusedIndex = 0;
     render();
-    emitScreen();
+    emitScreen(true);
     loadPosters();
   }
 
@@ -879,7 +921,7 @@
     lastDisliked = s.lastDisliked || [];
     focusedIndex = Math.min(s.focusedIndex || 0, Math.max(0, items.length - 1));
     render();
-    emitScreen();
+    emitScreen(true);
   }
 
   function play(mediaId) {
@@ -966,7 +1008,7 @@
       setBadge("Teléfono vinculado", "on");
       sendState({ type: "PAIRED" });
       render();
-      emitScreen(); // el home ya está precargado: mandárselo al teléfono ya
+      emitScreen(true); // el home ya está precargado: mandárselo al teléfono ya
       loadHome();
     } else if (!present && paired) {
       paired = false;
