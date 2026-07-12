@@ -1,8 +1,38 @@
 # Cinéfilo Landing
 
-Landing simple con la estética de Cinéfilo para descargar las apps (TV y celular)
-y abrir el control remoto. Pensada para mandarle el link a friends & family: cada
-uno entra, ve la última versión de cada app y la baja por botón directo o QR.
+Landing de descarga. Tiene **un solo mensaje**: bajate la app del celular (botón
+grande + QR si entrás desde una compu). Debajo, en segundo plano, están los pasos
+para instalar la app de TV.
+
+## Por qué la TV no tiene QR
+
+Los televisores no tienen cámara (no pueden escanear un QR) y los Android TV /
+Google TV **no reciben archivos por Bluetooth** (no implementan el perfil OPP), ni
+se les puede empujar un APK por red sin tener ya una app receptora instalada. El
+único camino real de sideload es **tipear una URL corta con el control remoto** en
+la app *Downloader*. Por eso `server.mjs` expone atajos que redirigen (302) al APK
+del manifest:
+
+| Atajo | Va a |
+|---|---|
+| `/tv` | último APK de la app de TV |
+| `/app` (`/android`) | último APK de la app de celular |
+
+### El código de Downloader (evita tipear la URL)
+
+Tipear `cinefilo-xxx-production.up.railway.app/tv` con un control remoto es una
+tortura. Downloader acepta además un **código numérico** de
+[go.aftvnews.com](https://go.aftvnews.com/): generás uno **una sola vez** apuntando
+a `https://<esta-landing>/tv` y lo ponés en `VITE_TV_DOWNLOADER_CODE`. La landing
+pasa a mostrar el número en vez de la URL, y el usuario tipea solo dígitos.
+
+Como `/tv` siempre redirige al último APK del manifest, el código **no hay que
+regenerarlo en cada release**. Si algún día hay dominio corto propio, la landing
+muestra sola su nuevo hostname (usa `window.location.host`).
+
+El camino verdaderamente fácil a futuro es **publicar la app de TV en Google Play**:
+ahí el usuario la instala desde el Play Store del celular eligiendo su televisor,
+sin tipear nada.
 
 Es una SPA estática (Vite + React + Tailwind, mismo stack que `apps/web-control`).
 Se despliega como **servicio Railway propio** y lee un `manifest.json` de builds

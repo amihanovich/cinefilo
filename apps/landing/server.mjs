@@ -1,6 +1,13 @@
 // Servidor estático mínimo para servir la landing en Railway (o cualquier host
 // Node). Sirve dist/ y hace fallback a index.html para el ruteo SPA. Sin
 // dependencias: usa solo el http/fs de Node.
+//
+// Además expone atajos de descarga que redirigen al APK del manifest:
+//   /tv  → APK de la app de TV     (el usuario la tipea con el control remoto)
+//   /app → APK de la app de celular
+// La URL real del APK vive en Supabase Storage y es larguísima; estos atajos
+// son lo que hace viable el sideload en un televisor, que no tiene cámara para
+// leer un QR ni teclado para escribir una URL larga.
 
 import http from "node:http";
 import fs from "node:fs";
@@ -10,6 +17,37 @@ import { fileURLToPath } from "node:url";
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const distDir = path.join(__dirname, "dist");
 const port = parseInt(process.env.PORT || "3000", 10);
+const manifestUrl = process.env.VITE_MANIFEST_URL || process.env.MANIFEST_URL;
+
+// Atajo → app del manifest.
+const SHORTCUTS = {
+  "/tv": "tv",
+  "/tv.apk": "tv",
+  "/app": "mobile-android",
+  "/app.apk": "mobile-android",
+  "/android": "mobile-android",
+};
+
+// El manifest cambia solo cuando se publica una build: alcanza con un cache
+// corto en memoria para no pegarle a Supabase en cada request.
+const MANIFEST_TTL_MS = 60_000;
+let manifestCache = { at: 0, data: null };
+
+async function apkUrlFor(appKey) {
+  if (!manifestUrl) return null;
+  const now = Date.now();
+  if (!manifestCache.data || now - manifestCache.at > MANIFEST_TTL_MS) {
+    try {
+      const res = await fetch(manifestUrl);
+      if (!res.ok) throw new Error(`manifest ${res.status}`);
+      manifestCache = { at: now, data: await res.json() };
+    } catch (err) {
+      console.error("no se pudo leer el manifest:", err.message);
+      if (!manifestCache.data) return null; // sin cache previa, no hay a dónde ir
+    }
+  }
+  return manifestCache.data?.apps?.[appKey]?.url ?? null;
+}
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -39,8 +77,22 @@ function sendFile(res, filePath) {
 }
 
 http
-  .createServer((req, res) => {
+  .createServer(async (req, res) => {
     const urlPath = new URL(req.url, "http://localhost").pathname;
+
+    const shortcut = SHORTCUTS[urlPath.replace(/\/+$/, "").toLowerCase() || "/"];
+    if (shortcut) {
+      const url = await apkUrlFor(shortcut);
+      if (url) {
+        res.writeHead(302, { Location: url, "Cache-Control": "no-store" });
+        res.end();
+      } else {
+        res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("No hay una version publicada todavia.");
+      }
+      return;
+    }
+
     const filePath = path.join(distDir, urlPath);
 
     // Anti path traversal.
