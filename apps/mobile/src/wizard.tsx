@@ -5,7 +5,7 @@ import {
   Volume2, VolumeX, Keyboard, ChevronDown, ShoppingCart,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters, fetchAsk, warmupBackend } from "./lib/api";
+import { fetchRecommendation, fetchPosters, fetchOrb, warmupBackend } from "./lib/api";
 import { speak, stopSpeaking, isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
@@ -94,11 +94,8 @@ function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
-// ¿Es una pregunta sobre el título en pantalla (y no un pedido de recomendaciones nuevas)?
-function isDetailQuery(q: string): boolean {
-  const t = q.toLowerCase();
-  return /contame|explicame|explicá|por qu[eé]|de qu[eé] trata|sinopsis|argumento|director|reparto|elenco|cast|qui[eé]n|cu[aá]ndo sali[oó]|vale la pena|es buena|es mala|opini[oó]n|m[aá]s info|final|se parece|similar a|c[oó]mo termina|d[oó]nde se film[oó]|actores|actriz|protagonista/.test(t);
-}
+// (La heurística por regex isDetailQuery se reemplazó por /api/orb: la IA
+// infiere si es pregunta de asesor o pedido de búsqueda — ver routeCore.)
 
 // ── Componente principal ─────────────────────────────────────────────────────
 export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
@@ -144,6 +141,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
   const [agentReply, setAgentReply] = useState<string | null>(null);
+  const [thinking, setThinking] = useState(false); // Cinéfilo decidiendo/respondiendo (chat y mic)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -282,9 +280,12 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
 
       // (e) Cinéfilo explica por voz por qué eligió estas opciones (respeta el mute).
-      void speak(
-        data.cinephile_note ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`,
-      );
+      // Si detectó duda en el pedido (muletillas, "no sé..."), se atreve a UNA
+      // pregunta para afinar: se habla a continuación y queda como burbuja.
+      const note = data.cinephile_note ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`;
+      const followUp = data.clarification_needed?.trim() || null;
+      void speak(followUp ? `${note} ${followUp}` : note);
+      if (followUp) setAgentReply(followUp);
 
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
@@ -424,36 +425,54 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     if (next >= 0 && next < heroCount) navigate(next);
   };
 
+  // ── Ruteo unificado (LA LEY de la voz/chat) ───────────────────────────────
+  // Todo lo que el usuario dice o escribe pasa por acá: /api/orb infiere si es
+  // una PREGUNTA de asesor (Cinéfilo piensa y responde, sin pisar el deck) o un
+  // PEDIDO de búsqueda (rueda de plataformas + recomendaciones nuevas).
+  const routeCore = async (
+    text: string,
+  ): Promise<{ mode: "search"; query: string } | { mode: "ask"; answer: string }> => {
+    const currentItem = (cart.length > 0 ? cart : items)[currentIndex];
+    // Sin título en pantalla no hay nada que preguntar → siempre búsqueda.
+    if (screen !== "magic" || !currentItem) return { mode: "search", query: text };
+    const result = await fetchOrb({
+      transcript: text,
+      title: currentItem.title,
+      platform: currentItem.platform,
+    });
+    if (result.mode === "search") return { mode: "search", query: result.query || text };
+    track("detail_question", { title: currentItem.title });
+    return { mode: "ask", answer: result.answer };
+  };
+
+  const routeUserInput = async (text: string, source: "text" | "voice") => {
+    setThinking(true);
+    setAgentReply(null);
+    try {
+      const r = await routeCore(text);
+      if (r.mode === "search") {
+        setThinking(false);
+        const turnNumber = messages.filter((m) => m.role === "user").length + 1;
+        track("refinement_made", { turn_number: turnNumber });
+        await getReco(r.query, source);
+        return;
+      }
+      setThinking(false);
+      setAgentReply(r.answer);
+      // Si lo dijo por voz, la respuesta también se habla (asesor de viva voz).
+      if (source === "voice") void speak(r.answer);
+    } catch {
+      setThinking(false);
+      showError("No pude responder eso. Intentá de nuevo.");
+    }
+  };
+
   // ── Chat ──────────────────────────────────────────────────────────────────
   const sendChat = async () => {
     const text = chatText.trim();
-    if (!text || loading) return;
+    if (!text || loading || thinking) return;
     setChatText("");
-
-    // Pregunta sobre el título en pantalla → respuesta conversacional,
-    // SIN pisar el deck actual con recomendaciones nuevas.
-    const currentItem = (cart.length > 0 ? cart : items)[currentIndex];
-    if (screen === "magic" && currentItem && isDetailQuery(text)) {
-      setLoading(true);
-      track("detail_question", { title: currentItem.title });
-      try {
-        const { answer } = await fetchAsk({
-          title: currentItem.title,
-          platform: currentItem.platform,
-          question: text,
-        });
-        setAgentReply(answer || null);
-      } catch {
-        showError("No pude responder eso. Intentá de nuevo.");
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    const turnNumber = messages.filter((m) => m.role === "user").length + 1;
-    track("refinement_made", { turn_number: turnNumber });
-    await getReco(text, "text");
+    await routeUserInput(text, "text");
   };
 
   const toggleMic = async () => {
@@ -465,9 +484,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       micRecorderRef.current = null;
       if (blob.size < 500) return;
       try {
-        const text = await transcribe(blob);
-        if (text.trim()) setChatText(text.trim());
-      } catch { /* silencioso */ }
+        // Misma ley que el orbe: hablaste → Cinéfilo decide (pregunta o búsqueda)
+        // y actúa. Ya no es solo dictado al input.
+        const text = (await transcribe(blob)).trim();
+        if (text) await routeUserInput(text, "voice");
+        else showError("No te escuché. Probá de nuevo.");
+      } catch {
+        showError("No te escuché. Probá de nuevo.");
+      }
     } else {
       // Press-to-speak / press-to-stop: sin auto-stop por silencio, el usuario frena.
       const recorder = new VoiceRecorder();
@@ -826,16 +850,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {voiceMode && (
           <VoiceAgentOverlay
             greet={false} /* desde la Home no saluda: escucha directo */
-            /* Apenas soltás: cerramos el overlay y mostramos YA la rueda de plataformas
-               (SearchLoading). La transcripción corre por detrás; cuando llega el texto,
-               getReco actualiza la rueda con el literal y trae los resultados + TTS. */
-            onListeningStopped={() => {
-              setVoiceMode(false);
-              setSearchInfo({ query: "", platforms: platforms.length > 0 ? platforms : PLATFORMS, type: "voice" });
-              setLoading(true);
+            /* LA LEY: al frenar, el orbe pasa a "pensando" y /api/orb decide.
+               Pregunta → la respuesta se muestra y habla EN el overlay (asesor,
+               se puede seguir conversando). Pedido → getReco dispara la rueda de
+               plataformas (SearchLoading reemplaza la pantalla y el overlay se
+               desmonta solo). */
+            route={async (text) => {
+              const r = await routeCore(text);
+              if (r.mode === "search") {
+                void getReco(r.query, "voice");
+                return { mode: "search" as const };
+              }
+              setAgentReply(r.answer); // persiste como burbuja al cerrar el overlay
+              return r;
             }}
-            onTranscript={(text) => { void getReco(text, "voice"); }}
-            onError={() => { setLoading(false); setSearchInfo(null); showError("No te escuché. Probá de nuevo."); }}
             onDismiss={() => setVoiceMode(false)}
           />
         )}
@@ -903,10 +931,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {/* Buscador de texto (secundario) — colapsado por defecto, se abre con "escribir" */}
         {chatOpen && (
           <div className="shrink-0 px-5 pb-3">
-            <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "pointer-events-none")}>
+            <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", (loading || thinking) && "pointer-events-none")}>
               <button
                 onClick={() => void toggleMic()}
-                disabled={loading}
+                disabled={loading || thinking}
                 className={cn(
                   "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
                   micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
@@ -923,18 +951,30 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 value={chatText}
                 onChange={(e) => setChatText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-                placeholder={micRecording ? "Escuchando..." : loading ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
-                disabled={loading || micRecording}
+                placeholder={micRecording ? "Escuchando..." : (loading || thinking) ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
+                disabled={loading || micRecording || thinking}
                 autoFocus
                 className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
               />
               <button
                 onClick={() => void sendChat()}
-                disabled={!chatText.trim() || loading}
+                disabled={!chatText.trim() || loading || thinking}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
               >
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                {loading || thinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cinéfilo pensando (decidiendo si responde o sale a buscar) */}
+        {thinking && (
+          <div className="shrink-0 px-5 pb-3">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+              <p className="flex-1 text-[12px] leading-relaxed text-foreground/70">
+                Cinéfilo está pensando…
+              </p>
             </div>
           </div>
         )}

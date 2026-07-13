@@ -155,11 +155,23 @@ export function ControlVoiceAgent({
     <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 px-6 backdrop-blur-md">
       <button
         onClick={onDismiss}
-        className="absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition-transform active:scale-90"
+        className="absolute right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition-transform active:scale-90"
+        style={{ top: "calc(1.5rem + env(safe-area-inset-top))" }}
         aria-label="Cerrar"
       >
         <X className="h-5 w-5" />
       </button>
+
+      {/* Chip de estado de escucha — misma señal inequívoca que el VoiceAgent */}
+      {state === "listening" && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1.5 ring-1 ring-red-400/40"
+          style={{ top: "calc(1.75rem + env(safe-area-inset-top))" }}
+        >
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="text-xs font-semibold tracking-wide text-red-200">Grabando</span>
+        </div>
+      )}
 
       {centeredTitle && (
         <p className="mb-6 max-w-xs text-center text-xs uppercase tracking-wide text-white/45">
@@ -182,6 +194,10 @@ export function ControlVoiceAgent({
         ) : (
           <p className="text-sm font-medium tracking-wide text-white/75">{hintText}</p>
         )}
+        {/* Instrucción explícita del modelo de interacción (siempre visible) */}
+        <p className="mt-2 text-[11px] leading-relaxed text-white/40">
+          Tocá y soltá para hablar, tocá de nuevo para frenar.
+        </p>
       </div>
     </div>
   );

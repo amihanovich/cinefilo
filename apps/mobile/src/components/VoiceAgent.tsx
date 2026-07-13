@@ -1,8 +1,10 @@
 // VoiceAgent: overlay de voz opt-in. Se monta sobre la pantalla de cards.
-// Escucha (press-to-speak / press-to-stop) y, al soltar, transcribe y DELEGA el
-// texto al wizard vía onTranscript → getReco, que muestra la misma SearchLoading
-// (rueda de plataformas + intención inferida) que el camino de texto. El overlay
-// NO hace la recomendación ni habla el resultado: de eso se encarga getReco.
+// LEY de interacción (igual en toda la app): tocás para hablar (señal clara de
+// que escucha), tocás de nuevo para frenar. Ahí el wizard decide vía `route`:
+// - pedido de búsqueda → la rueda de plataformas (SearchLoading) reemplaza todo
+//   y este overlay se desmonta;
+// - pregunta / charla de asesor → la respuesta se muestra y se habla ACÁ, y el
+//   orbe queda listo para seguir conversando.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
@@ -12,14 +14,12 @@ import { X } from "lucide-react";
 
 type AgentState = "idle" | "listening" | "thinking" | "speaking" | "done";
 
+export type VoiceRoute = { mode: "search" } | { mode: "ask"; answer: string };
+
 interface VoiceAgentProps {
-  // Apenas soltás la voz: el wizard cierra el overlay y muestra YA la rueda de
-  // plataformas (no dejamos el orbe girando mientras transcribe).
-  onListeningStopped: () => void;
-  // Transcripción lista → getReco(text, "voice") (la rueda ya está en pantalla).
-  onTranscript: (text: string) => void;
-  // No se pudo transcribir / no se escuchó → limpiar la rueda y avisar.
-  onError: () => void;
+  // Decide el destino de lo dicho (pregunta vs búsqueda). Si devuelve "search",
+  // el wizard ya disparó la rueda y este overlay se va a desmontar solo.
+  route: (text: string) => Promise<VoiceRoute>;
   onDismiss: () => void;
   // Si es false, NO saluda por TTS: abre escuchando directo (pedido d — "Pedile a
   // Cinéfilo" desde la Home). La entrada de la app sí saluda.
@@ -31,10 +31,11 @@ const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa 
 const GREETING_SHORT = "Decime qué tenés ganas de ver.";
 let greetedThisSession = false;
 
-export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, onDismiss, greet = true }: VoiceAgentProps) {
+export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgentProps) {
   const [state, setState] = useState<AgentState>(greet ? "speaking" : "idle");
   const [volume, setVolume] = useState(0);
   const [hint, setHint] = useState("...");
+  const [answer, setAnswer] = useState<string | null>(null);
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const mountedRef = useRef(true);
 
@@ -47,6 +48,7 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
   const startListening = useCallback(async () => {
     if (!mountedRef.current) return;
     stopSpeaking();
+    setAnswer(null);
     setState("listening");
     setHint("Te escucho...");
 
@@ -110,20 +112,39 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
     recorderRef.current = null;
     if (!recorder) return;
 
-    // Cedemos YA a la rueda de plataformas: cerramos el overlay al instante y la
-    // transcripción sigue por detrás (no dejamos el orbe girando unos segundos).
-    onListeningStopped();
+    // Cinéfilo "pensando": el orbe pasa a azul mientras transcribe y decide si
+    // es una pregunta (responde acá) o un pedido (rueda de plataformas).
+    setState("thinking");
 
     try {
       const blob = await recorder.stop();
-      if (blob.size < 1000) { onError(); return; }
-      const text = await transcribe(blob);
-      if (!text.trim()) { onError(); return; }
-      onTranscript(text.trim());
+      if (blob.size < 1000) {
+        setState("idle");
+        setHint("No te escuché. Probá de nuevo.");
+        return;
+      }
+      const text = (await transcribe(blob)).trim();
+      if (!text) {
+        setState("idle");
+        setHint("No te escuché. Probá de nuevo.");
+        return;
+      }
+      const result = await route(text);
+      if (!mountedRef.current) return;
+      if (result.mode === "ask") {
+        setAnswer(result.answer);
+        setState("speaking");
+        await speak(result.answer);
+        if (mountedRef.current) setState("idle");
+      }
+      // mode "search": el wizard ya mostró la rueda; este overlay se desmonta solo.
     } catch {
-      onError();
+      if (mountedRef.current) {
+        setState("idle");
+        setHint("No pude responder eso. Probá de nuevo.");
+      }
     }
-  }, [onListeningStopped, onTranscript, onError]);
+  }, [route]);
 
   const handleOrbClick = useCallback(() => {
     if (state === "listening") {
@@ -131,7 +152,7 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
     } else if (state === "idle" || state === "done") {
       void startListening();
     } else if (state === "speaking") {
-      // Interrumpir saludo y escuchar ya
+      // Interrumpir saludo/respuesta y escuchar ya
       stopSpeaking();
       void startListening();
     }
@@ -148,8 +169,9 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
   };
 
   const hintText =
-    state === "idle" ? "Tocá el orbe para hablar"
+    state === "idle" ? (hint !== "..." && hint !== "Te escucho..." ? hint : "Tocá el orbe para hablar")
     : state === "listening" ? "Te escucho… tocá para frenar"
+    : state === "thinking" ? "Pensando…"
     : state === "speaking" ? "Escuchame..."
     : hint;
 
@@ -186,11 +208,15 @@ export function VoiceAgentOverlay({ onListeningStopped, onTranscript, onError, o
         <Orb phase={orbPhase} size="full" volume={volume} />
       </button>
 
-      {/* Estado */}
-      <div className="mt-10 max-w-xs px-6 text-center">
-        <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">
-          {hintText}
-        </p>
+      {/* Estado / respuesta del asesor */}
+      <div className="mt-10 max-h-[30vh] max-w-sm overflow-y-auto px-6 text-center">
+        {answer ? (
+          <p className="text-base leading-relaxed text-white/85">{answer}</p>
+        ) : (
+          <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">
+            {hintText}
+          </p>
+        )}
         {/* Instrucción explícita del modelo de interacción (siempre visible) */}
         <p className="mt-2 text-[11px] leading-relaxed text-white/40">
           Tocá y soltá para hablar, tocá de nuevo para frenar.

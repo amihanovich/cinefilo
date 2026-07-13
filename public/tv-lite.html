@@ -49,26 +49,29 @@
   .sec { font-family:inherit; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
-  /* === Héroe (home): la recomendación principal a lo grande === */
-  .hero { position:relative; height:44vh; min-height:260px; max-height:400px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#161619; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
+     El póster NO se estira a todo el ancho: las carátulas de Cinemeta son
+     chicas y a pantalla completa se pixelaban mucho. === */
+  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:400px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
+  /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
+  .hero .hside { position:relative; width:34%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .hero .g1 { position:absolute; inset:0; background:linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.86) 42%, rgba(14,14,16,0) 78%); }
-  .hero .g2 { position:absolute; inset:0; background:linear-gradient(to top, #0E0E10 2%, rgba(14,14,16,.15) 46%, rgba(14,14,16,0) 78%); }
-  .hero .info { position:relative; z-index:2; max-width:56%; height:100%; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 48px; }
-  .hero .htitle { font-family:inherit; font-size:44px; font-weight:600; line-height:1.05; margin:0; color:#F5F5F7; }
+  .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:11px; padding:26px 40px; }
+  .hero .htitle { font-family:inherit; font-size:34px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
   .hero .hsub { font-size:16px; color:#B4B4BC; }
-  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:16px; line-height:1.38; color:#EDEDF0; background:rgba(0,0,0,.42); border-radius:12px; padding:11px 15px;
-    display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:16px; line-height:1.38; color:#EDEDF0; background:rgba(255,255,255,.05); border-radius:12px; padding:11px 15px;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
   /* Íconos sutiles (gris minimalista): 👍/👎/Para hoy. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
-  .hbtn.ico { width:42px; height:42px; padding:0; font-size:19px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico { width:36px; height:36px; padding:0; font-size:16px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
-  .hbtn.play { padding:9px 18px; font-size:16px; color:#fff; }
+  .hbtn.play { padding:8px 16px; font-size:15px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
   .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
@@ -80,8 +83,21 @@
   .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
   .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
   .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:5px; font-size:11px; color:#9A9AA2; }
-  /* Ficha (ítem a lo grande). */
+  /* === Ficha a pantalla completa: póster grande a la izquierda + info === */
+  .detail { display:flex; gap:46px; align-items:center; min-height:calc(100vh - 210px); padding:8px 10px 24px; }
+  .detail .dposter { width:340px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
+  .dph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
+  .dph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .dph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; color:#9A9AA2; font-size:19px; font-weight:500; }
+  .detail .dinfo { flex:1; min-width:0; max-width:960px; display:flex; flex-direction:column; gap:15px; }
+  .detail .dtitle { font-family:inherit; font-size:46px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
+  .detail .dreason { margin:0; font-size:18px; line-height:1.5; color:#EDEDF0; }
+  .detail .dreason b { color:#8852E0; margin-right:6px; }
+  .detail .dsyn { margin:0; font-size:16px; line-height:1.45; color:#B4B4BC; }
+  .detail .hbtn.play { padding:10px 22px; font-size:17px; }
+  .detail .hbtn.ico { width:42px; height:42px; font-size:18px; }
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
+  .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
   .okhint { text-align:center; color:#5C5C64; font-size:13px; margin:2px 0 6px; }
 
@@ -109,20 +125,34 @@
   .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .card .det .why b { color:#8852E0; }
+  /* Guardada en "Para hoy": degradé violeta + check centrado (como la móvil). */
+  .card .csaved { position:absolute; top:0; left:0; right:0; bottom:0; z-index:3;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
+    background:linear-gradient(to top, rgba(18,9,34,.9) 0%, rgba(136,82,224,.42) 100%); }
+  .card .csaved .cchk { width:46px; height:46px; border-radius:50%; background:#8852E0; color:#fff;
+    font-size:24px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 26px rgba(0,0,0,.55); }
+  .card .csaved .ctxt { font-size:14px; font-weight:600; color:#EDEDF0; letter-spacing:.02em; }
   .center { text-align:center; color:#9A9AA2; font-size:21px; padding:60px 20px; }
   .more { text-align:center; color:#9A9AA2; font-size:18px; padding:20px; width:100%; }
   .hidden { display:none; }
-  /* Estado de búsqueda: barra que se llena + plataformas pasando */
-  .searching { max-width:680px; margin:12vh auto 0; text-align:center; padding:0 24px; }
-  .searching .sline { font-size:22px; color:#F5F5F7; margin-bottom:18px; }
+  /* Estado de búsqueda: misma estética que la rueda de la app móvil —
+     anillo girando con el color de la plataforma + "Buscando en X" ciclando +
+     dots de progreso, sobre un degradé violeta (no fondo negro plano). */
+  .searching { position:relative; min-height:calc(100vh - 210px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:36px; text-align:center; padding:0 24px;
+    background:radial-gradient(ellipse at center, rgba(136,82,224,.18) 0%, rgba(136,82,224,.06) 45%, rgba(14,14,16,0) 75%); }
+  .searching .sline { font-size:28px; color:#F5F5F7; max-width:1100px; line-height:1.3; margin:0; }
   .searching .sline b { color:#8852E0; }
-  .sbar { height:12px; border-radius:999px; background:rgba(255,255,255,.12); overflow:hidden; }
-  .sbar i { display:block; height:100%; width:8%; border-radius:999px; background:#8852E0; animation:sfill 7s ease-out forwards; }
-  @keyframes sfill { from { width:8%; } to { width:95%; } }
-  .schips { overflow:hidden; margin-top:22px; }
-  .schips .row { display:inline-flex; gap:10px; white-space:nowrap; animation:schipmove 9s linear infinite; }
-  .schip { border-radius:999px; padding:8px 16px; font-size:16px; font-weight:500; border:1px solid #333; }
-  @keyframes schipmove { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+  .swheel { position:relative; width:300px; height:300px; }
+  .swheel .sring { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:10px solid rgba(255,255,255,.09); }
+  .swheel .sarc { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:10px solid transparent; border-top-color:#8852E0; animation:sspin 1.1s linear infinite; }
+  @keyframes sspin { to { transform:rotate(360deg); } }
+  .swheel .sc { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+  .swheel .sc .slbl { font-size:15px; letter-spacing:.16em; text-transform:uppercase; color:#8A8A93; }
+  .swheel .sc .spl { font-size:36px; font-weight:700; color:#8852E0; max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .sdots { display:flex; align-items:center; justify-content:center; gap:10px; }
+  .sdots span { display:inline-block; height:9px; width:9px; border-radius:999px; background:rgba(255,255,255,.18); transition:all .25s; }
+  .sdots span.on { width:34px; }
 </style>
 </head>
 <body>
@@ -141,6 +171,7 @@
         <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
       </div>
       <div class="sess" id="sess">Generando sesión…</div>
+      <div class="sess" id="pairhint"></div>
     </div>
     <div class="pairgrid" id="pairgrid"></div>
   </div>
@@ -238,31 +269,60 @@
   // Star+ fue absorbido por Disney+ en LatAm (2024).
   function platLabel(p) { return p === "Star+" ? "Disney+" : p; }
 
-  // Estado de búsqueda: barra que se llena + chips de plataformas que pasan.
-  function searchingHTML() {
+  // Estado de búsqueda: rueda de plataformas (idéntica en concepto y estética a
+  // la SearchLoading de la app móvil). El ciclado lo maneja startSearchAnim.
+  function searchPlatList() {
     // Plataformas del usuario (heredadas por SET_PLATFORMS) o todas; deduplicadas
     // por label para no repetir "Disney+" (Star+ → Disney+).
     var plats = userPlatforms && userPlatforms.length ? userPlatforms : PLATFORMS;
     var seen = {}, list = [];
     for (var i = 0; i < plats.length; i++) { var l = platLabel(plats[i]); if (!seen[l]) { seen[l] = 1; list.push(plats[i]); } }
-    var chip = function (p) {
-      var col = colorFor(p);
-      return '<span class="schip" style="border-color:' + col + ';color:' + col + '">' + esc(platLabel(p)) + "</span>";
-    };
-    var row = "";
-    for (var k = 0; k < 2; k++) { for (var j = 0; j < list.length; j++) row += chip(list[j]); }
-    var names = [];
-    for (var m = 0; m < list.length && m < 4; m++) names.push(platLabel(list[m]));
-    // Literal del pedido (como el móvil).
-    var head = query ? ("Buscando <b>«" + esc(query) + "»</b>") : "Buscando lo mejor para vos";
+    return list;
+  }
+  function searchingHTML() {
+    var list = searchPlatList();
+    // Un solo texto (el topline se oculta durante la búsqueda): pedido + rueda.
+    var head = query ? ("Buscando resultados para <b>«" + esc(query) + "»</b>") : "Buscando lo mejor para vos";
+    var dots = "";
+    for (var j = 0; j < list.length; j++) dots += "<span></span>";
     return (
       '<div class="searching">' +
       '<div class="sline">' + head + "</div>" +
-      '<div class="sline" style="font-size:16px;color:#8A8A93;margin-top:-8px">en ' + esc(names.join(", ")) + "…</div>" +
-      '<div class="sbar"><i></i></div>' +
-      '<div class="schips"><span class="row">' + row + "</span></div>" +
+      '<div class="swheel"><div class="sring"></div><div class="sarc" id="sarc"></div>' +
+      '<div class="sc"><span class="slbl">Buscando en</span><span class="spl" id="spl"></span></div></div>' +
+      '<div class="sdots" id="sdots">' + dots + "</div>" +
       "</div>"
     );
+  }
+  // Cicla la plataforma del centro de la rueda (nombre + color + arco + dot).
+  // Se auto-apaga cuando la pantalla de búsqueda ya no está en el DOM.
+  var searchAnimTimer = null;
+  function stopSearchAnim() { if (searchAnimTimer) { clearInterval(searchAnimTimer); searchAnimTimer = null; } }
+  function startSearchAnim() {
+    stopSearchAnim();
+    var list = searchPlatList();
+    if (!list.length) return;
+    var i = 0;
+    function tick() {
+      var spl = document.getElementById("spl");
+      if (!spl) { stopSearchAnim(); return; }
+      var p = list[i % list.length];
+      var col = colorFor(p);
+      spl.textContent = platLabel(p);
+      spl.style.color = col;
+      var arc = document.getElementById("sarc");
+      if (arc) arc.style.borderTopColor = col;
+      var dots = document.getElementById("sdots");
+      if (dots) {
+        for (var k = 0; k < dots.children.length; k++) {
+          dots.children[k].className = k === (i % list.length) ? "on" : "";
+          dots.children[k].style.background = k === (i % list.length) ? colorFor(list[k]) : "";
+        }
+      }
+      i++;
+    }
+    tick();
+    searchAnimTimer = setInterval(tick, 850);
   }
 
   // Búsqueda directa DENTRO de cada plataforma: URL https que las apps de
@@ -335,6 +395,7 @@
   var loading = false;
   var loadingMore = false;
   var paired = false;
+  var forcePair = false; // true = mostrar la pantalla de vinculación (QR) aunque haya control vivo
   var homeLoaded = false;
   var channel = null;
 
@@ -394,16 +455,23 @@
   }
 
   // Detalle como overlay sobre la parte baja del póster (solo tarjeta enfocada).
-  // Solo la razón de Cinéfilo: un párrafo corto de impacto, sin etiqueta ni sinopsis.
+  // Muestra el "hook" (porqué ultra concreto, ej "Porque hay espadas medievales
+  // y honor en juego"); si el ítem es viejo y no lo trae, cae a la 1ª frase.
   function detHTML(it) {
-    if (!it.reason) return "";
-    return '<div class="det"><p class="why"><b>✦</b> ' + esc(shortReason(it.reason)) + "</p></div>";
+    var why = it.hook || shortReason(it.reason);
+    if (!why) return "";
+    return '<div class="det"><p class="why"><b>✦</b> ' + esc(why) + "</p></div>";
   }
 
   // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
   // cardHTML y también al recargar el póster (loadPosters), para no perder la info.
   function cardPh(it) {
     var h = posterHTML(it) + '<div class="cgrad"></div>';
+    // Guardada en "Para hoy": degradé + check encima (mismo lenguaje que la
+    // app móvil) — sensación inmediata de "quedó reservada".
+    if (isToday(it)) {
+      h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">Para hoy</span></div>';
+    }
     // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
     h += '<div class="cinfo"><span class="tt">' + esc(it.title) + "</span>";
     var sub = [];
@@ -427,8 +495,6 @@
   // "card-<id>" con las tarjetas para reusar foco/scroll.
   function heroHTML(it, foc) {
     var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
-    h += '<img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt="">';
-    h += '<div class="g1"></div><div class="g2"></div>';
     h += '<div class="info">';
     h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
@@ -449,7 +515,10 @@
     h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
     h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
-    h += "</div></div>";
+    h += "</div>"; // cierra .info
+    // Columna del póster a la derecha (acotada, con blend hacia el panel negro).
+    h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+    h += "</div>";
     return h;
   }
 
@@ -511,19 +580,42 @@
   }
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
-  function openDetail(item) { if (!item) return; detailItem = item; screen = "detail"; render(); emitScreen(true); }
+  function openDetail(item) { if (!item) return; detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true); }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
   // y quedaría desincronizado. "Mi lista" siempre viaja como screen "search".
-  function closeDetail() { detailItem = null; screen = (mode === "list" ? "search" : mode); render(); emitScreen(true); }
+  function closeDetail() { detailItem = null; actionFocus = -1; screen = (mode === "list" ? "search" : mode); render(); emitScreen(true); }
+  // Ficha a pantalla completa (ya no reusa el banner): póster grande + info
+  // completa (razón sin recorte + sinopsis) + botones navegables con ←/→.
   function detailHTML(it) {
-    return heroHTML(it, true) + '<div class="detailhint">OK = ver ahora · Volver = salir</div>';
+    var h = '<div class="detail">';
+    h += '<div class="dposter"><div class="dph">' + posterHTML(it) + "</div></div>";
+    h += '<div class="dinfo">';
+    h += '<h2 class="dtitle">' + esc(it.title) + "</h2>";
+    h += '<div class="hmeta">';
+    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    var sub = [];
+    if (it.type) sub.push(it.type);
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
+    h += "</div>";
+    if (it.reason) h += '<p class="dreason"><b>✦</b> ' + esc(it.reason) + "</p>";
+    if (it.synopsis) h += '<p class="dsyn">' + esc(it.synopsis) + "</p>";
+    var td = isToday(it);
+    h += '<div class="hactions">';
+    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += "</div>";
+    h += '<div class="detailhint">←/→ elegir · OK confirmar · Volver salir</div>';
+    h += "</div></div>";
+    return h;
   }
 
   function renderContent() {
     // Ficha abierta: mostramos el ítem elegido a lo grande (estilo banner).
     if (detailItem) { elContent.innerHTML = detailHTML(detailItem); return; }
-    if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); return; }
+    if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); startSearchAnim(); return; }
     if (items.length === 0) {
       elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
       return;
@@ -555,16 +647,29 @@
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
       html += "</div>";
     }
-    // El gesto del OK sobre tarjetas no tiene botón visible: documentarlo acá.
-    html += '<div class="okhint">OK = guardar para hoy · OK doble = abrir ficha</div>';
+    // Los gestos del remoto nativo no tienen botón visible: documentarlos acá.
+    html += '<div class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</div>';
     return html;
   }
 
   function render() {
-    if (!paired) { elPair.className = "pair"; elResults.className = "wrap hidden"; return; }
+    if (!paired || forcePair) {
+      elPair.className = "pair";
+      elResults.className = "wrap hidden";
+      // Si se llegó acá con BACK (control apagado/colgado), avisar la salida.
+      var ph = document.getElementById("pairhint");
+      if (ph) ph.textContent = paired ? "Volver = seguir viendo en la TV" : "";
+      return;
+    }
     elPair.className = "pair hidden";
     elResults.className = "wrap";
-    if (mode === "search") {
+    if (detailItem) {
+      // Ficha a pantalla completa: sin la línea instructiva de arriba (ruido).
+      elTopline.innerHTML = "";
+    } else if (loading && items.length === 0) {
+      // Buscando: la rueda ya dice "Buscando «...»" — el topline es redundante.
+      elTopline.innerHTML = "";
+    } else if (mode === "search") {
       elTopline.innerHTML = "Resultados para <b>“" + esc(query) + "”</b>";
     } else if (mode === "list") {
       var listSec = (items[0] && items[0].section) || "Mi lista";
@@ -665,7 +770,11 @@
       })
       .then(function (j) {
         var m = j && j.metas && j.metas[0];
-        cb(m && m.poster ? m.poster : null);
+        var p = m && m.poster ? String(m.poster) : null;
+        // Cinemeta suele devolver la variante "medium" de metahub (~250px de
+        // ancho): en una TV 1080p se pixela fuerte. Pedimos la "big".
+        if (p) p = p.replace("/poster/medium/", "/poster/big/");
+        cb(p);
       })
       .catch(function (e) { lastPosterErr = (e && e.message) || "fetch falló (¿CORS/red?)"; cb(null); });
   }
@@ -717,6 +826,7 @@
       if (r.type) it.type = r.type;
       if (r.posterUrl) it.posterUrl = r.posterUrl;
       if (r.synopsis) it.synopsis = r.synopsis;
+      if (r.hook) it.hook = r.hook;
       if (r.reason) it.reason = r.reason;
       if (r.section) it.section = r.section;
       out.push(it);
@@ -864,7 +974,13 @@
   }
 
   function moveFocus(dir) {
-    if (items.length === 0 || detailItem) return; // en la ficha no se navega
+    // En la ficha, ←/→ elige entre "Para hoy" (0) y "Ver en X" (1).
+    if (detailItem) {
+      if (dir === "left" && actionFocus !== 0) { actionFocus = 0; renderContent(); }
+      else if (dir === "right" && actionFocus !== 1) { actionFocus = 1; renderContent(); }
+      return;
+    }
+    if (items.length === 0) return;
     var n = focusedIndex, changed = false;
     if (mode === "home") {
       var top = Math.min(TOP, items.length);
@@ -985,6 +1101,9 @@
 
   function handleCommand(cmd) {
     if (!cmd || !cmd.type) return;
+    // Llega un comando = hay un control vivo manejando la TV: si estábamos en
+    // la pantalla de vinculación forzada, volver al contenido.
+    if (forcePair) { forcePair = false; render(); }
     if (cmd.type === "SEARCH") runSearch(cmd);
     else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
     else if (cmd.type === "LOAD_MORE") loadMore();
@@ -1008,7 +1127,12 @@
   // 1 OK = ficha. Fuera del carrito: doble OK (<400ms) = ficha; 1 OK = agregar a "Para hoy".
   var okTimer = null, okTitle = "";
   function okPress() {
-    if (detailItem) { play(detailItem.id); return; }
+    if (detailItem) {
+      // En la ficha los botones se eligen con ←/→: 0 = "Para hoy", 1 = "Ver en X".
+      if (actionFocus === 0) { toggleToday(detailItem); return; }
+      play(detailItem.id);
+      return;
+    }
     // Foco en la tira "Para ver hoy": OK abre la ficha del ítem guardado.
     if (mode === "home" && todayFocus >= 0) {
       var tit = today[todayFocus];
@@ -1048,7 +1172,18 @@
     } else if (k === 10009 || k === 8 || k === 27 || k === 4) {
       if (detailItem) { closeDetail(); }
       else if (history.length) { goBack(); }
-      else return; // home sin historial: no interceptar (que el sistema pueda salir de la app)
+      else if (forcePair) {
+        // En la pantalla de vinculación: si hay un control vivo, BACK vuelve al
+        // contenido; si no, no interceptar (que el sistema pueda salir de la app).
+        if (paired) { forcePair = false; render(); }
+        else return;
+      } else if (paired) {
+        // Salida siempre disponible: BACK en el home vuelve a la pantalla de
+        // vinculación con QR (para re-vincular si el control se apagó/colgó).
+        forcePair = true;
+        render();
+      }
+      else return; // sin control y sin ficha: no interceptar
     } else return;
     e.preventDefault();
   });
@@ -1059,6 +1194,7 @@
     var present = !!st && Object.prototype.hasOwnProperty.call(st, "control");
     if (present && !paired) {
       paired = true;
+      forcePair = false; // control nuevo vinculado: salir de la pantalla de QR
       setBadge("Teléfono vinculado", "on");
       sendState({ type: "PAIRED" });
       render();
