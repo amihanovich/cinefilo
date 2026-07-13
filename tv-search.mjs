@@ -43,6 +43,7 @@ function normalizeItem(r, section) {
     platform: String(r.platform || ""),
     type: String(r.type || ""),
     synopsis: r.synopsis ? String(r.synopsis) : undefined,
+    hook: r.hook ? String(r.hook) : undefined,
     reason: r.reason ? String(r.reason) : undefined,
   };
   if (Number.isFinite(yearNum)) item.year = yearNum;
@@ -51,17 +52,24 @@ function normalizeItem(r, section) {
 }
 
 const ITEM_SHAPE =
-  '{"title":"","platform":"","year":"","type":"Película","synopsis":"","reason":""}';
+  '{"title":"","platform":"","year":"","type":"Película","synopsis":"","hook":"","reason":""}';
 const ITEM_RULES =
   '- "platform" EXACTAMENTE una de: ' +
   PLATFORMS.join(", ") +
   '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
   '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
-  '- "reason": 2 o 3 frases (40 a 60 palabras) que enganchen y den ganas de darle play: ' +
-  "por qué encaja con lo que se busca o con el momento, qué tono/clima tiene (tenso, luminoso, " +
-  "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional). " +
-  "Cálido y conversacional en rioplatense, como un amigo cinéfilo que te la recomienda; sin spoilers " +
-  "ni frases hechas repetidas entre ítems.\n- Títulos conocidos con disponibilidad estable.";
+  '- "hook": el porqué de la recomendación en UNA frase ultra concreta y visual, ' +
+  'empezando con "Porque", máximo 8 palabras, sin punto final. Ejemplos: ' +
+  '"Porque hay persecuciones y acción en Latinoamérica", "Porque hay espadas ' +
+  'medievales y honor en juego", "Porque hay identidades duplicadas y paranoia". ' +
+  "Es lo único que se lee en la tarjeta chica: concreto, nada de frases genéricas.\n" +
+  '- "reason": 2 o 3 frases (40 a 60 palabras) que enganchen y den ganas de darle play. ' +
+  "Lo primero y central es EL PORQUÉ: conectá explícitamente con lo que se pidió o con el momento " +
+  "(nada de elogios genéricos tipo 'gran película'). Después el tono/clima (tenso, luminoso, " +
+  "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional); " +
+  "si suma, un dato de cinéfilo breve (director, época, conexión). Cálido y conversacional en rioplatense, " +
+  "como el experto del videoclub que te la recomienda a VOS; sin spoilers ni frases hechas repetidas entre ítems." +
+  "\n- Títulos conocidos con disponibilidad estable.";
 
 export async function tvSearch(query, exclude, liked, disliked) {
   if (!query || !query.trim()) return { items: [] };
