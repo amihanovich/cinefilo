@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouch
 import {
   Play, CornerDownLeft, X, Smartphone, Bookmark, Plus, Check,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+  Home as HomeIcon, Clapperboard, Eye, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
@@ -31,6 +32,16 @@ function readArr(key: string): SavedItem[] {
   }
 }
 
+function pushArr(key: string, item: SavedItem): void {
+  try {
+    const arr = readArr(key);
+    if (!arr.find((i) => i.title === item.title)) arr.unshift(item);
+    localStorage.setItem(key, JSON.stringify(arr));
+  } catch {
+    /* noop */
+  }
+}
+
 interface ControlScreenProps {
   session: string;
   onClose: () => void;
@@ -41,6 +52,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const [nowPlaying, setNowPlaying] = useState<MediaItem | null>(null);
   const [centeredId, setCenteredId] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [tvScreen, setTvScreen] = useState<string>("home");
 
@@ -137,8 +149,24 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   // Atajo "Para hoy" (reemplaza "Mi lista"): agrega/saca el ítem centrado del carrito de la TV.
   const addToday = () => { if (centeredId) send({ type: "ADD_TODAY", mediaId: centeredId }); };
 
+  // "Ya la vi": pregunta si gustó (alimenta liked/disliked del SEARCH) y saca la
+  // tarjeta de la TV.
+  const rateSeen = (liked: boolean) => {
+    const it = pendingSeen;
+    if (!it) return;
+    pushArr(liked ? LIKED_KEY : DISLIKED_KEY, {
+      title: it.title, platform: it.platform, posterUrl: it.posterUrl, year: it.year,
+    });
+    send({ type: "REMOVE", mediaId: it.id });
+    setPendingSeen(null);
+  };
+
   // ── D-pad: mueve la selección entre las tarjetas de la TV ───────────────────
-  const nav = (direction: "up" | "down" | "left" | "right") => send({ type: "NAVIGATE", direction });
+  // Modelo "arrastrás el contenido" (como el scroll del celular): la flecha /
+  // el gesto mueven la LISTA, no el cursor → se envía la dirección opuesta.
+  type Dir = "up" | "down" | "left" | "right";
+  const INVERT: Record<Dir, Dir> = { up: "down", down: "up", left: "right", right: "left" };
+  const nav = (direction: Dir) => send({ type: "NAVIGATE", direction: INVERT[direction] });
   const padStart = useRef<{ x: number; y: number } | null>(null);
   const onPadTouchStart = (e: ReactTouchEvent) => {
     const t = e.touches[0];
@@ -213,20 +241,43 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </button>
       </div>
 
+      {/* Atajos de vista: volver al inicio de la TV / ver el carrito con cartel */}
+      <div className="flex shrink-0 gap-2 px-4 pt-3">
+        <button
+          onClick={() => send({ type: "HOME" })}
+          disabled={!paired}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
+        >
+          <HomeIcon className="h-4 w-4" /> Inicio
+        </button>
+        <button
+          onClick={() => send({ type: "SHOW_TODAY" })}
+          disabled={!paired || todayTitles.length === 0}
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
+        >
+          <Clapperboard className="h-4 w-4" /> Candidatas
+          {todayTitles.length > 0 && (
+            <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">
+              {todayTitles.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* D-pad direccional */}
       <div
         className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-4"
         onTouchStart={onPadTouchStart}
         onTouchEnd={onPadTouchEnd}
       >
-        <div className="grid grid-cols-3 grid-rows-3 gap-2.5" style={{ width: "min(80vw, 300px)" }}>
+        <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(62vw, 230px)" }}>
           <div />
           <button onClick={() => nav("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
-            <ChevronUp className="h-7 w-7" />
+            <ChevronUp className="h-6 w-6" />
           </button>
           <div />
           <button onClick={() => nav("left")} disabled={!paired} aria-label="Izquierda" className={padBtn}>
-            <ChevronLeft className="h-7 w-7" />
+            <ChevronLeft className="h-6 w-6" />
           </button>
           <button
             onClick={okPress}
@@ -237,11 +288,11 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             OK
           </button>
           <button onClick={() => nav("right")} disabled={!paired} aria-label="Derecha" className={padBtn}>
-            <ChevronRight className="h-7 w-7" />
+            <ChevronRight className="h-6 w-6" />
           </button>
           <div />
           <button onClick={() => nav("down")} disabled={!paired} aria-label="Abajo" className={padBtn}>
-            <ChevronDown className="h-7 w-7" />
+            <ChevronDown className="h-6 w-6" />
           </button>
           <div />
         </div>
@@ -250,30 +301,71 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </p>
 
         {/* Acciones */}
-        <div className="flex w-full max-w-xs items-stretch gap-2">
+        <div className="flex w-full max-w-sm items-stretch gap-2">
           <button
             onClick={() => send({ type: "BACK" })}
             disabled={!paired}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-3 text-sm font-semibold text-foreground active:scale-95 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-1 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
           >
-            <CornerDownLeft className="h-5 w-5" /> Volver
+            <CornerDownLeft className="h-4 w-4" /> Volver
           </button>
           <button
             onClick={() => previewItem && send({ type: "PLAY", mediaId: previewItem.id })}
             disabled={!paired || !previewItem}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-primary py-3 text-sm font-semibold text-white active:scale-95 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-1 rounded-2xl bg-primary py-2.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-40"
           >
-            <Play className="h-5 w-5" /> Play
+            <Play className="h-4 w-4" /> Play
           </button>
           <button
             onClick={addToday}
             disabled={!paired || !centeredId}
-            className={"flex flex-1 items-center justify-center gap-1.5 rounded-2xl border py-3 text-sm font-semibold active:scale-95 disabled:opacity-40 " + (inToday(centered) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
+            className={"flex flex-1 items-center justify-center gap-1 rounded-2xl border py-2.5 text-xs font-semibold active:scale-95 disabled:opacity-40 " + (inToday(centered) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
           >
-            {inToday(centered) ? <Check className="h-5 w-5" /> : <Plus className="h-5 w-5" />} Para hoy
+            {inToday(centered) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />} Para hoy
+          </button>
+          <button
+            onClick={() => centered && setPendingSeen(centered)}
+            disabled={!paired || !centered}
+            className="flex flex-1 items-center justify-center gap-1 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
+          >
+            <Eye className="h-4 w-4" /> Ya la vi
           </button>
         </div>
       </div>
+
+      {/* Hoja "¿Te gustó?" — marca vista, alimenta el gusto y saca la tarjeta */}
+      {pendingSeen && (
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={() => setPendingSeen(null)}>
+          <div
+            className="w-full rounded-t-3xl border-t border-border bg-background p-5 pb-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-center text-[11px] uppercase tracking-wide text-muted-foreground">Marcar como vista</p>
+            <p className="mb-1 mt-1 text-center text-lg font-bold text-foreground">{pendingSeen.title}</p>
+            <p className="mb-4 text-center text-sm text-muted-foreground">¿Te gustó? Nos ayuda a recomendarte mejor.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => rateSeen(false)}
+                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl border border-border text-sm font-semibold text-foreground active:scale-95"
+              >
+                <ThumbsDown className="h-5 w-5" /> No me gustó
+              </button>
+              <button
+                onClick={() => rateSeen(true)}
+                className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-white active:scale-95"
+              >
+                <ThumbsUp className="h-5 w-5" /> Me gustó
+              </button>
+            </div>
+            <button
+              onClick={() => setPendingSeen(null)}
+              className="mt-3 w-full py-2 text-sm text-muted-foreground"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Cinéfilo AI (voz): buscar / preguntar por lo que está enfocado en la TV */}
       {voiceOpen && (

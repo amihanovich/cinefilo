@@ -55,8 +55,9 @@ export function ControlVoiceAgent({
         });
         if (!mountedRef.current) return;
         if (result.mode === "search") {
-          // Quiere algo nuevo → búsqueda en la TV y cerramos el orbe.
-          onSearch(result.query || q);
+          // Quiere algo nuevo → búsqueda en la TV con el LITERAL de lo que dijo
+          // (la TV lo muestra en la rueda; no la query refinada del orb).
+          onSearch(q);
           onDismiss();
           return;
         }

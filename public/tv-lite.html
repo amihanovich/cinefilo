@@ -94,8 +94,9 @@
   .detail .dreason { margin:0; font-size:18px; line-height:1.5; color:#EDEDF0; }
   .detail .dreason b { color:#8852E0; margin-right:6px; }
   .detail .dsyn { margin:0; font-size:16px; line-height:1.45; color:#B4B4BC; }
-  .detail .hbtn.play { padding:10px 22px; font-size:17px; }
-  .detail .hbtn.ico { width:42px; height:42px; font-size:18px; }
+  .detail .hbtn.play { padding:8px 16px; font-size:15px; }
+  .detail .hbtn.ico { width:36px; height:36px; font-size:16px; }
+  .detail .hactions { gap:12px; }
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
@@ -141,15 +142,15 @@
      dots de progreso, sobre un degradé violeta (no fondo negro plano). */
   .searching { position:relative; min-height:calc(100vh - 210px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:36px; text-align:center; padding:0 24px;
     background:radial-gradient(ellipse at center, rgba(136,82,224,.18) 0%, rgba(136,82,224,.06) 45%, rgba(14,14,16,0) 75%); }
-  .searching .sline { font-size:28px; color:#F5F5F7; max-width:1100px; line-height:1.3; margin:0; }
+  .searching .sline { font-size:24px; color:#F5F5F7; max-width:1000px; line-height:1.3; margin:0; }
   .searching .sline b { color:#8852E0; }
-  .swheel { position:relative; width:300px; height:300px; }
-  .swheel .sring { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:10px solid rgba(255,255,255,.09); }
-  .swheel .sarc { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:10px solid transparent; border-top-color:#8852E0; animation:sspin 1.1s linear infinite; }
+  .swheel { position:relative; width:240px; height:240px; }
+  .swheel .sring { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:8px solid rgba(255,255,255,.09); }
+  .swheel .sarc { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:8px solid transparent; border-top-color:#8852E0; animation:sspin 1.1s linear infinite; }
   @keyframes sspin { to { transform:rotate(360deg); } }
   .swheel .sc { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
-  .swheel .sc .slbl { font-size:15px; letter-spacing:.16em; text-transform:uppercase; color:#8A8A93; }
-  .swheel .sc .spl { font-size:36px; font-weight:700; color:#8852E0; max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .swheel .sc .slbl { font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#8A8A93; }
+  .swheel .sc .spl { font-size:28px; font-weight:700; color:#8852E0; max-width:195px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .sdots { display:flex; align-items:center; justify-content:center; gap:10px; }
   .sdots span { display:inline-block; height:9px; width:9px; border-radius:999px; background:rgba(255,255,255,.18); transition:all .25s; }
   .sdots span.on { width:34px; }
@@ -613,17 +614,19 @@
       elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
       return;
     }
-    // Home = carrusel de 5 grandes (arriba) + "más opciones" (grilla debajo).
-    // Búsqueda / lista = grilla plana (sin cambios).
-    if (mode === "home") {
+    // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
+    // principales resultados merecen la misma jerarquía que el home. Solo las
+    // listas ("Mi lista" / "Candidatas para hoy") quedan como grilla plana.
+    if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       // Banner + dots en un contenedor estable: al mover el foco solo se
       // regenera #herobox (ver updateFocusClasses), no la grilla entera.
       var html = '<div id="herobox">' + heroBoxHTML() + "</div>";
       // Tira "Para ver hoy" (carrito), debajo del carrusel.
       html += todayStripHTML();
-      // "Más opciones para vos": el resto, desde el ítem 5.
-      if (items.length > top) html += '<h3 class="sec">Más opciones para vos</h3>' + cardsGridHTML(top);
+      // El resto, desde el ítem 5.
+      var secTitle = mode === "search" ? "Más resultados" : "Más opciones para vos";
+      if (items.length > top) html += '<h3 class="sec">' + secTitle + "</h3>" + cardsGridHTML(top);
       elContent.innerHTML = html;
     } else {
       elContent.innerHTML = gridHTML(0);
@@ -668,7 +671,9 @@
       var listSec = (items[0] && items[0].section) || "Mi lista";
       var listMsg = listSec === "Ya vistas"
         ? " — películas y series que ya viste."
-        : " — tus películas y series guardadas.";
+        : listSec === "Candidatas para hoy"
+          ? " — tus elegidas para esta noche."
+          : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
       elTopline.innerHTML = '<span class="hint">Pedile a Cinéfilo desde tu App o Web Control</span> — buscá y controlá desde el teléfono.';
@@ -689,11 +694,11 @@
   }
 
   function updateFocusClasses() {
-    // En home conviven héroe (.hero) + tarjetas (.card). Antes cada flecha del
-    // D-pad reconstruía TODO el home (innerHTML de héroe + hasta 60 tarjetas):
-    // lag y parpadeo en TVs de gama baja. Ahora solo se regenera el banner
-    // (#herobox) y se togglean clases en la grilla.
-    if (mode === "home") {
+    // En home y búsqueda conviven héroe (.hero) + tarjetas (.card). Antes cada
+    // flecha del D-pad reconstruía TODO (innerHTML de héroe + hasta 60
+    // tarjetas): lag y parpadeo en TVs de gama baja. Ahora solo se regenera el
+    // banner (#herobox) y se togglean clases en la grilla.
+    if (mode === "home" || mode === "search") {
       var hb = document.getElementById("herobox");
       if (!hb) { renderContent(); return; }
       hb.innerHTML = heroBoxHTML();
@@ -885,7 +890,10 @@
     postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked })
       .then(function (data) {
         loading = false;
-        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; }
+        if (data && data.items) {
+          items = assignIds(data.items, 0);
+          focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1;
+        }
         render();
         emitScreen(true);
         loadPosters();
@@ -973,7 +981,7 @@
     }
     if (items.length === 0) return;
     var n = focusedIndex, changed = false;
-    if (mode === "home") {
+    if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       if (todayFocus >= 0) {
         // En la tira "Para ver hoy" (carrito): ←/→ entre tiles; ↑ a los botones
@@ -1063,6 +1071,32 @@
     loadPosters();
   }
 
+  // Atajo del control: mostrar el carrito de la TV como lista con cartel claro.
+  function showToday() {
+    if (!today.length) return;
+    var li = [];
+    for (var i = 0; i < today.length; i++) {
+      var t = today[i];
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Candidatas para hoy" });
+    }
+    showList(li);
+  }
+
+  // Atajo del control: volver al home de recomendaciones desde cualquier lado.
+  function goHome() {
+    detailItem = null;
+    history = [];
+    query = "";
+    mode = "home";
+    screen = "home";
+    actionFocus = -1;
+    todayFocus = -1;
+    loading = false;
+    stopSearchAnim();
+    homeLoaded = false; // fuerza re-carga (el server la tiene cacheada: es rápida)
+    loadHome();
+  }
+
   function goBack() {
     if (history.length === 0) return; // no hay a dónde volver (pantalla inicial)
     var s = history.pop();
@@ -1103,6 +1137,8 @@
     else if (cmd.type === "PLAY") play(cmd.mediaId);
     else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
+    else if (cmd.type === "HOME") goHome();
+    else if (cmd.type === "SHOW_TODAY") showToday();
     else if (cmd.type === "BACK") { if (detailItem) closeDetail(); else goBack(); }
     else if (cmd.type === "ADD_TODAY") { var ta = itemById(cmd.mediaId); if (ta) toggleToday(ta); }
     else if (cmd.type === "OPEN_DETAIL") { var td2 = itemById(cmd.mediaId); if (td2) openDetail(td2); }
@@ -1125,7 +1161,7 @@
       return;
     }
     // Foco en la tira "Para ver hoy": OK abre la ficha del ítem guardado.
-    if (mode === "home" && todayFocus >= 0) {
+    if ((mode === "home" || mode === "search") && todayFocus >= 0) {
       var tit = today[todayFocus];
       if (tit) openDetail(tit);
       return;
@@ -1133,7 +1169,7 @@
     var it = items[focusedIndex];
     if (!it) return;
     // Si el foco está en un botón del banner, activarlo (👍/👎/Para hoy/Ver en X).
-    if (mode === "home" && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
+    if ((mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
       if (actionFocus === 0) toggleToday(it);
       else if (actionFocus === 1) play(it.id);
       return;
