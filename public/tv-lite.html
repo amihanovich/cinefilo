@@ -502,7 +502,10 @@
     var h = posterHTML(it) + '<div class="cgrad"></div>';
     // Guardada en "Para hoy": degradé + check encima (mismo lenguaje que la
     // app móvil) — sensación inmediata de "quedó reservada".
-    if (isToday(it)) {
+    // PERO no en la lista "Candidatas para hoy": ahí TODAS están guardadas, así
+    // que la marca no informa nada y el degradé violeta + el tilde solo tapan la
+    // carátula. Se muestra solo donde distingue (grilla general, "Mi lista").
+    if (isToday(it) && it.section !== "Candidatas para hoy") {
       h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">Para hoy</span></div>';
     }
     // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
