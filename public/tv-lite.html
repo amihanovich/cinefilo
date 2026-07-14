@@ -1197,7 +1197,14 @@
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
     else if (cmd.type === "HOME") goHome();
     else if (cmd.type === "SHOW_TODAY") showToday();
-    else if (cmd.type === "BACK") { if (detailItem) closeDetail(); else goBack(); }
+    // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si no
+    // hay ficha ni historial, vuelve a la pantalla de vinculación (QR). Antes
+    // solo hacía goBack() y desde el control no había forma de volver al pairing.
+    else if (cmd.type === "BACK") {
+      if (detailItem) closeDetail();
+      else if (history.length) goBack();
+      else if (paired) { forcePair = true; render(); }
+    }
     else if (cmd.type === "ADD_TODAY") { var ta = itemById(cmd.mediaId); if (ta) toggleToday(ta); }
     else if (cmd.type === "OPEN_DETAIL") { var td2 = itemById(cmd.mediaId); if (td2) openDetail(td2); }
     else if (cmd.type === "SET_PLATFORMS") {
