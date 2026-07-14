@@ -1044,8 +1044,13 @@
     // igual que en la app); ↑/↓ elige el botón "Para hoy" (0) / "Ver en X" (1).
     if (detailItem) {
       if (dir === "up" || dir === "down") {
-        var naf = (dir === "up") ? 0 : 1;
-        if (naf !== actionFocus) { actionFocus = naf; render(); }
+        // ALTERNA entre los 2 botones en vez de mapear ↑=0 / ↓=1. Clave: el
+        // control del teléfono INVIERTE las direcciones (modelo "arrastrás el
+        // contenido": INVERT[up]=down). Con el mapeo absoluto, apretar ↑ para el
+        // "+" llegaba como "down" y seleccionaba "Ver en X" → OK disparaba play()
+        // y abría el browser de la TV. Alternando, la inversión deja de importar.
+        actionFocus = (actionFocus === 0) ? 1 : 0;
+        render();
         return;
       }
       var sib = detailSiblings();
