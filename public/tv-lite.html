@@ -532,10 +532,10 @@
     var h = posterHTML(it) + '<div class="cgrad"></div>';
     // Guardada en "Para hoy": degradé + check encima (mismo lenguaje que la
     // app móvil) — sensación inmediata de "quedó reservada".
-    // PERO no en la lista "Candidatas para hoy": ahí TODAS están guardadas, así
+    // PERO no en la lista "Tus marcadas para hoy": ahí TODAS están guardadas, así
     // que la marca no informa nada y el degradé violeta + el tilde solo tapan la
     // carátula. Se muestra solo donde distingue (grilla general, "Mi lista").
-    if (isToday(it) && it.section !== "Candidatas para hoy") {
+    if (isToday(it) && it.section !== "Tus marcadas para hoy") {
       h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">Para hoy</span></div>';
     }
     // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
@@ -639,7 +639,7 @@
   // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
   function todayStripHTML() {
     if (!today.length) return "";
-    var h = '<h3 class="sec">Para ver hoy</h3><div class="todayrow">';
+    var h = '<h3 class="sec">Tus marcadas para hoy</h3><div class="todayrow">';
     for (var i = 0; i < today.length; i++) {
       var it = today[i];
       var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
@@ -703,7 +703,7 @@
     }
     // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
     // principales resultados merecen la misma jerarquía que el home. Solo las
-    // listas ("Mi lista" / "Candidatas para hoy") quedan como grilla plana.
+    // listas ("Mi lista" / "Tus marcadas para hoy") quedan como grilla plana.
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       // Banner + dots en un contenedor estable: al mover el foco solo se
@@ -732,7 +732,7 @@
     html += '<div class="hdots' + (onCands ? " act" : "") + '">';
     if (top > 1) {
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
-      html += '<span class="hcount">Candidata ' + (hi + 1) + " de " + top +
+      html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
               (onCands ? " · ← → para cambiar" : "") + "</span>";
     }
     html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</span>';
@@ -763,7 +763,7 @@
       var listSec = (items[0] && items[0].section) || "Mi lista";
       var listMsg = listSec === "Ya vistas"
         ? " — películas y series que ya viste."
-        : listSec === "Candidatas para hoy"
+        : listSec === "Tus marcadas para hoy"
           ? " — tus elegidas para esta noche."
           : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
@@ -1196,7 +1196,7 @@
     var li = [];
     for (var i = 0; i < today.length; i++) {
       var t = today[i];
-      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Candidatas para hoy" });
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Tus marcadas para hoy" });
     }
     showList(li);
   }

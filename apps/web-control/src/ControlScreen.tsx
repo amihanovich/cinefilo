@@ -318,7 +318,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
           disabled={!paired || todayTitles.length === 0}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
         >
-          <Clapperboard className="h-4 w-4" /> Candidatas
+          <Clapperboard className="h-4 w-4" /> Marcadas
           {todayTitles.length > 0 && (
             <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">
               {todayTitles.length}
