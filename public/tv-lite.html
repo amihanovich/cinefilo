@@ -58,7 +58,7 @@
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:12px 0 7px; color:#F5F5F7; }
+  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:7px 0 5px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
@@ -98,7 +98,7 @@
   .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
-  .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:8px 0 3px; }
+  .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
   /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
      que estás parado ahí y que con ←/→ cambiás de candidata. */
   .hcount { margin-left:10px; font-size:12px; color:#6A6A72; transition:color .18s; }
@@ -134,7 +134,7 @@
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
-  .okhint { text-align:center; color:#5C5C64; font-size:12px; margin:1px 0 4px; }
+  .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -683,19 +683,18 @@
     var top = Math.min(TOP, items.length);
     var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
     var html = heroHTML(items[hi], todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
+    // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
+    // ocupaba una línea entera propia y le robaba alto al "Para ver hoy", que
+    // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
+    var onCands = (todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
+    html += '<div class="hdots' + (onCands ? " act" : "") + '">';
     if (top > 1) {
-      // ¿El foco está parado en las candidatas (el carrusel del banner)? Si sí,
-      // encendemos el indicador y decimos explícitamente que ←/→ las recorre:
-      // antes no había forma de darse cuenta de que estabas ahí.
-      var onCands = (todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
-      html += '<div class="hdots' + (onCands ? " act" : "") + '">';
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
       html += '<span class="hcount">Candidata ' + (hi + 1) + " de " + top +
               (onCands ? " · ← → para cambiar" : "") + "</span>";
-      html += "</div>";
     }
-    // Los gestos del remoto nativo no tienen botón visible: documentarlos acá.
-    html += '<div class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</div>';
+    html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</span>';
+    html += "</div>";
     return html;
   }
 
