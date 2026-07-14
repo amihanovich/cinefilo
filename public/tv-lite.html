@@ -656,7 +656,8 @@
     if (it.synopsis) h += '<p class="dsyn">' + esc(it.synopsis) + "</p>";
     var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
+         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
@@ -1044,7 +1045,7 @@
     if (detailItem) {
       if (dir === "up" || dir === "down") {
         var naf = (dir === "up") ? 0 : 1;
-        if (naf !== actionFocus) { actionFocus = naf; renderContent(); }
+        if (naf !== actionFocus) { actionFocus = naf; render(); }
         return;
       }
       var sib = detailSiblings();
