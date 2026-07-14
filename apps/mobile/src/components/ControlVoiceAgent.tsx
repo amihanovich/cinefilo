@@ -106,7 +106,12 @@ export function ControlVoiceAgent({
         ? `Estás viendo ${centeredTitle}. Preguntame lo que quieras sobre esta, o pedime que te busque algo nuevo.`
         : "Decime qué querés ver, o preguntame sobre lo que estás mirando.";
       await speak(text);
-      if (mountedRef.current) await startListening();
+      // NO arranca a grabar solo. Antes encadenaba startListening() acá y el mic
+      // "se activaba solo" apenas terminaba el saludo, pisándose con la voz y
+      // sintiéndose errático. Ahora queda en reposo: press-to-speak puro, igual
+      // que la home. Tocás el orbe -> escucha; lo volvés a tocar -> frena y recién
+      // ahí piensa (responde o busca).
+      if (mountedRef.current) setState("idle");
     };
     void greet();
     return () => {
@@ -139,10 +144,11 @@ export function ControlVoiceAgent({
   }, [handleTranscript]);
 
   const handleOrbClick = useCallback(() => {
-    if (state === "listening") void stopListeningManual();
-    else if (state === "idle") void startListening();
+    if (state === "thinking") return; // procesando: ignorar taps (evita reentrar)
+    if (state === "listening") void stopListeningManual(); // 2º tap: frena y procesa
+    else if (state === "idle") void startListening();      // 1er tap: empieza a escuchar
     else if (state === "speaking") {
-      stopSpeaking();
+      stopSpeaking(); // te la puedo cortar y hablarle encima
       void startListening();
     }
   }, [state, startListening, stopListeningManual]);
