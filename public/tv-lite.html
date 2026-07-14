@@ -69,15 +69,23 @@
   .hero { position:relative; display:flex; height:37vh; min-height:214px; max-height:330px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
-  .hero .hside { position:relative; width:34%; flex:0 0 auto; overflow:hidden; }
+  /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
+     así la razón llega más a la derecha y entra en menos líneas. */
+  .hero .hside { position:relative; width:30%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
   .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:18px 30px; }
   .hero .htitle { font-family:inherit; font-size:29px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
   .hero .hsub { font-size:14px; color:#B4B4BC; }
-  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:14px; line-height:1.35; color:#EDEDF0; background:rgba(255,255,255,.05); border-radius:12px; padding:8px 12px;
-    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  /* La razón va como TEXTO PELADO sobre el hero (sin caja gris): el degradado
+     de la izquierda ya la hace legible y el text-shadow la asegura sobre la
+     imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
+     flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
+     ni max-width gana ancho y entra en 3 líneas cómodas. */
+  .hero .hreason { margin:2px 0 0; font-size:14px; line-height:1.4; color:#EDEDF0; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 12px rgba(0,0,0,.5);
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
