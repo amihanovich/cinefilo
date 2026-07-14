@@ -418,6 +418,8 @@
   var query = "";
   var mode = "home"; // "home" | "search" | "list"
   var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
+  var detailScope = "grid"; // de qué lista salió la ficha: cands | grid | today | list
+                            // (define entre qué ítems se mueve con ←/→ adentro de la ficha)
   var TODAY_KEY = "cinefilo:tv:today";
   var today = loadToday(); // ítems en "Para hoy" (carrito de la TV, persistido en la sesión)
   var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Para hoy", 1 = "Ver en X"
@@ -619,6 +621,17 @@
   }
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
+  // Ítems entre los que se navega con ←/→ DENTRO de la ficha: los del mismo
+  // contexto del que la abriste (candidatas si zoomeaste una candidata, la
+  // grilla general si venías de ahí, el carrito si venías de "Para ver hoy").
+  function detailSiblings() {
+    if (detailScope === "today") return today;
+    if (mode !== "home" && mode !== "search") return items; // "Mi lista" / listas
+    var top = Math.min(TOP, items.length);
+    if (detailScope === "cands") return items.slice(0, top);
+    return items.slice(top);
+  }
+
   function openDetail(item) { if (!item) return; detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true); }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
@@ -646,7 +659,7 @@
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
-    h += '<div class="detailhint">←/→ elegir · OK confirmar · Volver salir</div>';
+    h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
     h += "</div></div>";
     return h;
   }
@@ -1026,10 +1039,21 @@
   }
 
   function moveFocus(dir) {
-    // En la ficha, ←/→ elige entre "Para hoy" (0) y "Ver en X" (1).
+    // En la ficha: ←/→ SE MUEVE ENTRE ÍTEMS (dentro de la lista de la que salió,
+    // igual que en la app); ↑/↓ elige el botón "Para hoy" (0) / "Ver en X" (1).
     if (detailItem) {
-      if (dir === "left" && actionFocus !== 0) { actionFocus = 0; renderContent(); }
-      else if (dir === "right" && actionFocus !== 1) { actionFocus = 1; renderContent(); }
+      if (dir === "up" || dir === "down") {
+        var naf = (dir === "up") ? 0 : 1;
+        if (naf !== actionFocus) { actionFocus = naf; renderContent(); }
+        return;
+      }
+      var sib = detailSiblings();
+      var ci = -1;
+      for (var q = 0; q < sib.length; q++) { if (sib[q].id === detailItem.id) { ci = q; break; } }
+      if (ci < 0) return;
+      var ti = (dir === "left") ? ci - 1 : ci + 1;
+      if (ti < 0 || ti >= sib.length) return; // no dar la vuelta: los extremos frenan
+      openDetail(sib[ti]); // conserva detailScope: seguís en el mismo contexto
       return;
     }
     if (items.length === 0) return;
@@ -1206,7 +1230,18 @@
       else if (paired) { forcePair = true; render(); }
     }
     else if (cmd.type === "ADD_TODAY") { var ta = itemById(cmd.mediaId); if (ta) toggleToday(ta); }
-    else if (cmd.type === "OPEN_DETAIL") { var td2 = itemById(cmd.mediaId); if (td2) openDetail(td2); }
+    else if (cmd.type === "OPEN_DETAIL") {
+      var td2 = itemById(cmd.mediaId);
+      if (td2) {
+        // Mismo criterio que el doble tap: el scope define entre qué ítems se
+        // mueve ←/→ dentro de la ficha.
+        var ix = -1;
+        for (var w = 0; w < items.length; w++) { if (items[w].id === td2.id) { ix = w; break; } }
+        if (mode !== "home" && mode !== "search") detailScope = "list";
+        else detailScope = (ix >= 0 && ix < Math.min(TOP, items.length)) ? "cands" : "grid";
+        openDetail(td2);
+      }
+    }
     else if (cmd.type === "SET_PLATFORMS") {
       // Fix: antes la TV descartaba esto → nunca heredaba las plataformas del usuario.
       if (cmd.platforms && cmd.platforms.length) userPlatforms = cmd.platforms;
@@ -1228,7 +1263,7 @@
     // Foco en la tira "Para ver hoy": OK abre la ficha del ítem guardado.
     if ((mode === "home" || mode === "search") && todayFocus >= 0) {
       var tit = today[todayFocus];
-      if (tit) openDetail(tit);
+      if (tit) { detailScope = "today"; openDetail(tit); }
       return;
     }
     var it = items[focusedIndex];
@@ -1246,6 +1281,9 @@
     //   2 taps → abrir la ficha
     if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → ficha
       clearTimeout(okTimer); okTimer = null; okTitle = "";
+      // El scope define entre qué ítems te vas a poder mover con ←/→ en la ficha.
+      if (mode !== "home" && mode !== "search") detailScope = "list";
+      else detailScope = (focusedIndex < Math.min(TOP, items.length)) ? "cands" : "grid";
       openDetail(it); return;
     }
     if (okTimer) clearTimeout(okTimer);
