@@ -19,26 +19,32 @@
   .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
   .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
 
-  /* === Landing / vinculación: 2 mitades (QR+copy | grilla de pósters) === */
+  /* === Landing / vinculación: QR protagonista | cintas de pósters de fondo ===
+     OJO con las medidas: la WebView de la TV corre con DPR 2, así que el viewport
+     CSS es 960x540 (no 1920x1080). El alto útil de .pairleft es ~465px
+     (540 - 75 del top), así que el QR no puede pasar de ~300px o se corta el
+     texto de abajo. 300px CSS = 600px reales en pantalla: se escanea a ~3 m. */
   .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
-  .pairleft { width:40%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 46px; border-right:1px solid #1E1E22; }
+  .pairleft { width:46%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:10px; padding:0 30px; border-right:1px solid #1E1E22; }
   .qrbox { align-self:flex-start; background:#fff; padding:12px; border-radius:18px; box-shadow:0 14px 44px rgba(136,82,224,.26); }
-  /* QR grande: tiene que leerse desde el sillón (~3 m) sin levantarse.
-     image-rendering:pixelated mantiene los módulos nítidos al escalar. */
-  .qrbox img { display:block; width:400px; height:400px; image-rendering:pixelated; }
-  .pairleft h1 { font-family:inherit; font-size:27px; font-weight:600; margin:4px 0 0; color:#F5F5F7; line-height:1.15; }
-  .pairleft .sub { font-size:16px; color:#B4B4BC; margin:0; max-width:420px; line-height:1.4; }
-  .taglines { margin:2px 0 0; }
-  .taglines p { margin:5px 0; font-size:14px; color:#9A9AA2; line-height:1.3; }
-  .taglines .a { color:#8852E0; font-weight:600; }
-  .sess { margin-top:4px; color:#6A6A72; font-size:13px; }
-  /* Grilla de pósters reales de tendencias, mitad derecha (estilo operadora). */
-  .pairgrid { flex:1; display:grid; grid-template-columns:repeat(4, 1fr); grid-auto-rows:1fr; gap:14px; padding:26px; }
-  .ptile { position:relative; overflow:hidden; border-radius:16px; background:#161619; box-shadow:0 12px 34px rgba(0,0,0,.55); }
-  .ptile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .ptile .cap { position:absolute; left:0; right:0; bottom:0; padding:26px 12px 10px; background:linear-gradient(to top, rgba(0,0,0,.9), transparent); }
-  .ptile .cap .tt { display:block; font-size:14px; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ptile .cap .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
+  .qrbox img { display:block; width:300px; height:300px; image-rendering:pixelated; }
+  .pairleft h1 { font-family:inherit; font-size:22px; font-weight:600; margin:2px 0 0; color:#F5F5F7; line-height:1.15; }
+  .pairleft .sub { font-size:15px; color:#B4B4BC; margin:0; max-width:340px; line-height:1.35; }
+  .sess { margin-top:2px; color:#6A6A72; font-size:13px; }
+
+  /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
+     fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
+  .ribbons { flex:1; position:relative; display:flex; gap:14px; padding:0 20px; overflow:hidden; opacity:.40;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
+            mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%); }
+  .ribbon { flex:1; display:flex; flex-direction:column; will-change:transform; animation:ribUp 48s linear infinite; }
+  /* El contenido de cada cinta va DUPLICADO, por eso -50% cierra el loop exacto.
+     El margin-bottom (en vez de gap) hace que media altura sea justo una copia. */
+  .ribbon img { display:block; width:100%; aspect-ratio:2/3; object-fit:cover; margin-bottom:14px; border-radius:14px; background:#161619; }
+  .ribbon.b { animation-name:ribDown; animation-duration:58s; }
+  .ribbon.c { animation-duration:66s; }
+  @keyframes ribUp   { from { transform:translateY(0); }      to { transform:translateY(-50%); } }
+  @keyframes ribDown { from { transform:translateY(-50%); }   to { transform:translateY(0); } }
 
   /* === Resultados / home === */
   .wrap { padding:18px 34px 44px; }
@@ -168,11 +174,11 @@
     <div class="pairleft">
       <div class="qrbox"><img id="qr" alt="QR"></div>
       <h1 class="serif">Usá tu teléfono como control</h1>
-      <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
+      <p class="sub">Escaneá el código con la cámara.</p>
       <div class="sess" id="sess">Generando sesión…</div>
       <div class="sess" id="pairhint"></div>
     </div>
-    <div class="pairgrid" id="pairgrid"></div>
+    <div class="ribbons" id="pairribbons"></div>
   </div>
 
   <div id="results" class="wrap hidden">
@@ -1285,30 +1291,58 @@
     });
   }
 
-  // Grilla de pósters reales de tendencias en la mitad derecha del landing
-  // (mismo contenido que el home). Cada tile trae carátula + "Disponible en X".
-  function buildLandingGrid() {
-    var box = document.getElementById("pairgrid");
+  // Cintas de pósters del landing: 3 columnas que suben y bajan en loop, como
+  // fondo ambiental detrás del QR. Sin títulos ni sombras al frente.
+  // Cada columna lleva su contenido DUPLICADO ([set A][set A]) para que el
+  // translateY(-50%) del CSS cierre el ciclo sin salto visible.
+  function buildLandingRibbons() {
+    var box = document.getElementById("pairribbons");
     if (!box) return;
+    var COLS = 3;
+    var cols = [];
+    for (var c = 0; c < COLS; c++) {
+      var col = document.createElement("div");
+      col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
+      box.appendChild(col);
+      cols.push(col);
+    }
     fetch("/api/tv-home")
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var list = (data && data.items) ? data.items.slice(0, 12) : [];
-        for (var i = 0; i < list.length; i++) {
-          (function (it) {
-            var tile = document.createElement("div");
-            tile.className = "ptile";
-            // Sin "Disponible en" en el landing (pedido): solo el título sobre el póster.
-            var cap = '<div class="cap"><span class="tt">' + esc(it.title) + "</span></div>";
-            tile.innerHTML = cap;
-            box.appendChild(tile);
-            cinemetaPoster(it.title, it.type, function (url) {
-              if (!url) return;
-              var img = document.createElement("img");
-              img.src = url;
-              tile.insertBefore(img, tile.firstChild);
-            });
-          })(list[i]);
+        var byCol = [];
+        for (var c2 = 0; c2 < COLS; c2++) byCol.push([]);
+        for (var i = 0; i < list.length; i++) byCol[i % COLS].push(list[i]);
+
+        for (var c3 = 0; c3 < COLS; c3++) {
+          (function (col, items) {
+            var pairs = [];
+            // Primera copia (set A), en orden.
+            for (var k = 0; k < items.length; k++) {
+              var a = document.createElement("img");
+              a.alt = "";
+              col.appendChild(a);
+              pairs.push({ a: a, b: null });
+            }
+            // Segunda copia (set B), misma secuencia.
+            for (var k2 = 0; k2 < items.length; k2++) {
+              var b = document.createElement("img");
+              b.alt = "";
+              col.appendChild(b);
+              pairs[k2].b = b;
+            }
+            // El póster se espeja en las dos copias; si no hay, se sacan ambas
+            // (así las dos mitades siguen midiendo igual y el loop no se corre).
+            for (var k3 = 0; k3 < items.length; k3++) {
+              (function (it, p) {
+                cinemetaPoster(it.title, it.type, function (url) {
+                  if (!url) { p.a.remove(); p.b.remove(); return; }
+                  p.a.src = url;
+                  p.b.src = url;
+                });
+              })(items[k3], pairs[k3]);
+            }
+          })(cols[c3], byCol[c3]);
         }
       })
       .catch(function () {});
@@ -1316,7 +1350,7 @@
 
   render();
   connect();
-  buildLandingGrid();
+  buildLandingRibbons();
   // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
   // vincule, las películas aparecen al instante en vez de recién pedirse.
   loadHome();
