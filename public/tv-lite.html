@@ -23,7 +23,9 @@
   .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
   .pairleft { width:40%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 46px; border-right:1px solid #1E1E22; }
   .qrbox { align-self:flex-start; background:#fff; padding:12px; border-radius:18px; box-shadow:0 14px 44px rgba(136,82,224,.26); }
-  .qrbox img { display:block; width:150px; height:150px; }
+  /* QR grande: tiene que leerse desde el sillón (~3 m) sin levantarse.
+     image-rendering:pixelated mantiene los módulos nítidos al escalar. */
+  .qrbox img { display:block; width:400px; height:400px; image-rendering:pixelated; }
   .pairleft h1 { font-family:inherit; font-size:27px; font-weight:600; margin:4px 0 0; color:#F5F5F7; line-height:1.15; }
   .pairleft .sub { font-size:16px; color:#B4B4BC; margin:0; max-width:420px; line-height:1.4; }
   .taglines { margin:2px 0 0; }
@@ -167,10 +169,6 @@
       <div class="qrbox"><img id="qr" alt="QR"></div>
       <h1 class="serif">Usá tu teléfono como control</h1>
       <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
-      <div class="taglines">
-        <p>🎬 Películas y Series de <span class="a">todas las plataformas</span> en un solo lugar</p>
-        <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
-      </div>
       <div class="sess" id="sess">Generando sesión…</div>
       <div class="sess" id="pairhint"></div>
     </div>
@@ -416,11 +414,13 @@
         var q = window.qrcode(0, "M");
         q.addData(controlUrl);
         q.make();
-        img.src = q.createDataURL(8, 8);
+        // cellSize 12 (antes 8): el QR se muestra a 400px, así el bitmap nace
+        // con resolución de sobra y no se ve borroso al escalar.
+        img.src = q.createDataURL(12, 8);
         return;
       }
     } catch (e) {}
-    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
+    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=8&data=" + encodeURIComponent(controlUrl);
   })();
   document.getElementById("sess").textContent = "Sesión " + sessionId;
 
