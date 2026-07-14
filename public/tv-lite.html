@@ -365,14 +365,18 @@
   // Verificado con adb en la TV: nflx:// levanta Netflix (com.netflix.ninja).
   function appScheme(platform, title) {
     var t = encodeURIComponent(title);
+    // OJO: el esquema NECESITA EL HOST. "disneyplus://search?q=X" NO resuelve
+    // (verificado con adb en la TV); "disneyplus://www.disneyplus.com/search?q=X" sí.
+    // Verificados en Android TV: nflx, disneyplus, starplus.
+    // Prime Video NO declara esquema propio (solo http/https) -> va sin esquema y
+    // cae a la URL web.
     var m = {
       "Netflix": "nflx://www.netflix.com/search?q=" + t,
-      "Disney+": "disneyplus://search?q=" + t,
-      "Star+": "starplus://search?q=" + t,
-      "Max": "hbomax://search?q=" + t,
-      "Prime Video": "primevideo://search?phrase=" + t,
-      "Apple TV+": "videos://search?term=" + t,
-      "Paramount+": "paramountplus://"
+      "Disney+": "disneyplus://www.disneyplus.com/search?q=" + t,
+      "Star+": "starplus://www.starplus.com/search?q=" + t,
+      "Max": "hbomax://play.max.com/search?q=" + t,
+      "Apple TV+": "videos://tv.apple.com/search?term=" + t,
+      "Paramount+": "paramountplus://www.paramountplus.com/search/"
     };
     return m[platform] || "";
   }
