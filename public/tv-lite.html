@@ -922,7 +922,10 @@
     function next() {
       if (run !== posterRun || idx >= pending.length) return;
       var item = pending[idx++];
-      cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
+      // El backend ya manda posterUrl en /api/tv-home: usarlo evita una request
+      // por título desde la TV. Solo si no vino, se resuelve en el cliente.
+      if (item.posterUrl) { onPoster(item, item.posterUrl); }
+      else cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
     }
     for (var k = 0; k < CONC && k < pending.length; k++) next();
   }
@@ -1497,11 +1500,14 @@
             // (así las dos mitades siguen midiendo igual y el loop no se corre).
             for (var k3 = 0; k3 < items.length; k3++) {
               (function (it, p) {
-                cinemetaPoster(it.title, it.type, function (url) {
+                var setSrc = function (url) {
                   if (!url) { p.a.remove(); p.b.remove(); return; }
                   p.a.src = url;
                   p.b.src = url;
-                });
+                };
+                // Póster ya resuelto por el backend -> las cintas pintan al toque.
+                if (it.posterUrl) setSrc(it.posterUrl);
+                else cinemetaPoster(it.title, it.type, setSrc);
               })(items[k3], pairs[k3]);
             }
           })(cols[c3], byCol[c3]);

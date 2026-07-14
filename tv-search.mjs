@@ -107,6 +107,40 @@ export async function tvSearch(query, exclude, liked, disliked) {
   return { items };
 }
 
+// Póster desde Cinemeta, resuelto EN EL SERVIDOR. Antes cada TV hacía 1 request
+// por título (12 en la pantalla de pairing) y las tiras tardaban en aparecer.
+// Acá se resuelven en paralelo UNA vez y quedan dentro del caché del home (6 h),
+// así el cliente recibe los pósters ya listos en /api/tv-home.
+async function cinemetaPoster(title, type) {
+  const kind = /serie/i.test(type || "") ? "series" : "movie";
+  const u = "https://v3-cinemeta.strem.io/catalog/" + kind + "/top/search=" +
+    encodeURIComponent(title) + ".json";
+  try {
+    const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const m = j && j.metas && j.metas[0];
+    let poster = m && m.poster ? String(m.poster) : null;
+    // Cinemeta devuelve la variante "medium" (~250px): en 1080p se pixela.
+    if (poster) poster = poster.replace("/poster/medium/", "/poster/big/");
+    return poster;
+  } catch {
+    return null; // sin póster no se rompe nada: el cliente cae a su propio fetch
+  }
+}
+
+async function attachPosters(items) {
+  await Promise.all(
+    items.map(async (it) => {
+      if (it && !it.posterUrl) {
+        const p = await cinemetaPoster(it.title, it.type);
+        if (p) it.posterUrl = p;
+      }
+    }),
+  );
+  return items;
+}
+
 // Caché en memoria del home (mismo para todos; evita la espera de la IA en cada visita).
 let homeCache = null;
 let homeCacheAt = 0;
@@ -136,7 +170,7 @@ export async function tvHome() {
   const latest = ((parsed && parsed.latest) || []).map((r) =>
     normalizeItem(r, "Últimas subidas a las plataformas"),
   );
-  const items = rec.concat(latest);
+  const items = await attachPosters(rec.concat(latest));
   homeCache = { items: items };
   homeCacheAt = Date.now();
   return homeCache;
