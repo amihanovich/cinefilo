@@ -51,42 +51,50 @@
   @keyframes ribDown { from { transform:translateY(-50%); }   to { transform:translateY(0); } }
 
   /* === Resultados / home === */
-  .wrap { padding:18px 34px 44px; }
-  .topline { font-size:20px; color:#B4B4BC; margin-bottom:14px; }
+  .wrap { padding:10px 30px 16px; }
+  .topline { font-size:17px; color:#B4B4BC; margin-bottom:8px; }
   .topline b { color:#F5F5F7; }
   .topline .hint { color:#8852E0; font-weight:600; }
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:inherit; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
+  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:12px 0 7px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
      El póster NO se estira a todo el ancho: las carátulas de Cinemeta son
      chicas y a pantalla completa se pixelaban mucho. === */
-  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:400px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
+     comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
+  .hero { position:relative; display:flex; height:37vh; min-height:214px; max-height:330px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
   .hero .hside { position:relative; width:34%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
-  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:11px; padding:26px 40px; }
-  .hero .htitle { font-family:inherit; font-size:34px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:8px; padding:18px 30px; }
+  .hero .htitle { font-family:inherit; font-size:29px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-  .hero .hsub { font-size:16px; color:#B4B4BC; }
-  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:16px; line-height:1.38; color:#EDEDF0; background:rgba(255,255,255,.05); border-radius:12px; padding:11px 15px;
+  .hero .hsub { font-size:14px; color:#B4B4BC; }
+  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:14px; line-height:1.35; color:#EDEDF0; background:rgba(255,255,255,.05); border-radius:12px; padding:8px 12px;
     display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
-  .hero .hactions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+  .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
   /* Íconos sutiles (gris minimalista): 👍/👎/Para hoy. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
-  .hbtn.ico { width:36px; height:36px; padding:0; font-size:16px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
-  .hbtn.play { padding:8px 16px; font-size:15px; color:#fff; }
+  .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
-  .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
+  .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:8px 0 3px; }
+  /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
+     que estás parado ahí y que con ←/→ cambiás de candidata. */
+  .hcount { margin-left:10px; font-size:12px; color:#6A6A72; transition:color .18s; }
+  .hdots.act .hcount { color:#B79BF0; font-weight:600; }
+  .hdots.act .hdot { background:rgba(255,255,255,.35); }
+  .hdots.act .hdot.on { background:#A878FF; box-shadow:0 0 0 3px rgba(136,82,224,.28); }
   .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
   .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
   /* Tira "Para ver hoy" (carrito de la TV). */
@@ -112,7 +120,7 @@
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
-  .okhint { text-align:center; color:#5C5C64; font-size:13px; margin:2px 0 6px; }
+  .okhint { text-align:center; color:#5C5C64; font-size:12px; margin:1px 0 4px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -656,8 +664,14 @@
     var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
     var html = heroHTML(items[hi], todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
     if (top > 1) {
-      html += '<div class="hdots">';
+      // ¿El foco está parado en las candidatas (el carrusel del banner)? Si sí,
+      // encendemos el indicador y decimos explícitamente que ←/→ las recorre:
+      // antes no había forma de darse cuenta de que estabas ahí.
+      var onCands = (todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
+      html += '<div class="hdots' + (onCands ? " act" : "") + '">';
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
+      html += '<span class="hcount">Candidata ' + (hi + 1) + " de " + top +
+              (onCands ? " · ← → para cambiar" : "") + "</span>";
       html += "</div>";
     }
     // Los gestos del remoto nativo no tienen botón visible: documentarlos acá.
