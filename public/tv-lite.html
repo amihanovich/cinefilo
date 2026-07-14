@@ -93,6 +93,8 @@
   .hbtn { border:none; border-radius:999px; font-weight:600; }
   .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
+  /* Label del botón "Para hoy": oculto por defecto (banner), visible en la ficha. */
+  .blab { display:none; }
   .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
@@ -123,8 +125,12 @@
   .detail .dreason b { color:#8852E0; margin-right:6px; }
   .detail .dsyn { margin:0; font-size:16px; line-height:1.45; color:#B4B4BC; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
-  .detail .hbtn.ico { width:36px; height:36px; font-size:16px; }
-  .detail .hactions { gap:12px; }
+  /* En la ficha, "Para hoy" deja de ser un ícono redondo y se vuelve píldora con
+     texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
+     outline 3px + scale(1.06), y con 12px quedaba pisando al "Ver en X". */
+  .detail .hbtn.ico { width:auto; height:36px; padding:0 15px; gap:7px; font-size:15px; border-radius:999px; }
+  .detail .hbtn.ico .blab { display:inline; }
+  .detail .hactions { gap:22px; }
   .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
@@ -539,7 +545,10 @@
     var af = foc ? actionFocus : -1;
     var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    // El label "Para hoy" solo se muestra en la ficha (ahí sobra espacio); en el
+    // banner el botón queda como ícono redondo para no robarle aire al hero.
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
+         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
     h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += "</div>"; // cierra .info
