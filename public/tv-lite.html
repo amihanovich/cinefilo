@@ -1260,20 +1260,23 @@
       play(detailItem.id);
       return;
     }
-    // Foco en la tira "Para ver hoy": OK abre la ficha del ítem guardado.
-    if ((mode === "home" || mode === "search") && todayFocus >= 0) {
+    var it = items[focusedIndex];
+    // Los BOTONES DEL BANNER mandan primero. Antes esta rama iba después de la del
+    // carrito, y como la del carrito abría la ficha sin mirar actionFocus, si
+    // todayFocus había quedado activo, apretar "Ver en X" te llevaba a la ficha en
+    // vez de lanzar la app de streaming.
+    if (it && (mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
+      if (actionFocus === 0) toggleToday(it);
+      else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
+      return;
+    }
+    // Foco en la tira "Para ver hoy" (y NO en un botón): OK abre la ficha.
+    if ((mode === "home" || mode === "search") && todayFocus >= 0 && actionFocus < 0) {
       var tit = today[todayFocus];
       if (tit) { detailScope = "today"; openDetail(tit); }
       return;
     }
-    var it = items[focusedIndex];
     if (!it) return;
-    // Si el foco está en un botón del banner, activarlo (👍/👎/Para hoy/Ver en X).
-    if ((mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
-      if (actionFocus === 0) toggleToday(it);
-      else if (actionFocus === 1) play(it.id);
-      return;
-    }
     // Antes había un atajo acá: si el ítem YA estaba guardado, un tap abría la
     // ficha directo — y entonces desde la grilla no había forma de desmarcarlo.
     // Ahora el gesto es simétrico y vale igual esté guardado o no:

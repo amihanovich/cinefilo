@@ -200,7 +200,12 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </span>
       </div>
 
-      {/* Preview: lo que se ve en la TV (metadata; no stream de video) */}
+      {/* Preview: SOLO cuando hay algo reproduciéndose. Espejar el ítem centrado
+          era redundante (la TV ya lo muestra, más grande), le robaba alto a la
+          lista y su chrome de tarjeta parecía apretable sin serlo. En cambio, al
+          lanzar a la app de streaming la TV se va de Cinéfilo y el teléfono queda
+          como el único lugar que dice qué lanzaste: ahí sí informa. */}
+      {nowPlaying && (
       <div className="shrink-0 px-4 pt-4">
         <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/20 p-3">
           <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
@@ -226,6 +231,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia */}
       <div className="shrink-0 px-4 pt-3">
