@@ -34,9 +34,13 @@
 
   /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
      fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
-  .ribbons { flex:1; position:relative; display:flex; gap:14px; padding:0 20px; overflow:hidden; opacity:.40;
+  .ribbons { flex:1; position:relative; overflow:hidden; opacity:.40;
     -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
             mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%); }
+  /* El track va ABSOLUTO a propósito: las cintas son mucho más altas que la
+     pantalla y, en flujo normal, estiraban .pair y empujaban el QR fuera de
+     la vista (overflow:hidden recorta, pero NO impide que el div crezca). */
+  .ribbons .track { position:absolute; inset:0; display:flex; align-items:flex-start; gap:14px; padding:0 20px; }
   .ribbon { flex:1; display:flex; flex-direction:column; will-change:transform; animation:ribUp 48s linear infinite; }
   /* El contenido de cada cinta va DUPLICADO, por eso -50% cierra el loop exacto.
      El margin-bottom (en vez de gap) hace que media altura sea justo una copia. */
@@ -1299,11 +1303,16 @@
     var box = document.getElementById("pairribbons");
     if (!box) return;
     var COLS = 3;
+    // Track absoluto: saca las cintas del flujo para que su altura (mucho mayor
+    // que la pantalla) no estire .pair ni empuje el QR fuera de la vista.
+    var track = document.createElement("div");
+    track.className = "track";
+    box.appendChild(track);
     var cols = [];
     for (var c = 0; c < COLS; c++) {
       var col = document.createElement("div");
       col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
-      box.appendChild(col);
+      track.appendChild(col);
       cols.push(col);
     }
     fetch("/api/tv-home")
