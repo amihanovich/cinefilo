@@ -31,7 +31,12 @@ const WEB_CONTROL_URL = import.meta.env.VITE_WEB_CONTROL_URL as string | undefin
 // Código numérico de go.aftvnews.com apuntando a <landing>/tv. Downloader lo
 // acepta tal cual, así que el usuario tipea solo números con el control remoto
 // en vez de una URL larga. Si no está, mostramos la URL.
-const TV_DOWNLOADER_CODE = import.meta.env.VITE_TV_DOWNLOADER_CODE as string | undefined;
+// Default = el código ya generado en go.aftvnews.com apuntando a <landing>/tv
+// (aftv.news/3675666). Va hardcodeado para que la landing muestre el número sin
+// depender de la env var; como /tv siempre redirige al último APK del manifest,
+// NO hay que regenerarlo en cada release.
+const TV_DOWNLOADER_CODE =
+  (import.meta.env.VITE_TV_DOWNLOADER_CODE as string | undefined) || "3675666";
 
 function formatSize(bytes?: number): string | null {
   if (!bytes || bytes <= 0) return null;
