@@ -16,8 +16,12 @@ import type { ControlCommandMessage, MediaItem } from "./lib/tv-protocol";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { VoiceRecorder, transcribe } from "./lib/stt";
 
-// Link real a la app (Play Store / landing). Si falta, mostramos "Próximamente".
-const MOBILE_APP_URL = import.meta.env.VITE_MOBILE_APP_URL as string | undefined;
+// Link real a la app (Play Store / landing). Default = la landing de descargas,
+// para que el CTA siempre linkee aunque el build no traiga la env var (era el
+// caso: sin ella el banner mostraba "Próximamente" y no se podía clickear).
+const MOBILE_APP_URL =
+  (import.meta.env.VITE_MOBILE_APP_URL as string | undefined) ||
+  "https://landing-page-cinefilo-production.up.railway.app/";
 
 const MYLIST_KEY = "cinefilo:web-mylist";
 const LIKED_KEY = "cinefilo:web-liked";
