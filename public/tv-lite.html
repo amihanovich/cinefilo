@@ -189,49 +189,8 @@
   .sdots span { display:inline-block; height:9px; width:9px; border-radius:999px; background:rgba(255,255,255,.18); transition:all .25s; }
   .sdots span.on { width:34px; }
 </style>
-
-<style>
-  /* Splash animado: encadena con el splash NATIVO (mismo fondo y mismo destello),
-     así el arranque se ve como una sola transición y nunca aparece el flash
-     blanco del WebView. Vive en el index.html —no en el bundle— para que se
-     pinte antes de que cargue el JS. */
-  #cine-splash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:18px;
-    background:radial-gradient(circle at 50% 42%, #7B3FD4 0%, #4A1E96 55%, #2A0F5C 100%);
-    transition:opacity .55s ease, visibility .55s;}
-  #cine-splash.cs-out{opacity:0;visibility:hidden;}
-  #cine-splash svg{width:132px;height:132px;fill:#fff;
-    filter:drop-shadow(0 0 26px rgba(255,255,255,.75));
-    animation:csPulse 1.6s ease-in-out infinite, csIn .7s cubic-bezier(.2,.9,.3,1.4) both;}
-  #cine-splash .cs-word{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:700;
-    color:#F5F5F7;letter-spacing:.5px;animation:csWord .7s ease .25s both;}
-  @keyframes csIn{from{transform:scale(.4) rotate(-25deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
-  @keyframes csWord{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
-  @keyframes csPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
-  @media (prefers-reduced-motion:reduce){#cine-splash svg,#cine-splash .cs-word{animation:none}}
-</style>
 </head>
 <body>
-<div id="cine-splash">
-  <svg viewBox="0 0 120 58" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M60 6 C63.4 22.3 66.6 25.4 82.9 28.8 C66.6 32.2 63.4 35.3 60 51.6 C56.6 35.3 53.4 32.2 37.1 28.8 C53.4 25.4 56.6 22.3 60 6 Z"/></svg>
-  <div class="cs-word">Cinéfilo</div>
-</div>
-<script>
-  // Se va cuando la app ya pintó (o a lo sumo a los 2.2s, por si algo se cuelga).
-  (function () {
-    var el = document.getElementById("cine-splash");
-    if (!el) return;
-    var gone = false;
-    var hide = function () {
-      if (gone) return; gone = true;
-      el.classList.add("cs-out");
-      setTimeout(function () { el.remove(); }, 600);
-    };
-    window.cinefiloSplashDone = hide;   // la app puede cerrarlo apenas está lista
-    window.addEventListener("load", function () { setTimeout(hide, 700); });
-    setTimeout(hide, 2200);             // red de contención
-  })();
-</script>
   <div class="top">
     <div class="brand">Cinéfilo <span>TV</span><span class="ai">✦ recomendado con IA</span></div>
     <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
