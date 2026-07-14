@@ -1252,7 +1252,11 @@
     else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
     else if (cmd.type === "LOAD_MORE") loadMore();
     else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
-    else if (cmd.type === "SELECT") focusById(cmd.mediaId);
+    // SELECT con mediaId = enfocá ese ítem. SIN mediaId = "apretaron OK": lo
+    // resuelve okPress(), que respeta el botón enfocado (actionFocus). Antes el
+    // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Para hoy" te
+    // lanzaba la app de streaming porque el comando ya venía como "reproducí".
+    else if (cmd.type === "SELECT") { if (cmd.mediaId) focusById(cmd.mediaId); else okPress(); }
     else if (cmd.type === "PLAY") play(cmd.mediaId);
     else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);

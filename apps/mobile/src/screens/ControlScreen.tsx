@@ -134,7 +134,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const okPress = () => {
     const item = centered;
     if (!item) { send({ type: "SELECT", mediaId: centeredId ?? undefined }); return; }
-    if (tvScreen === "detail") { send({ type: "PLAY", mediaId: item.id }); return; }
+    // En la ficha, OK activa EL BOTÓN ENFOCADO de la TV ("+ Para hoy" o
+    // "Ver en X"). Antes mandaba PLAY siempre, así que el "+ Para hoy"
+    // terminaba lanzando la app de streaming.
+    if (tvScreen === "detail") { send({ type: "SELECT" }); return; }
     if (inToday(item)) { send({ type: "OPEN_DETAIL", mediaId: item.id }); return; }
     if (okTimerRef.current) {
       clearTimeout(okTimerRef.current); okTimerRef.current = null;
