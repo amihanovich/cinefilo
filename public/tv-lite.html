@@ -1239,7 +1239,11 @@
       else if (actionFocus === 1) play(it.id);
       return;
     }
-    if (isToday(it)) { openDetail(it); return; }
+    // Antes había un atajo acá: si el ítem YA estaba guardado, un tap abría la
+    // ficha directo — y entonces desde la grilla no había forma de desmarcarlo.
+    // Ahora el gesto es simétrico y vale igual esté guardado o no:
+    //   1 tap  → toggle "Para hoy" (marca / DESMARCA, y se va el fade + el tilde)
+    //   2 taps → abrir la ficha
     if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → ficha
       clearTimeout(okTimer); okTimer = null; okTitle = "";
       openDetail(it); return;
