@@ -454,7 +454,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         setThinking(false);
         const turnNumber = messages.filter((m) => m.role === "user").length + 1;
         track("refinement_made", { turn_number: turnNumber });
-        await getReco(r.query, source);
+        // El LITERAL del usuario (no la query refinada del orb): es lo que se
+        // muestra en la rueda y lo que entra a la conversación con la IA.
+        await getReco(text, source);
         return;
       }
       setThinking(false);

@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
+import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 import { X } from "lucide-react";
@@ -168,12 +169,8 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
     onDismiss();
   };
 
-  const hintText =
-    state === "idle" ? (hint !== "..." && hint !== "Te escucho..." ? hint : "Tocá el orbe para hablar")
-    : state === "listening" ? "Te escucho… tocá para frenar"
-    : state === "thinking" ? "Pensando…"
-    : state === "speaking" ? "Escuchame..."
-    : hint;
+  // Solo mensajes de error ("No te escuché…"): la mecánica vive en la VoicePill.
+  const errHint = state === "idle" && hint !== "..." && hint !== "Te escucho..." ? hint : null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
@@ -208,20 +205,21 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
         <Orb phase={orbPhase} size="full" volume={volume} />
       </button>
 
-      {/* Estado / respuesta del asesor */}
-      <div className="mt-10 max-h-[30vh] max-w-sm overflow-y-auto px-6 text-center">
-        {answer ? (
-          <p className="text-base leading-relaxed text-white/85">{answer}</p>
-        ) : (
-          <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">
-            {hintText}
-          </p>
-        )}
-        {/* Instrucción explícita del modelo de interacción (siempre visible) */}
-        <p className="mt-2 text-[11px] leading-relaxed text-white/40">
-          Tocá y soltá para hablar, tocá de nuevo para frenar.
-        </p>
+      {/* La mecánica pegada al orbe: misma píldora que el welcome y el control */}
+      <div className="mt-8">
+        <VoicePill state={orbPhase} onClick={handleOrbClick} />
       </div>
+
+      {/* Respuesta del asesor / errores */}
+      {(answer || errHint) && (
+        <div className="mt-6 max-h-[28vh] max-w-sm overflow-y-auto px-6 text-center">
+          {answer ? (
+            <p className="text-base leading-relaxed text-white/85">{answer}</p>
+          ) : (
+            <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">{errHint}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

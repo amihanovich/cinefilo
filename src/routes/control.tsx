@@ -11,6 +11,8 @@ import {
   BookmarkCheck,
   ThumbsUp,
   ThumbsDown,
+  Home as HomeIcon,
+  Clapperboard,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTvChannel } from "@/lib/use-tv-channel";
@@ -108,8 +110,12 @@ function ControlPage() {
     role: "control",
     onState: (state) => {
       if (state.type === "SCREEN") {
-        // Sincronizamos si estamos viendo "Mi lista" según lo que muestra la TV.
-        viewingListRef.current = !!(state.items[0] && state.items[0].section === "Mi lista");
+        // Sincronizamos si estamos viendo una lista fija ("Mi lista" /
+        // "Candidatas para hoy") según lo que muestra la TV: sin carga infinita.
+        viewingListRef.current = !!(state.items[0] && state.items[0].section &&
+          state.items[0].section !== "Recomendadas para vos" &&
+          state.items[0].section !== "Últimas subidas a las plataformas" &&
+          state.items[0].section !== "Más recomendadas para vos");
         setItems((prev) => {
           if (state.items.length > loadReqLenRef.current) setLoadingMore(false);
           return state.items;
@@ -311,7 +317,29 @@ function ControlPage() {
           <span className="text-xl font-semibold" style={{ fontFamily: SERIF }}>
             Cinéfilo<span style={{ color: C.accent }}> ✦</span>
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { viewingListRef.current = false; send({ type: "HOME" }); }}
+              disabled={!paired}
+              aria-label="Inicio de la TV"
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium active:scale-95 disabled:opacity-40"
+              style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text }}
+            >
+              <HomeIcon className="h-3.5 w-3.5" />
+              Inicio
+            </button>
+            <button
+              type="button"
+              onClick={() => send({ type: "SHOW_TODAY" })}
+              disabled={!paired}
+              aria-label="Candidatas para hoy"
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium active:scale-95 disabled:opacity-40"
+              style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text }}
+            >
+              <Clapperboard className="h-3.5 w-3.5" />
+              Candidatas
+            </button>
             <button
               type="button"
               onClick={showMyList}

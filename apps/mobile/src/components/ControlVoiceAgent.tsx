@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
+import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 import { fetchOrb } from "../lib/api";
@@ -55,8 +56,9 @@ export function ControlVoiceAgent({
         });
         if (!mountedRef.current) return;
         if (result.mode === "search") {
-          // Quiere algo nuevo → búsqueda en la TV y cerramos el orbe.
-          onSearch(result.query || q);
+          // Quiere algo nuevo → búsqueda en la TV con el LITERAL de lo que dijo
+          // (la TV lo muestra en la rueda; no la query refinada del orb).
+          onSearch(q);
           onDismiss();
           return;
         }
@@ -145,11 +147,6 @@ export function ControlVoiceAgent({
     }
   }, [state, startListening, stopListeningManual]);
 
-  const hintText =
-    state === "listening" ? "Te escucho…"
-    : state === "speaking" ? "Escuchame…"
-    : state === "thinking" ? "Pensando…"
-    : "Tocá el orbe para hablar";
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 px-6 backdrop-blur-md">
@@ -188,17 +185,16 @@ export function ControlVoiceAgent({
         <Orb phase={orbPhase} size="full" volume={volume} />
       </button>
 
-      <div className="mt-10 max-h-[28vh] max-w-sm overflow-y-auto px-2 text-center">
-        {answer ? (
-          <p className="text-base leading-relaxed text-white/85">{answer}</p>
-        ) : (
-          <p className="text-sm font-medium tracking-wide text-white/75">{hintText}</p>
-        )}
-        {/* Instrucción explícita del modelo de interacción (siempre visible) */}
-        <p className="mt-2 text-[11px] leading-relaxed text-white/40">
-          Tocá y soltá para hablar, tocá de nuevo para frenar.
-        </p>
+      {/* La mecánica pegada al orbe: misma píldora que el welcome y la home */}
+      <div className="mt-8">
+        <VoicePill state={orbPhase} onClick={handleOrbClick} />
       </div>
+
+      {answer && (
+        <div className="mt-6 max-h-[26vh] max-w-sm overflow-y-auto px-2 text-center">
+          <p className="text-base leading-relaxed text-white/85">{answer}</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -58,6 +58,10 @@ export const ControlCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ADD_TODAY"), mediaId: z.string() }),
   // OPEN_DETAIL: abrir la ficha (banner grande) del ítem en la TV.
   z.object({ type: z.literal("OPEN_DETAIL"), mediaId: z.string() }),
+  // HOME: volver al home de recomendaciones de la TV desde cualquier pantalla.
+  z.object({ type: z.literal("HOME") }),
+  // SHOW_TODAY: mostrar el carrito "Para hoy" de la TV como lista ("Candidatas").
+  z.object({ type: z.literal("SHOW_TODAY") }),
 ]);
 export type ControlCommandMessage = z.infer<typeof ControlCommand>;
 

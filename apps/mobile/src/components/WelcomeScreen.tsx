@@ -7,16 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, Shuffle, QrCode } from "lucide-react";
 import { Orb } from "./Orb";
+import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
 const GREETING = "Hola, soy Cinéfilo. ¿Listo para que encontremos algo para que veas hoy?";
 // Ejemplos tocables para arrancar (anti-parálisis): muestran QUÉ se puede pedir.
 const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto", "Documental"];
-
-function cn(...classes: (string | boolean | undefined | null)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
 
 interface WelcomeScreenProps {
   firstTime: boolean;
@@ -39,16 +36,19 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   const [phase, setPhase] = useState<"splash" | "agent">("splash");
   const [text, setText] = useState("");
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [speaking, setSpeaking] = useState(false); // Cinéfilo saludando por TTS
+  const [notice, setNotice] = useState<string | null>(null); // mic denegado / no te escuché
   const [volume, setVolume] = useState(0);
   const micRef = useRef<VoiceRecorder | null>(null);
   const greetedRef = useRef(false);
 
   // (a) Al aparecer el agente, Cinéfilo te recibe por voz (TTS). Best-effort:
-  // si el WebView bloquea el autoplay sin gesto, falla en silencio.
+  // si el WebView bloquea el autoplay sin gesto, falla en silencio. El orbe
+  // refleja que ÉL está hablando (misma señal que los overlays de voz).
   useEffect(() => {
     if (phase !== "agent" || greetedRef.current) return;
     greetedRef.current = true;
-    void speak(GREETING);
+    void speak(GREETING, () => setSpeaking(true), () => setSpeaking(false));
     return () => stopSpeaking();
   }, [phase]);
 
@@ -77,14 +77,24 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       setVolume(0);
       if (!rec) { setMicState("idle"); return; }
       const blob = await rec.stop();
-      if (blob.size < 500) { setMicState("idle"); return; }
+      if (blob.size < 500) {
+        setMicState("idle");
+        setNotice("No te escuché. Probá de nuevo.");
+        return;
+      }
       try {
         const t = await transcribe(blob);
         setMicState("idle");
         if (t.trim()) submit(t.trim());
-      } catch { setMicState("idle"); }
+        else setNotice("No te escuché. Probá de nuevo.");
+      } catch {
+        setMicState("idle");
+        setNotice("No te escuché. Probá de nuevo.");
+      }
     } else if (micState === "idle") {
       stopSpeaking(); // corta el saludo si todavía suena
+      setSpeaking(false);
+      setNotice(null);
       const rec = new VoiceRecorder();
       micRef.current = rec;
       try {
@@ -94,8 +104,10 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
         });
         setMicState("rec");
       } catch {
+        // Antes fallaba EN SILENCIO: tocabas y no pasaba nada.
         micRef.current = null;
         setMicState("idle");
+        setNotice("No pude acceder al micrófono. Dale permiso a Cinéfilo y probá de nuevo.");
       }
     }
   };
@@ -117,7 +129,11 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   }
 
   // ── Agente (solo 1ª vez) ────────────────────────────────────────────────────
-  const orbPhase = micState === "rec" ? "listening" : micState === "processing" ? "thinking" : "idle";
+  const orbPhase =
+    micState === "rec" ? "listening"
+    : micState === "processing" ? "thinking"
+    : speaking ? "speaking"
+    : "idle";
 
   const connectTv = () => {
     stopSpeaking(); // corta el saludo si todavía suena
@@ -156,6 +172,9 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
           )}
           <Orb phase={orbPhase} size="full" volume={volume} />
         </button>
+        {/* La mecánica pegada al orbe: el orbe ES el agente, la píldora te dice
+            qué hacer y en qué estado está (mismo componente en toda la app). */}
+        <VoicePill state={orbPhase} onClick={() => void toggleMic()} />
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo</h1>
           <p className="text-base text-muted-foreground leading-snug">
@@ -166,20 +185,9 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       </div>
 
       {error && <p className="text-xs font-semibold text-red-400">{error}</p>}
+      {notice && <p className="text-xs font-semibold text-amber-400">{notice}</p>}
 
       <div className="flex w-full max-w-sm flex-col items-center gap-3">
-        <button
-          onClick={() => void toggleMic()}
-          className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-base font-semibold text-white transition-transform active:scale-95",
-            micState === "rec" ? "bg-red-500/80" : "bg-primary",
-          )}
-        >
-          {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-          {micState === "rec" ? "Tocá para frenar" : micState === "processing" ? "Un segundo…" : "Tocá para hablar"}
-        </button>
-        <p className="text-[11px] text-muted-foreground/50">Tocá y soltá para hablar, tocá de nuevo para frenar.</p>
-
         <div className="flex w-full items-center gap-2 rounded-2xl bg-muted px-3">
           <input
             type="text"
