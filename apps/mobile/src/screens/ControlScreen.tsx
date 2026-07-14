@@ -134,7 +134,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const okPress = () => {
     const item = centered;
     if (!item) { send({ type: "SELECT", mediaId: centeredId ?? undefined }); return; }
-    if (tvScreen === "detail") { send({ type: "PLAY", mediaId: item.id }); return; }
+    // En la ficha, OK activa EL BOTÓN ENFOCADO de la TV ("+ Para hoy" o
+    // "Ver en X"). Antes mandaba PLAY siempre, así que el "+ Para hoy"
+    // terminaba lanzando la app de streaming.
+    if (tvScreen === "detail") { send({ type: "SELECT" }); return; }
     if (inToday(item)) { send({ type: "OPEN_DETAIL", mediaId: item.id }); return; }
     if (okTimerRef.current) {
       clearTimeout(okTimerRef.current); okTimerRef.current = null;
@@ -200,7 +203,12 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </span>
       </div>
 
-      {/* Preview: lo que se ve en la TV (metadata; no stream de video) */}
+      {/* Preview: SOLO cuando hay algo reproduciéndose. Espejar el ítem centrado
+          era redundante (la TV ya lo muestra, más grande), le robaba alto a la
+          lista y su chrome de tarjeta parecía apretable sin serlo. En cambio, al
+          lanzar a la app de streaming la TV se va de Cinéfilo y el teléfono queda
+          como el único lugar que dice qué lanzaste: ahí sí informa. */}
+      {nowPlaying && (
       <div className="shrink-0 px-4 pt-4">
         <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/20 p-3">
           <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
@@ -226,6 +234,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia */}
       <div className="shrink-0 px-4 pt-3">
@@ -260,7 +269,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           disabled={!paired || todayTitles.length === 0}
           className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40"
         >
-          <Clapperboard className="h-4 w-4" /> Candidatas
+          <Clapperboard className="h-4 w-4" /> Marcadas
           {todayTitles.length > 0 && (
             <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-white">
               {todayTitles.length}

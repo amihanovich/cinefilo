@@ -19,88 +19,122 @@
   .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
   .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
 
-  /* === Landing / vinculación: 2 mitades (QR+copy | grilla de pósters) === */
+  /* === Landing / vinculación: QR protagonista | cintas de pósters de fondo ===
+     OJO con las medidas: la WebView de la TV corre con DPR 2, así que el viewport
+     CSS es 960x540 (no 1920x1080). El alto útil de .pairleft es ~465px
+     (540 - 75 del top), así que el QR no puede pasar de ~300px o se corta el
+     texto de abajo. 300px CSS = 600px reales en pantalla: se escanea a ~3 m. */
   .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
-  .pairleft { width:40%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:12px; padding:0 46px; border-right:1px solid #1E1E22; }
+  .pairleft { width:46%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:10px; padding:0 30px; border-right:1px solid #1E1E22; }
   .qrbox { align-self:flex-start; background:#fff; padding:12px; border-radius:18px; box-shadow:0 14px 44px rgba(136,82,224,.26); }
-  .qrbox img { display:block; width:150px; height:150px; }
-  .pairleft h1 { font-family:inherit; font-size:27px; font-weight:600; margin:4px 0 0; color:#F5F5F7; line-height:1.15; }
-  .pairleft .sub { font-size:16px; color:#B4B4BC; margin:0; max-width:420px; line-height:1.4; }
-  .taglines { margin:2px 0 0; }
-  .taglines p { margin:5px 0; font-size:14px; color:#9A9AA2; line-height:1.3; }
-  .taglines .a { color:#8852E0; font-weight:600; }
-  .sess { margin-top:4px; color:#6A6A72; font-size:13px; }
-  /* Grilla de pósters reales de tendencias, mitad derecha (estilo operadora). */
-  .pairgrid { flex:1; display:grid; grid-template-columns:repeat(4, 1fr); grid-auto-rows:1fr; gap:14px; padding:26px; }
-  .ptile { position:relative; overflow:hidden; border-radius:16px; background:#161619; box-shadow:0 12px 34px rgba(0,0,0,.55); }
-  .ptile img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .ptile .cap { position:absolute; left:0; right:0; bottom:0; padding:26px 12px 10px; background:linear-gradient(to top, rgba(0,0,0,.9), transparent); }
-  .ptile .cap .tt { display:block; font-size:14px; font-weight:600; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .ptile .cap .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
+  .qrbox img { display:block; width:300px; height:300px; image-rendering:pixelated; }
+  .pairleft h1 { font-family:inherit; font-size:22px; font-weight:600; margin:2px 0 0; color:#F5F5F7; line-height:1.15; }
+  .pairleft .sub { font-size:15px; color:#B4B4BC; margin:0; max-width:340px; line-height:1.35; }
+  .sess { margin-top:2px; color:#6A6A72; font-size:13px; }
+
+  /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
+     fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
+  .ribbons { flex:1; position:relative; overflow:hidden; opacity:.40;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
+            mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%); }
+  /* El track va ABSOLUTO a propósito: las cintas son mucho más altas que la
+     pantalla y, en flujo normal, estiraban .pair y empujaban el QR fuera de
+     la vista (overflow:hidden recorta, pero NO impide que el div crezca). */
+  .ribbons .track { position:absolute; inset:0; display:flex; align-items:flex-start; gap:14px; padding:0 20px; }
+  .ribbon { flex:1; display:flex; flex-direction:column; will-change:transform; animation:ribUp 48s linear infinite; }
+  /* El contenido de cada cinta va DUPLICADO, por eso -50% cierra el loop exacto.
+     El margin-bottom (en vez de gap) hace que media altura sea justo una copia. */
+  .ribbon img { display:block; width:100%; aspect-ratio:2/3; object-fit:cover; margin-bottom:14px; border-radius:14px; background:#161619; }
+  .ribbon.b { animation-name:ribDown; animation-duration:58s; }
+  .ribbon.c { animation-duration:66s; }
+  @keyframes ribUp   { from { transform:translateY(0); }      to { transform:translateY(-50%); } }
+  @keyframes ribDown { from { transform:translateY(-50%); }   to { transform:translateY(0); } }
 
   /* === Resultados / home === */
-  .wrap { padding:18px 34px 44px; }
-  .topline { font-size:20px; color:#B4B4BC; margin-bottom:14px; }
+  .wrap { padding:10px 30px 16px; }
+  .topline { font-size:17px; color:#B4B4BC; margin-bottom:8px; }
   .topline b { color:#F5F5F7; }
   .topline .hint { color:#8852E0; font-weight:600; }
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:inherit; font-size:23px; font-weight:600; margin:26px 0 12px; color:#F5F5F7; }
+  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:7px 0 5px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
      El póster NO se estira a todo el ancho: las carátulas de Cinemeta son
      chicas y a pantalla completa se pixelaban mucho. === */
-  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:400px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
+     comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
+  .hero { position:relative; display:flex; height:38vh; min-height:224px; max-height:340px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
-  .hero .hside { position:relative; width:34%; flex:0 0 auto; overflow:hidden; }
+  /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
+     así la razón llega más a la derecha y entra en menos líneas. */
+  .hero .hside { position:relative; width:26%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
-  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:11px; padding:26px 40px; }
-  .hero .htitle { font-family:inherit; font-size:34px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:7px; padding:16px 24px; }
+  .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
   .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-  .hero .hsub { font-size:16px; color:#B4B4BC; }
-  .hero .hreason { max-width:680px; margin:2px 0 0; font-size:16px; line-height:1.38; color:#EDEDF0; background:rgba(255,255,255,.05); border-radius:12px; padding:11px 15px;
+  .hero .hsub { font-size:14px; color:#B4B4BC; }
+  /* La razón va como TEXTO PELADO sobre el hero (sin caja gris): el degradado
+     de la izquierda ya la hace legible y el text-shadow la asegura sobre la
+     imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
+     flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
+     ni max-width gana ancho y entra en 3 líneas cómodas. */
+  .hero .hreason { margin:2px 0 0; font-size:13px; line-height:1.4; color:#EDEDF0; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 12px rgba(0,0,0,.5);
     display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
-  .hero .hactions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
+  .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
   /* Íconos sutiles (gris minimalista): 👍/👎/Para hoy. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
-  .hbtn.ico { width:36px; height:36px; padding:0; font-size:16px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
-  .hbtn.play { padding:8px 16px; font-size:15px; color:#fff; }
+  /* Label del botón "Para hoy": oculto por defecto (banner), visible en la ficha. */
+  .blab { display:none; }
+  .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
-  .hdots { display:flex; justify-content:center; align-items:center; gap:9px; margin:12px 0 4px; }
+  .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
+  /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
+     que estás parado ahí y que con ←/→ cambiás de candidata. */
+  .hcount { margin-left:10px; font-size:12px; color:#6A6A72; transition:color .18s; }
+  .hdots.act .hcount { color:#B79BF0; font-weight:600; }
+  .hdots.act .hdot { background:rgba(255,255,255,.35); }
+  .hdots.act .hdot.on { background:#A878FF; box-shadow:0 0 0 3px rgba(136,82,224,.28); }
   .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
   .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
   /* Tira "Para ver hoy" (carrito de la TV). */
-  .todayrow { display:flex; gap:12px; overflow:hidden; margin-bottom:4px; }
-  .ttile { width:92px; height:138px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
+  .todayrow { display:flex; gap:10px; overflow:hidden; margin-bottom:3px; }
+  .ttile { width:76px; height:114px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
   .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
   .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
-  .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:5px; font-size:11px; color:#9A9AA2; }
+  .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:4px; font-size:10px; color:#9A9AA2; }
   /* === Ficha a pantalla completa: póster grande a la izquierda + info === */
-  .detail { display:flex; gap:46px; align-items:center; min-height:calc(100vh - 210px); padding:8px 10px 24px; }
-  .detail .dposter { width:340px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
+  .detail { display:flex; gap:28px; align-items:center; min-height:calc(100vh - 140px); padding:6px 8px 14px; }
+  .detail .dposter { width:230px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
   .dph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
   .dph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
   .dph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; color:#9A9AA2; font-size:19px; font-weight:500; }
-  .detail .dinfo { flex:1; min-width:0; max-width:960px; display:flex; flex-direction:column; gap:15px; }
-  .detail .dtitle { font-family:inherit; font-size:46px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
-  .detail .dreason { margin:0; font-size:18px; line-height:1.5; color:#EDEDF0; }
+  .detail .dinfo { flex:1; min-width:0; display:flex; flex-direction:column; gap:9px; }
+  .detail .dtitle { font-family:inherit; font-size:31px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
+  .detail .dreason { margin:0; font-size:15px; line-height:1.45; color:#EDEDF0; }
   .detail .dreason b { color:#8852E0; margin-right:6px; }
-  .detail .dsyn { margin:0; font-size:16px; line-height:1.45; color:#B4B4BC; }
+  .detail .dsyn { margin:0; font-size:14px; line-height:1.4; color:#B4B4BC; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
-  .detail .hbtn.ico { width:36px; height:36px; font-size:16px; }
-  .detail .hactions { gap:12px; }
-  .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
+  /* En la ficha, "Para hoy" deja de ser un ícono redondo y se vuelve píldora con
+     texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
+     outline 3px + scale(1.06), y con 12px quedaba pisando al "Ver en X". */
+  .detail .hbtn.ico { width:auto; height:36px; padding:0 15px; gap:7px; font-size:15px; border-radius:999px; }
+  .detail .hbtn.ico .blab { display:inline; }
+  .detail .hactions { display:flex; align-items:center; flex-wrap:wrap; gap:22px; margin-top:4px; }
+  .detailhint { text-align:center; color:#8A8A93; font-size:13px; margin-top:8px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
-  .okhint { text-align:center; color:#5C5C64; font-size:13px; margin:2px 0 6px; }
+  .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
@@ -166,15 +200,11 @@
     <div class="pairleft">
       <div class="qrbox"><img id="qr" alt="QR"></div>
       <h1 class="serif">Usá tu teléfono como control</h1>
-      <p class="sub">Escaneá el código con la cámara y buscá qué ver desde tu teléfono.</p>
-      <div class="taglines">
-        <p>🎬 Películas y Series de <span class="a">todas las plataformas</span> en un solo lugar</p>
-        <p>✨ <span class="a">Inteligencia Artificial</span> para buscar y recomendarte qué ver hoy</p>
-      </div>
+      <p class="sub">Escaneá el código con la cámara.</p>
       <div class="sess" id="sess">Generando sesión…</div>
       <div class="sess" id="pairhint"></div>
     </div>
-    <div class="pairgrid" id="pairgrid"></div>
+    <div class="ribbons" id="pairribbons"></div>
   </div>
 
   <div id="results" class="wrap hidden">
@@ -329,6 +359,28 @@
   // Búsqueda directa DENTRO de cada plataforma: URL https que las apps de
   // streaming registran como App Link en Android TV. Reemplaza la búsqueda de
   // Google con btnI=1 (deprecada por Google), que en el WebView no abría nada.
+  // Esquema NATIVO de cada app. Clave en Android TV: un intent VIEW con https es
+  // ambiguo (lo puede tomar el navegador) y por eso "Ver en X" terminaba abriendo
+  // el browser. Los esquemas propios son inequívocos: solo los resuelve su app.
+  // Verificado con adb en la TV: nflx:// levanta Netflix (com.netflix.ninja).
+  function appScheme(platform, title) {
+    var t = encodeURIComponent(title);
+    // OJO: el esquema NECESITA EL HOST. "disneyplus://search?q=X" NO resuelve
+    // (verificado con adb en la TV); "disneyplus://www.disneyplus.com/search?q=X" sí.
+    // Verificados en Android TV: nflx, disneyplus, starplus.
+    // Prime Video NO declara esquema propio (solo http/https) -> va sin esquema y
+    // cae a la URL web.
+    var m = {
+      "Netflix": "nflx://www.netflix.com/search?q=" + t,
+      "Disney+": "disneyplus://www.disneyplus.com/search?q=" + t,
+      "Star+": "starplus://www.starplus.com/search?q=" + t,
+      "Max": "hbomax://play.max.com/search?q=" + t,
+      "Apple TV+": "videos://tv.apple.com/search?term=" + t,
+      "Paramount+": "paramountplus://www.paramountplus.com/search/"
+    };
+    return m[platform] || "";
+  }
+
   function deepLink(platform, title) {
     var t = encodeURIComponent(title);
     var map = {
@@ -346,13 +398,40 @@
   // Dentro de la cáscara Capacitor (Android TV) el bridge inyecta window.Capacitor:
   // AppLauncher dispara un intent VIEW que captura la app de streaming instalada.
   // Fuera de Capacitor (browser de prueba), fallback a window.open.
-  function openExternal(url) {
+  function openExternal(primary, fallback) {
     try {
       var C = window.Capacitor;
       var AL = C && C.Plugins && C.Plugins.AppLauncher;
-      if (AL && AL.openUrl) { AL.openUrl({ url: url }); return; }
+      if (AL && AL.openUrl) {
+        // Primero el esquema de la app (inequívoco). Solo si NO hay app que lo
+        // resuelva, recién ahí la URL web — así el browser deja de ser el default.
+        // OJO: AppLauncher.openUrl NO rechaza si no puede abrir: RESUELVE con
+        // {completed:false}. Con solo un .catch() el fallback nunca corría y no
+        // pasaba nada. Hay que mirar el resultado, además de atrapar el error.
+        var tryOpen = function (url) {
+          if (!url) return Promise.resolve(false);
+          try {
+            return AL.openUrl({ url: url }).then(function (r) {
+              var ok = !r || r.completed !== false; // sin campo = asumimos que abrió
+              console.log("[cinefilo] openUrl", url, "->", ok);
+              return ok;
+            })["catch"](function (e) {
+              console.log("[cinefilo] openUrl FALLÓ", url, e && e.message);
+              return false;
+            });
+          } catch (e3) { return Promise.resolve(false); }
+        };
+        tryOpen(primary).then(function (ok) {
+          if (!ok && fallback) {
+            return tryOpen(fallback).then(function (ok2) {
+              if (!ok2) { try { window.open(fallback, "_blank"); } catch (e4) {} }
+            });
+          }
+        });
+        return;
+      }
     } catch (e) {}
-    try { window.open(url, "_blank"); } catch (e2) {}
+    try { window.open(fallback || primary, "_blank"); } catch (e2) {}
   }
 
   function makeSessionId() {
@@ -388,6 +467,8 @@
   var query = "";
   var mode = "home"; // "home" | "search" | "list"
   var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
+  var detailScope = "grid"; // de qué lista salió la ficha: cands | grid | today | list
+                            // (define entre qué ítems se mueve con ←/→ adentro de la ficha)
   var TODAY_KEY = "cinefilo:tv:today";
   var today = loadToday(); // ítems en "Para hoy" (carrito de la TV, persistido en la sesión)
   var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Para hoy", 1 = "Ver en X"
@@ -416,11 +497,13 @@
         var q = window.qrcode(0, "M");
         q.addData(controlUrl);
         q.make();
-        img.src = q.createDataURL(8, 8);
+        // cellSize 12 (antes 8): el QR se muestra a 400px, así el bitmap nace
+        // con resolución de sobra y no se ve borroso al escalar.
+        img.src = q.createDataURL(12, 8);
         return;
       }
     } catch (e) {}
-    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=8&data=" + encodeURIComponent(controlUrl);
+    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=8&data=" + encodeURIComponent(controlUrl);
   })();
   document.getElementById("sess").textContent = "Sesión " + sessionId;
 
@@ -470,7 +553,10 @@
     var h = posterHTML(it) + '<div class="cgrad"></div>';
     // Guardada en "Para hoy": degradé + check encima (mismo lenguaje que la
     // app móvil) — sensación inmediata de "quedó reservada".
-    if (isToday(it)) {
+    // PERO no en la lista "Tus marcadas para hoy": ahí TODAS están guardadas, así
+    // que la marca no informa nada y el degradé violeta + el tilde solo tapan la
+    // carátula. Se muestra solo donde distingue (grilla general, "Mi lista").
+    if (isToday(it) && it.section !== "Tus marcadas para hoy") {
       h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">Para hoy</span></div>';
     }
     // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
@@ -513,7 +599,10 @@
     var af = foc ? actionFocus : -1;
     var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    // El label "Para hoy" solo se muestra en la ficha (ahí sobra espacio); en el
+    // banner el botón queda como ícono redondo para no robarle aire al hero.
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
+         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
     h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += "</div>"; // cierra .info
@@ -571,7 +660,7 @@
   // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
   function todayStripHTML() {
     if (!today.length) return "";
-    var h = '<h3 class="sec">Para ver hoy</h3><div class="todayrow">';
+    var h = '<h3 class="sec">Tus marcadas para hoy</h3><div class="todayrow">';
     for (var i = 0; i < today.length; i++) {
       var it = today[i];
       var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
@@ -581,6 +670,17 @@
   }
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
+  // Ítems entre los que se navega con ←/→ DENTRO de la ficha: los del mismo
+  // contexto del que la abriste (candidatas si zoomeaste una candidata, la
+  // grilla general si venías de ahí, el carrito si venías de "Para ver hoy").
+  function detailSiblings() {
+    if (detailScope === "today") return today;
+    if (mode !== "home" && mode !== "search") return items; // "Mi lista" / listas
+    var top = Math.min(TOP, items.length);
+    if (detailScope === "cands") return items.slice(0, top);
+    return items.slice(top);
+  }
+
   function openDetail(item) { if (!item) return; detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true); }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
@@ -605,10 +705,11 @@
     if (it.synopsis) h += '<p class="dsyn">' + esc(it.synopsis) + "</p>";
     var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' + (td ? "✓" : "+") + "</button>";
+    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
+         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
-    h += '<div class="detailhint">←/→ elegir · OK confirmar · Volver salir</div>';
+    h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
     h += "</div></div>";
     return h;
   }
@@ -623,7 +724,7 @@
     }
     // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
     // principales resultados merecen la misma jerarquía que el home. Solo las
-    // listas ("Mi lista" / "Candidatas para hoy") quedan como grilla plana.
+    // listas ("Mi lista" / "Tus marcadas para hoy") quedan como grilla plana.
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       // Banner + dots en un contenedor estable: al mover el foco solo se
@@ -645,13 +746,18 @@
     var top = Math.min(TOP, items.length);
     var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
     var html = heroHTML(items[hi], todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
+    // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
+    // ocupaba una línea entera propia y le robaba alto al "Para ver hoy", que
+    // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
+    var onCands = (todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
+    html += '<div class="hdots' + (onCands ? " act" : "") + '">';
     if (top > 1) {
-      html += '<div class="hdots">';
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
-      html += "</div>";
+      html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
+              (onCands ? " · ← → para cambiar" : "") + "</span>";
     }
-    // Los gestos del remoto nativo no tienen botón visible: documentarlos acá.
-    html += '<div class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</div>';
+    html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</span>';
+    html += "</div>";
     return html;
   }
 
@@ -678,7 +784,7 @@
       var listSec = (items[0] && items[0].section) || "Mi lista";
       var listMsg = listSec === "Ya vistas"
         ? " — películas y series que ya viste."
-        : listSec === "Candidatas para hoy"
+        : listSec === "Tus marcadas para hoy"
           ? " — tus elegidas para esta noche."
           : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
@@ -816,7 +922,10 @@
     function next() {
       if (run !== posterRun || idx >= pending.length) return;
       var item = pending[idx++];
-      cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
+      // El backend ya manda posterUrl en /api/tv-home: usarlo evita una request
+      // por título desde la TV. Solo si no vino, se resuelve en el cliente.
+      if (item.posterUrl) { onPoster(item, item.posterUrl); }
+      else cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
     }
     for (var k = 0; k < CONC && k < pending.length; k++) next();
   }
@@ -884,6 +993,9 @@
     var q = ((cmd && cmd.query) || "").trim();
     if (!q) return;
     pushHistory(); // recordá la pantalla actual antes de mostrar resultados
+    // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
+    // nunca veías la rueda de "buscando…" al hablarle a Cinéfilo desde ahí.
+    detailItem = null;
     query = q;
     mode = "search";
     lastLiked = (cmd && cmd.liked) || [];
@@ -918,6 +1030,7 @@
   // llegue al final. Búsqueda: hasta 36. Home: hasta el tope (60). Después de
   // esos umbrales, recién se carga más cuando el usuario se acerca al final.
   var autoDry = false; // true si una ronda no trajo nada nuevo (cortar el loop)
+  var MAX_ITEMS = 150;  // tope duro (antes 60: se agotaba y el final de la grilla quedaba muerto)
   function autoFill() {
     if (autoDry) return;
     if (mode !== "home" && mode !== "search") return;
@@ -927,7 +1040,7 @@
   }
 
   function loadMore() {
-    if (loadingMore || loading || items.length === 0 || items.length >= 60) return;
+    if (loadingMore || loading || items.length === 0 || items.length >= MAX_ITEMS) return;
     if (mode !== "home" && mode !== "search") return; // "Mi lista" no tiene scroll infinito
     loadingMore = true;
     renderContent();
@@ -982,10 +1095,26 @@
   }
 
   function moveFocus(dir) {
-    // En la ficha, ←/→ elige entre "Para hoy" (0) y "Ver en X" (1).
+    // En la ficha: ←/→ SE MUEVE ENTRE ÍTEMS (dentro de la lista de la que salió,
+    // igual que en la app); ↑/↓ elige el botón "Para hoy" (0) / "Ver en X" (1).
     if (detailItem) {
-      if (dir === "left" && actionFocus !== 0) { actionFocus = 0; renderContent(); }
-      else if (dir === "right" && actionFocus !== 1) { actionFocus = 1; renderContent(); }
+      if (dir === "up" || dir === "down") {
+        // ALTERNA entre los 2 botones en vez de mapear ↑=0 / ↓=1. Clave: el
+        // control del teléfono INVIERTE las direcciones (modelo "arrastrás el
+        // contenido": INVERT[up]=down). Con el mapeo absoluto, apretar ↑ para el
+        // "+" llegaba como "down" y seleccionaba "Ver en X" → OK disparaba play()
+        // y abría el browser de la TV. Alternando, la inversión deja de importar.
+        actionFocus = (actionFocus === 0) ? 1 : 0;
+        render();
+        return;
+      }
+      var sib = detailSiblings();
+      var ci = -1;
+      for (var q = 0; q < sib.length; q++) { if (sib[q].id === detailItem.id) { ci = q; break; } }
+      if (ci < 0) return;
+      var ti = (dir === "left") ? ci - 1 : ci + 1;
+      if (ti < 0 || ti >= sib.length) return; // no dar la vuelta: los extremos frenan
+      openDetail(sib[ti]); // conserva detailScope: seguís en el mismo contexto
       return;
     }
     if (items.length === 0) return;
@@ -1041,6 +1170,11 @@
       else if (dir === "up") n = Math.max(n - 6, 0);
     }
     if (n !== focusedIndex) { focusedIndex = n; changed = true; }
+    // Scroll infinito con el CONTROL DE LA TV: hasta ahora loadMore solo lo
+    // disparaba el autoFill (proactivo, hasta 60) o el teléfono (LOAD_MORE), así
+    // que si llegabas al final de la grilla con el remoto —típico en el home sin
+    // búsqueda— no cargaba nada más. Ahora, al acercarse al final, pide más.
+    if (changed && (mode === "home" || mode === "search") && focusedIndex >= items.length - 6) loadMore();
     if (changed) { updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen(); }
   }
 
@@ -1086,7 +1220,7 @@
     var li = [];
     for (var i = 0; i < today.length; i++) {
       var t = today[i];
-      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Candidatas para hoy" });
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Tus marcadas para hoy" });
     }
     showList(li);
   }
@@ -1130,7 +1264,7 @@
     if (!it) it = items[focusedIndex];
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
-    if (it.platform) openExternal(deepLink(it.platform, it.title));
+    if (it.platform) openExternal(appScheme(it.platform, it.title), deepLink(it.platform, it.title));
   }
 
   function handleCommand(cmd) {
@@ -1142,15 +1276,37 @@
     else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
     else if (cmd.type === "LOAD_MORE") loadMore();
     else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
-    else if (cmd.type === "SELECT") focusById(cmd.mediaId);
+    // SELECT con mediaId = enfocá ese ítem. SIN mediaId = "apretaron OK": lo
+    // resuelve okPress(), que respeta el botón enfocado (actionFocus). Antes el
+    // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Para hoy" te
+    // lanzaba la app de streaming porque el comando ya venía como "reproducí".
+    else if (cmd.type === "SELECT") { if (cmd.mediaId) focusById(cmd.mediaId); else okPress(); }
     else if (cmd.type === "PLAY") play(cmd.mediaId);
     else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
     else if (cmd.type === "HOME") goHome();
     else if (cmd.type === "SHOW_TODAY") showToday();
-    else if (cmd.type === "BACK") { if (detailItem) closeDetail(); else goBack(); }
+    // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si no
+    // hay ficha ni historial, vuelve a la pantalla de vinculación (QR). Antes
+    // solo hacía goBack() y desde el control no había forma de volver al pairing.
+    else if (cmd.type === "BACK") {
+      if (detailItem) closeDetail();
+      else if (history.length) goBack();
+      else if (paired) { forcePair = true; render(); }
+    }
     else if (cmd.type === "ADD_TODAY") { var ta = itemById(cmd.mediaId); if (ta) toggleToday(ta); }
-    else if (cmd.type === "OPEN_DETAIL") { var td2 = itemById(cmd.mediaId); if (td2) openDetail(td2); }
+    else if (cmd.type === "OPEN_DETAIL") {
+      var td2 = itemById(cmd.mediaId);
+      if (td2) {
+        // Mismo criterio que el doble tap: el scope define entre qué ítems se
+        // mueve ←/→ dentro de la ficha.
+        var ix = -1;
+        for (var w = 0; w < items.length; w++) { if (items[w].id === td2.id) { ix = w; break; } }
+        if (mode !== "home" && mode !== "search") detailScope = "list";
+        else detailScope = (ix >= 0 && ix < Math.min(TOP, items.length)) ? "cands" : "grid";
+        openDetail(td2);
+      }
+    }
     else if (cmd.type === "SET_PLATFORMS") {
       // Fix: antes la TV descartaba esto → nunca heredaba las plataformas del usuario.
       if (cmd.platforms && cmd.platforms.length) userPlatforms = cmd.platforms;
@@ -1169,23 +1325,33 @@
       play(detailItem.id);
       return;
     }
-    // Foco en la tira "Para ver hoy": OK abre la ficha del ítem guardado.
-    if ((mode === "home" || mode === "search") && todayFocus >= 0) {
-      var tit = today[todayFocus];
-      if (tit) openDetail(tit);
-      return;
-    }
     var it = items[focusedIndex];
-    if (!it) return;
-    // Si el foco está en un botón del banner, activarlo (👍/👎/Para hoy/Ver en X).
-    if ((mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
+    // Los BOTONES DEL BANNER mandan primero. Antes esta rama iba después de la del
+    // carrito, y como la del carrito abría la ficha sin mirar actionFocus, si
+    // todayFocus había quedado activo, apretar "Ver en X" te llevaba a la ficha en
+    // vez de lanzar la app de streaming.
+    if (it && (mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
       if (actionFocus === 0) toggleToday(it);
-      else if (actionFocus === 1) play(it.id);
+      else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
       return;
     }
-    if (isToday(it)) { openDetail(it); return; }
+    // Foco en la tira "Para ver hoy" (y NO en un botón): OK abre la ficha.
+    if ((mode === "home" || mode === "search") && todayFocus >= 0 && actionFocus < 0) {
+      var tit = today[todayFocus];
+      if (tit) { detailScope = "today"; openDetail(tit); }
+      return;
+    }
+    if (!it) return;
+    // Antes había un atajo acá: si el ítem YA estaba guardado, un tap abría la
+    // ficha directo — y entonces desde la grilla no había forma de desmarcarlo.
+    // Ahora el gesto es simétrico y vale igual esté guardado o no:
+    //   1 tap  → toggle "Para hoy" (marca / DESMARCA, y se va el fade + el tilde)
+    //   2 taps → abrir la ficha
     if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → ficha
       clearTimeout(okTimer); okTimer = null; okTitle = "";
+      // El scope define entre qué ítems te vas a poder mover con ←/→ en la ficha.
+      if (mode !== "home" && mode !== "search") detailScope = "list";
+      else detailScope = (focusedIndex < Math.min(TOP, items.length)) ? "cands" : "grid";
       openDetail(it); return;
     }
     if (okTimer) clearTimeout(okTimer);
@@ -1285,30 +1451,66 @@
     });
   }
 
-  // Grilla de pósters reales de tendencias en la mitad derecha del landing
-  // (mismo contenido que el home). Cada tile trae carátula + "Disponible en X".
-  function buildLandingGrid() {
-    var box = document.getElementById("pairgrid");
+  // Cintas de pósters del landing: 3 columnas que suben y bajan en loop, como
+  // fondo ambiental detrás del QR. Sin títulos ni sombras al frente.
+  // Cada columna lleva su contenido DUPLICADO ([set A][set A]) para que el
+  // translateY(-50%) del CSS cierre el ciclo sin salto visible.
+  function buildLandingRibbons() {
+    var box = document.getElementById("pairribbons");
     if (!box) return;
+    var COLS = 3;
+    // Track absoluto: saca las cintas del flujo para que su altura (mucho mayor
+    // que la pantalla) no estire .pair ni empuje el QR fuera de la vista.
+    var track = document.createElement("div");
+    track.className = "track";
+    box.appendChild(track);
+    var cols = [];
+    for (var c = 0; c < COLS; c++) {
+      var col = document.createElement("div");
+      col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
+      track.appendChild(col);
+      cols.push(col);
+    }
     fetch("/api/tv-home")
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var list = (data && data.items) ? data.items.slice(0, 12) : [];
-        for (var i = 0; i < list.length; i++) {
-          (function (it) {
-            var tile = document.createElement("div");
-            tile.className = "ptile";
-            // Sin "Disponible en" en el landing (pedido): solo el título sobre el póster.
-            var cap = '<div class="cap"><span class="tt">' + esc(it.title) + "</span></div>";
-            tile.innerHTML = cap;
-            box.appendChild(tile);
-            cinemetaPoster(it.title, it.type, function (url) {
-              if (!url) return;
-              var img = document.createElement("img");
-              img.src = url;
-              tile.insertBefore(img, tile.firstChild);
-            });
-          })(list[i]);
+        var byCol = [];
+        for (var c2 = 0; c2 < COLS; c2++) byCol.push([]);
+        for (var i = 0; i < list.length; i++) byCol[i % COLS].push(list[i]);
+
+        for (var c3 = 0; c3 < COLS; c3++) {
+          (function (col, items) {
+            var pairs = [];
+            // Primera copia (set A), en orden.
+            for (var k = 0; k < items.length; k++) {
+              var a = document.createElement("img");
+              a.alt = "";
+              col.appendChild(a);
+              pairs.push({ a: a, b: null });
+            }
+            // Segunda copia (set B), misma secuencia.
+            for (var k2 = 0; k2 < items.length; k2++) {
+              var b = document.createElement("img");
+              b.alt = "";
+              col.appendChild(b);
+              pairs[k2].b = b;
+            }
+            // El póster se espeja en las dos copias; si no hay, se sacan ambas
+            // (así las dos mitades siguen midiendo igual y el loop no se corre).
+            for (var k3 = 0; k3 < items.length; k3++) {
+              (function (it, p) {
+                var setSrc = function (url) {
+                  if (!url) { p.a.remove(); p.b.remove(); return; }
+                  p.a.src = url;
+                  p.b.src = url;
+                };
+                // Póster ya resuelto por el backend -> las cintas pintan al toque.
+                if (it.posterUrl) setSrc(it.posterUrl);
+                else cinemetaPoster(it.title, it.type, setSrc);
+              })(items[k3], pairs[k3]);
+            }
+          })(cols[c3], byCol[c3]);
         }
       })
       .catch(function () {});
@@ -1316,7 +1518,7 @@
 
   render();
   connect();
-  buildLandingGrid();
+  buildLandingRibbons();
   // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
   // vincule, las películas aparecen al instante en vez de recién pedirse.
   loadHome();

@@ -9,6 +9,11 @@ const config: CapacitorConfig = {
   appId: "com.cinefilo.tv",
   appName: "Cinéfilo TV",
   webDir: "dist",
+  // Fondo del WebView = violeta de marca. La app de TV es una cáscara que baja
+  // tv-lite.html REMOTO: durante esa descarga el WebView pinta su fondo, que por
+  // default es negro (se veía un hueco muerto entre el splash nativo y la app).
+  // El splash animado del front no puede taparlo porque vive DENTRO de esa página.
+  backgroundColor: "#2A0F5C",
   server: {
     url: "https://cinefilo-production.up.railway.app/tv-lite.html",
     androidScheme: "https",
