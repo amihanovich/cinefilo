@@ -114,24 +114,24 @@
   .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
   .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:5px; font-size:11px; color:#9A9AA2; }
   /* === Ficha a pantalla completa: póster grande a la izquierda + info === */
-  .detail { display:flex; gap:46px; align-items:center; min-height:calc(100vh - 210px); padding:8px 10px 24px; }
-  .detail .dposter { width:340px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
+  .detail { display:flex; gap:28px; align-items:center; min-height:calc(100vh - 140px); padding:6px 8px 14px; }
+  .detail .dposter { width:230px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
   .dph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
   .dph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
   .dph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; color:#9A9AA2; font-size:19px; font-weight:500; }
-  .detail .dinfo { flex:1; min-width:0; max-width:960px; display:flex; flex-direction:column; gap:15px; }
-  .detail .dtitle { font-family:inherit; font-size:46px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
-  .detail .dreason { margin:0; font-size:18px; line-height:1.5; color:#EDEDF0; }
+  .detail .dinfo { flex:1; min-width:0; display:flex; flex-direction:column; gap:9px; }
+  .detail .dtitle { font-family:inherit; font-size:31px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
+  .detail .dreason { margin:0; font-size:15px; line-height:1.45; color:#EDEDF0; }
   .detail .dreason b { color:#8852E0; margin-right:6px; }
-  .detail .dsyn { margin:0; font-size:16px; line-height:1.45; color:#B4B4BC; }
+  .detail .dsyn { margin:0; font-size:14px; line-height:1.4; color:#B4B4BC; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
   /* En la ficha, "Para hoy" deja de ser un ícono redondo y se vuelve píldora con
      texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
      outline 3px + scale(1.06), y con 12px quedaba pisando al "Ver en X". */
   .detail .hbtn.ico { width:auto; height:36px; padding:0 15px; gap:7px; font-size:15px; border-radius:999px; }
   .detail .hbtn.ico .blab { display:inline; }
-  .detail .hactions { gap:22px; }
-  .detailhint { text-align:center; color:#8A8A93; font-size:15px; margin-top:14px; }
+  .detail .hactions { display:flex; align-items:center; flex-wrap:wrap; gap:22px; margin-top:4px; }
+  .detailhint { text-align:center; color:#8A8A93; font-size:13px; margin-top:8px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
   .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
