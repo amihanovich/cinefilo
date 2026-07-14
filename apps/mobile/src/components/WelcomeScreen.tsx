@@ -38,16 +38,19 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
   const [phase, setPhase] = useState<"splash" | "agent">("splash");
   const [text, setText] = useState("");
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [speaking, setSpeaking] = useState(false); // Cinéfilo saludando por TTS
+  const [notice, setNotice] = useState<string | null>(null); // mic denegado / no te escuché
   const [volume, setVolume] = useState(0);
   const micRef = useRef<VoiceRecorder | null>(null);
   const greetedRef = useRef(false);
 
   // (a) Al aparecer el agente, Cinéfilo te recibe por voz (TTS). Best-effort:
-  // si el WebView bloquea el autoplay sin gesto, falla en silencio.
+  // si el WebView bloquea el autoplay sin gesto, falla en silencio. El orbe
+  // refleja que ÉL está hablando (misma señal que los overlays de voz).
   useEffect(() => {
     if (phase !== "agent" || greetedRef.current) return;
     greetedRef.current = true;
-    void speak(GREETING);
+    void speak(GREETING, () => setSpeaking(true), () => setSpeaking(false));
     return () => stopSpeaking();
   }, [phase]);
 
@@ -76,14 +79,24 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
       setVolume(0);
       if (!rec) { setMicState("idle"); return; }
       const blob = await rec.stop();
-      if (blob.size < 500) { setMicState("idle"); return; }
+      if (blob.size < 500) {
+        setMicState("idle");
+        setNotice("No te escuché. Probá de nuevo.");
+        return;
+      }
       try {
         const t = await transcribe(blob);
         setMicState("idle");
         if (t.trim()) submit(t.trim());
-      } catch { setMicState("idle"); }
+        else setNotice("No te escuché. Probá de nuevo.");
+      } catch {
+        setMicState("idle");
+        setNotice("No te escuché. Probá de nuevo.");
+      }
     } else if (micState === "idle") {
       stopSpeaking(); // corta el saludo si todavía suena
+      setSpeaking(false);
+      setNotice(null);
       const rec = new VoiceRecorder();
       micRef.current = rec;
       try {
@@ -93,8 +106,10 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
         });
         setMicState("rec");
       } catch {
+        // Antes fallaba EN SILENCIO: tocabas y no pasaba nada.
         micRef.current = null;
         setMicState("idle");
+        setNotice("No pude acceder al micrófono. Dale permiso a Cinéfilo y probá de nuevo.");
       }
     }
   };
@@ -116,7 +131,11 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
   }
 
   // ── Agente (solo 1ª vez) ────────────────────────────────────────────────────
-  const orbPhase = micState === "rec" ? "listening" : micState === "processing" ? "thinking" : "idle";
+  const orbPhase =
+    micState === "rec" ? "listening"
+    : micState === "processing" ? "thinking"
+    : speaking ? "speaking"
+    : "idle";
 
   return (
     <div className="flex h-[100dvh] flex-col items-center justify-center gap-7 bg-background px-8 text-center safe-top safe-bottom">
@@ -146,6 +165,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
       </div>
 
       {error && <p className="text-xs font-semibold text-red-400">{error}</p>}
+      {notice && <p className="text-xs font-semibold text-amber-400">{notice}</p>}
 
       <div className="flex w-full max-w-sm flex-col items-center gap-3">
         <button
