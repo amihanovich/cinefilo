@@ -405,13 +405,30 @@
       if (AL && AL.openUrl) {
         // Primero el esquema de la app (inequívoco). Solo si NO hay app que lo
         // resuelva, recién ahí la URL web — así el browser deja de ser el default.
-        if (primary) {
-          AL.openUrl({ url: primary })["catch"](function () {
-            if (fallback) { AL.openUrl({ url: fallback })["catch"](function () {}); }
-          });
-          return;
-        }
-        if (fallback) { AL.openUrl({ url: fallback })["catch"](function () {}); return; }
+        // OJO: AppLauncher.openUrl NO rechaza si no puede abrir: RESUELVE con
+        // {completed:false}. Con solo un .catch() el fallback nunca corría y no
+        // pasaba nada. Hay que mirar el resultado, además de atrapar el error.
+        var tryOpen = function (url) {
+          if (!url) return Promise.resolve(false);
+          try {
+            return AL.openUrl({ url: url }).then(function (r) {
+              var ok = !r || r.completed !== false; // sin campo = asumimos que abrió
+              console.log("[cinefilo] openUrl", url, "->", ok);
+              return ok;
+            })["catch"](function (e) {
+              console.log("[cinefilo] openUrl FALLÓ", url, e && e.message);
+              return false;
+            });
+          } catch (e3) { return Promise.resolve(false); }
+        };
+        tryOpen(primary).then(function (ok) {
+          if (!ok && fallback) {
+            return tryOpen(fallback).then(function (ok2) {
+              if (!ok2) { try { window.open(fallback, "_blank"); } catch (e4) {} }
+            });
+          }
+        });
+        return;
       }
     } catch (e) {}
     try { window.open(fallback || primary, "_blank"); } catch (e2) {}
