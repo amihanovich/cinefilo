@@ -359,6 +359,24 @@
   // Búsqueda directa DENTRO de cada plataforma: URL https que las apps de
   // streaming registran como App Link en Android TV. Reemplaza la búsqueda de
   // Google con btnI=1 (deprecada por Google), que en el WebView no abría nada.
+  // Esquema NATIVO de cada app. Clave en Android TV: un intent VIEW con https es
+  // ambiguo (lo puede tomar el navegador) y por eso "Ver en X" terminaba abriendo
+  // el browser. Los esquemas propios son inequívocos: solo los resuelve su app.
+  // Verificado con adb en la TV: nflx:// levanta Netflix (com.netflix.ninja).
+  function appScheme(platform, title) {
+    var t = encodeURIComponent(title);
+    var m = {
+      "Netflix": "nflx://www.netflix.com/search?q=" + t,
+      "Disney+": "disneyplus://search?q=" + t,
+      "Star+": "starplus://search?q=" + t,
+      "Max": "hbomax://search?q=" + t,
+      "Prime Video": "primevideo://search?phrase=" + t,
+      "Apple TV+": "videos://search?term=" + t,
+      "Paramount+": "paramountplus://"
+    };
+    return m[platform] || "";
+  }
+
   function deepLink(platform, title) {
     var t = encodeURIComponent(title);
     var map = {
@@ -376,13 +394,23 @@
   // Dentro de la cáscara Capacitor (Android TV) el bridge inyecta window.Capacitor:
   // AppLauncher dispara un intent VIEW que captura la app de streaming instalada.
   // Fuera de Capacitor (browser de prueba), fallback a window.open.
-  function openExternal(url) {
+  function openExternal(primary, fallback) {
     try {
       var C = window.Capacitor;
       var AL = C && C.Plugins && C.Plugins.AppLauncher;
-      if (AL && AL.openUrl) { AL.openUrl({ url: url }); return; }
+      if (AL && AL.openUrl) {
+        // Primero el esquema de la app (inequívoco). Solo si NO hay app que lo
+        // resuelva, recién ahí la URL web — así el browser deja de ser el default.
+        if (primary) {
+          AL.openUrl({ url: primary })["catch"](function () {
+            if (fallback) { AL.openUrl({ url: fallback })["catch"](function () {}); }
+          });
+          return;
+        }
+        if (fallback) { AL.openUrl({ url: fallback })["catch"](function () {}); return; }
+      }
     } catch (e) {}
-    try { window.open(url, "_blank"); } catch (e2) {}
+    try { window.open(fallback || primary, "_blank"); } catch (e2) {}
   }
 
   function makeSessionId() {
@@ -941,6 +969,9 @@
     var q = ((cmd && cmd.query) || "").trim();
     if (!q) return;
     pushHistory(); // recordá la pantalla actual antes de mostrar resultados
+    // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
+    // nunca veías la rueda de "buscando…" al hablarle a Cinéfilo desde ahí.
+    detailItem = null;
     query = q;
     mode = "search";
     lastLiked = (cmd && cmd.liked) || [];
@@ -1209,7 +1240,7 @@
     if (!it) it = items[focusedIndex];
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
-    if (it.platform) openExternal(deepLink(it.platform, it.title));
+    if (it.platform) openExternal(appScheme(it.platform, it.title), deepLink(it.platform, it.title));
   }
 
   function handleCommand(cmd) {
