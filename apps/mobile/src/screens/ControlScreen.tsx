@@ -227,17 +227,22 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </div>
       </div>
 
-      {/* Cinéfilo AI: hablarle por voz */}
+      {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia */}
       <div className="shrink-0 px-4 pt-3">
         <button
           onClick={() => setVoiceOpen(true)}
           disabled={!paired}
-          className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-primary/30 bg-primary/5 py-3 transition-transform active:scale-95 disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-3.5 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-5 shadow-[0_0_28px_rgba(136,82,224,0.18)] transition-transform active:scale-[0.97] disabled:opacity-40"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
             <Orb phase="idle" size="mini" />
           </span>
-          <span className="text-sm font-semibold text-primary">Hablarle a Cinéfilo</span>
+          <span className="flex flex-col items-start text-left">
+            <span className="text-lg font-bold text-primary">Hablarle a Cinéfilo</span>
+            <span className="text-[11px] text-muted-foreground">
+              Pedile qué ver, o preguntale sobre lo que estás viendo
+            </span>
+          </span>
         </button>
       </div>
 
