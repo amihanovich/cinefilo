@@ -7,16 +7,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, Shuffle } from "lucide-react";
 import { Orb } from "./Orb";
+import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
 const GREETING = "Hola, soy Cinéfilo. ¿Listo para que encontremos algo para que veas hoy?";
 // Ejemplos tocables para arrancar (anti-parálisis): muestran QUÉ se puede pedir.
 const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto", "Documental"];
-
-function cn(...classes: (string | boolean | undefined | null)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
 
 interface WelcomeScreenProps {
   firstTime: boolean;
@@ -155,6 +152,9 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
           )}
           <Orb phase={orbPhase} size="full" volume={volume} />
         </button>
+        {/* La mecánica pegada al orbe: el orbe ES el agente, la píldora te dice
+            qué hacer y en qué estado está (mismo componente en toda la app). */}
+        <VoicePill state={orbPhase} onClick={() => void toggleMic()} />
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo</h1>
           <p className="text-base text-muted-foreground leading-snug">
@@ -168,18 +168,6 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise }: 
       {notice && <p className="text-xs font-semibold text-amber-400">{notice}</p>}
 
       <div className="flex w-full max-w-sm flex-col items-center gap-3">
-        <button
-          onClick={() => void toggleMic()}
-          className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-2xl py-4 text-base font-semibold text-white transition-transform active:scale-95",
-            micState === "rec" ? "bg-red-500/80" : "bg-primary",
-          )}
-        >
-          {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
-          {micState === "rec" ? "Tocá para frenar" : micState === "processing" ? "Un segundo…" : "Tocá para hablar"}
-        </button>
-        <p className="text-[11px] text-muted-foreground/50">Tocá y soltá para hablar, tocá de nuevo para frenar.</p>
-
         <div className="flex w-full items-center gap-2 rounded-2xl bg-muted px-3">
           <input
             type="text"
