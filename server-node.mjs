@@ -9,6 +9,7 @@ import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.m
 import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsStream } from "./tts.mjs";
+import { startSupabaseKeepAlive } from "./keepalive.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -405,4 +406,5 @@ http
   .listen(port, () => {
     console.log(`Server listening on port ${port}`);
     warmHome(); // pre-carga el home en caché para que el primer usuario no espere
+    startSupabaseKeepAlive(); // que el free tier no pause el proyecto (pairing)
   });
