@@ -1,9 +1,9 @@
 // Control remoto web de la TV. Se abre al escanear el QR de la App TV desde un
-// navegador (SIN la app móvil). Misma lógica que el control móvil nuevo: preview
-// de lo que se ve en la TV arriba + D-pad direccional que mueve las tarjetas
-// (envía NAVIGATE/SELECT/BACK/PLAY por el mismo canal Realtime, lado "control").
-// La voz acá es SOLO dictado de búsqueda; el agente conversacional Cinéfilo vive
-// en la app móvil, por eso hay un CTA fijo para descargarla.
+// navegador (SIN la app móvil). MISMA experiencia que el control de la app:
+// preview + "Hablarle a Cinéfilo" (agente conversacional completo: pregunta →
+// responde y habla; pedido → busca en la TV) + D-pad + acciones, por el mismo
+// canal Realtime (lado "control"). El CTA de la app queda como invitación a
+// llevarte Cinéfilo en el bolsillo.
 
 import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
@@ -15,6 +15,8 @@ import { useTvChannel } from "./hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "./lib/tv-protocol";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { VoiceRecorder, transcribe } from "./lib/stt";
+import { ControlVoiceAgent } from "./components/ControlVoiceAgent";
+import { Orb } from "./components/Orb";
 
 // Link real a la app (Play Store / landing). Default = la landing de descargas,
 // para que el CTA siempre linkee aunque el build no traiga la env var (era el
@@ -64,6 +66,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [tvScreen, setTvScreen] = useState<string>("home");
   const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const micRef = useRef<VoiceRecorder | null>(null);
 
   const { status, paired, sendCommand } = useTvChannel({
@@ -269,6 +272,25 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </div>
       )}
 
+      {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia (como la app) */}
+      <div className="shrink-0 px-4 pt-3">
+        <button
+          onClick={() => setVoiceOpen(true)}
+          disabled={!paired}
+          className="flex w-full items-center justify-center gap-3.5 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-5 shadow-[0_0_36px_rgba(136,82,224,0.22)] transition-transform active:scale-[0.97] disabled:opacity-40"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
+            <Orb phase="idle" size="mini" />
+          </span>
+          <span className="flex flex-col items-start text-left">
+            <span className="text-lg font-bold text-primary">Hablarle a Cinéfilo</span>
+            <span className="text-[11px] text-muted-foreground">
+              Pedile qué ver, o preguntale sobre lo que estás viendo
+            </span>
+          </span>
+        </button>
+      </div>
+
       {/* Búsqueda: texto + dictado por voz */}
       <div className="shrink-0 px-4 pt-3">
         <form onSubmit={(e) => { e.preventDefault(); runSearch(text); }} className="flex gap-2">
@@ -396,6 +418,16 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </div>
       </div>
 
+      {/* Cinéfilo AI (voz): buscar / preguntar por lo que está enfocado en la TV */}
+      {voiceOpen && (
+        <ControlVoiceAgent
+          centeredTitle={centered?.title ?? null}
+          centeredPlatform={centered?.platform ?? null}
+          onSearch={runSearch}
+          onDismiss={() => setVoiceOpen(false)}
+        />
+      )}
+
       {/* Hoja "¿Te gustó?" — marca vista, alimenta el gusto y saca la tarjeta */}
       {pendingSeen && (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/60" onClick={() => setPendingSeen(null)}>
@@ -439,8 +471,8 @@ function DownloadBar() {
     <div className="flex items-center gap-2.5 px-4 py-2">
       <Sparkles className="h-4 w-4 shrink-0 text-primary" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-foreground">Descargá la app para hablar con Cinéfilo</p>
-        <p className="truncate text-[11px] text-muted-foreground">Voz, recomendaciones a medida y más</p>
+        <p className="truncate text-xs font-semibold text-foreground">Llevate Cinéfilo en tu teléfono</p>
+        <p className="truncate text-[11px] text-muted-foreground">La app completa: tu lista, tus gustos y la TV siempre a mano</p>
       </div>
       {MOBILE_APP_URL ? (
         <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">
