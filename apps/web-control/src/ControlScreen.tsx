@@ -7,14 +7,13 @@
 
 import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
-  Search, Play, CornerDownLeft, Loader2, Mic, Smartphone, Sparkles, Bookmark, Plus, Check,
+  Search, Play, CornerDownLeft, Mic, Smartphone, Sparkles, Bookmark, Plus, Check,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
   Home as HomeIcon, Clapperboard, Eye, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 import { useTvChannel } from "./hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "./lib/tv-protocol";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
-import { VoiceRecorder, transcribe } from "./lib/stt";
 import { ControlVoiceAgent } from "./components/ControlVoiceAgent";
 import { Orb } from "./components/Orb";
 
@@ -62,12 +61,10 @@ export function ControlScreen({ session }: ControlScreenProps) {
   const [nowPlaying, setNowPlaying] = useState<MediaItem | null>(null);
   const [centeredId, setCenteredId] = useState<string | null>(null);
   const [text, setText] = useState("");
-  const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [tvScreen, setTvScreen] = useState<string>("home");
   const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const micRef = useRef<VoiceRecorder | null>(null);
 
   const { status, paired, sendCommand } = useTvChannel({
     sessionId: session,
@@ -154,48 +151,6 @@ export function ControlScreen({ session }: ControlScreenProps) {
     send({ type: "SHOW_LIST", items: li });
   };
 
-  // Voz = dictado de búsqueda (el Cinéfilo conversacional vive en la app móvil).
-  const toggleMic = async () => {
-    if (micState === "rec") {
-      const rec = micRef.current;
-      micRef.current = null;
-      setMicState("processing");
-      if (!rec) { setMicState("idle"); return; }
-      const blob = await rec.stop();
-      if (blob.size < 1) { setMicState("idle"); return; }
-      try {
-        const t = await transcribe(blob);
-        setMicState("idle");
-        if (t.trim()) runSearch(t.trim());
-      } catch { setMicState("idle"); }
-    } else if (micState === "idle") {
-      const rec = new VoiceRecorder();
-      micRef.current = rec;
-      try {
-        await rec.start({
-          silenceMs: 2500,
-          onAutoStop: async () => {
-            micRef.current = null;
-            setMicState("processing");
-            const blob = await rec.stop();
-            if (blob.size >= 1) {
-              try {
-                const t = await transcribe(blob);
-                setMicState("idle");
-                if (t.trim()) runSearch(t.trim());
-                return;
-              } catch { /* noop */ }
-            }
-            setMicState("idle");
-          },
-        });
-        setMicState("rec");
-      } catch {
-        micRef.current = null;
-        setMicState("idle");
-      }
-    }
-  };
 
   // ── D-pad: mueve la selección entre las tarjetas de la TV ───────────────────
   // Modelo "arrastrás el contenido" (como el scroll del celular): la flecha /
@@ -276,8 +231,10 @@ export function ControlScreen({ session }: ControlScreenProps) {
           disabled={!paired}
           className="flex w-full items-center justify-center gap-3.5 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-5 shadow-[0_0_36px_rgba(136,82,224,0.22)] transition-transform active:scale-[0.97] disabled:opacity-40"
         >
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
+          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
             <Orb phase="idle" size="mini" />
+            {/* El orbe ES el micrófono: mic centrado sobre la esfera */}
+            <Mic className="absolute h-5 w-5 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           </span>
           <span className="flex flex-col items-start text-left">
             <span className="text-lg font-bold text-primary">Hablarle a Cinéfilo</span>
@@ -285,13 +242,10 @@ export function ControlScreen({ session }: ControlScreenProps) {
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
           </span>
-          <span className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
-            <Mic className="h-4 w-4" />
-          </span>
         </button>
       </div>
 
-      {/* Búsqueda: texto + dictado por voz */}
+      {/* Búsqueda por texto (la voz vive en "Hablarle a Cinéfilo": un solo micrófono) */}
       <div className="shrink-0 px-4 pt-3">
         <form onSubmit={(e) => { e.preventDefault(); runSearch(text); }} className="flex gap-2">
           <input
@@ -302,19 +256,6 @@ export function ControlScreen({ session }: ControlScreenProps) {
             disabled={!paired}
             className="min-h-[48px] flex-1 rounded-2xl border border-border bg-muted/30 px-4 text-base text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-40"
           />
-          <button
-            type="button"
-            onClick={() => void toggleMic()}
-            disabled={!paired}
-            aria-label="Dictar búsqueda"
-            className={cn(
-              "relative flex min-h-[48px] min-w-[48px] items-center justify-center rounded-2xl border border-border disabled:opacity-40",
-              micState === "rec" ? "bg-primary text-white" : "bg-muted/30 text-foreground",
-            )}
-          >
-            {micState === "processing" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Mic className="h-5 w-5" />}
-            {micState === "rec" && <span className="pointer-events-none absolute inset-0 rounded-2xl bg-primary/40 animate-ping" />}
-          </button>
           <button
             type="submit"
             disabled={!paired || !text.trim()}
