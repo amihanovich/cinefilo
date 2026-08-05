@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouch
 import {
   Play, CornerDownLeft, X, Smartphone, Bookmark, Plus, Check,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Home as HomeIcon, Clapperboard, Eye, ThumbsUp, ThumbsDown,
+  Home as HomeIcon, Clapperboard, Eye, ThumbsUp, ThumbsDown, Mic,
 } from "lucide-react";
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
@@ -251,6 +251,9 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             <span className="text-xs text-muted-foreground">
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
+          </span>
+          <span className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <Mic className="h-4 w-4" />
           </span>
         </button>
       </div>

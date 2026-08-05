@@ -7,7 +7,7 @@
 
 import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
-  Search, Play, CornerDownLeft, Loader2, Mic, Smartphone, Sparkles, ArrowRight, Bookmark, Plus, Check,
+  Search, Play, CornerDownLeft, Loader2, Mic, Smartphone, Sparkles, Bookmark, Plus, Check,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
   Home as HomeIcon, Clapperboard, Eye, ThumbsUp, ThumbsDown,
 } from "lucide-react";
@@ -236,9 +236,6 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </span>
       </header>
 
-      {/* CTA fijo: descargá la app (el agente Cinéfilo vive ahí) */}
-      <DownloadBar />
-
       {/* Preview: SOLO cuando hay algo reproduciéndose. Espejar el ítem centrado
           era redundante (la TV ya lo muestra, más grande), le robaba alto a la
           lista y su chrome de tarjeta parecía apretable sin serlo. En cambio, al
@@ -287,6 +284,9 @@ export function ControlScreen({ session }: ControlScreenProps) {
             <span className="text-[11px] text-muted-foreground">
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
+          </span>
+          <span className="ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <Mic className="h-4 w-4" />
           </span>
         </button>
       </div>
@@ -465,35 +465,3 @@ export function ControlScreen({ session }: ControlScreenProps) {
   );
 }
 
-// CTA siempre visible para bajar la app móvil (donde vive el agente Cinéfilo).
-function DownloadBar() {
-  const content = (
-    <div className="flex items-center gap-2.5 px-4 py-2">
-      <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-foreground">Llevate Cinéfilo en tu teléfono</p>
-        <p className="truncate text-[11px] text-muted-foreground">La app completa: tu lista, tus gustos y la TV siempre a mano</p>
-      </div>
-      {MOBILE_APP_URL ? (
-        <span className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">
-          Descargar <ArrowRight className="h-3.5 w-3.5" />
-        </span>
-      ) : (
-        <span className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-muted-foreground">
-          Próximamente
-        </span>
-      )}
-    </div>
-  );
-  return (
-    <div className="shrink-0 border-b border-border bg-primary/5">
-      {MOBILE_APP_URL ? (
-        <a href={MOBILE_APP_URL} target="_blank" rel="noopener noreferrer" className="block active:scale-[0.99]">
-          {content}
-        </a>
-      ) : (
-        content
-      )}
-    </div>
-  );
-}
