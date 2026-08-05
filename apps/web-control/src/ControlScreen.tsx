@@ -229,16 +229,16 @@ export function ControlScreen({ session }: ControlScreenProps) {
         <button
           onClick={() => setVoiceOpen(true)}
           disabled={!paired}
-          className="flex w-full items-center justify-center gap-3.5 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-5 shadow-[0_0_36px_rgba(136,82,224,0.22)] transition-transform active:scale-[0.97] disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-4 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-6 shadow-[0_0_36px_rgba(136,82,224,0.22)] transition-transform active:scale-[0.97] disabled:opacity-40"
         >
-          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
-            <Orb phase="idle" size="mini" />
+          <span className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full">
+            <Orb phase="idle" size="mini" sizePx={64} />
             {/* El orbe ES el micrófono: mic centrado sobre la esfera */}
-            <Mic className="absolute h-5 w-5 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
+            <Mic className="absolute h-7 w-7 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           </span>
           <span className="flex flex-col items-start text-left">
-            <span className="text-lg font-bold text-primary">Hablarle a Cinéfilo</span>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xl font-bold text-primary">Hablarle a Cinéfilo</span>
+            <span className="text-xs text-muted-foreground">
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
           </span>
@@ -290,13 +290,13 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </button>
       </div>
 
-      {/* D-pad direccional */}
+      {/* D-pad direccional — justify-evenly reparte el alto sobrante (sin hueco muerto) */}
       <div
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-4 py-4"
+        className="flex min-h-0 flex-1 flex-col items-center justify-evenly gap-3 px-4 py-3"
         onTouchStart={onPadTouchStart}
         onTouchEnd={onPadTouchEnd}
       >
-        <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(62vw, 230px)" }}>
+        <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(68vw, 256px)" }}>
           <div />
           <button onClick={() => nav("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
             <ChevronUp className="h-6 w-6" />

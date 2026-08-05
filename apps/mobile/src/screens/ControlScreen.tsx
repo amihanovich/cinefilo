@@ -243,10 +243,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           disabled={!paired}
           className="flex w-full items-center justify-center gap-4 rounded-3xl border border-primary/40 bg-gradient-to-r from-primary/15 via-primary/5 to-primary/15 py-7 shadow-[0_0_36px_rgba(136,82,224,0.22)] transition-transform active:scale-[0.97] disabled:opacity-40"
         >
-          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full">
-            <Orb phase="idle" size="mini" />
+          <span className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full">
+            <Orb phase="idle" size="mini" sizePx={64} />
             {/* El orbe ES el micrófono: mic centrado sobre la esfera */}
-            <Mic className="absolute h-5 w-5 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
+            <Mic className="absolute h-7 w-7 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           </span>
           <span className="flex flex-col items-start text-left">
             <span className="text-xl font-bold text-primary">Hablarle a Cinéfilo</span>

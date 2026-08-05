@@ -6,11 +6,13 @@ export type OrbSize = "full" | "mini";
 interface OrbProps {
   phase: OrbPhase;
   size: OrbSize;
+  /** Diámetro en px que pisa el default del size (mini=48, full=220). */
+  sizePx?: number;
   volume?: number; // 0–1
   onClick?: () => void;
 }
 
-export function Orb({ phase, size, volume = 0, onClick }: OrbProps) {
+export function Orb({ phase, size, sizePx, volume = 0, onClick }: OrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef<number>(0);
   const timerRef = useRef<number>(0);
@@ -18,7 +20,7 @@ export function Orb({ phase, size, volume = 0, onClick }: OrbProps) {
   volumeRef.current = volume;
 
   const isMini = size === "mini";
-  const px = isMini ? 48 : 220;
+  const px = sizePx ?? (isMini ? 48 : 220);
 
   useEffect(() => {
     const canvas = canvasRef.current;
