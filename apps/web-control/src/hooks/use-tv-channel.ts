@@ -63,8 +63,7 @@ export function useTvChannel({
 
     const peerRole: ChannelRole = role === "tv" ? "control" : "tv";
     let disposed = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectDelay = 2000;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
       if (disposed) return;
@@ -113,7 +112,7 @@ export function useTvChannel({
         // Callbacks de un canal ya reemplazado o de un hook desmontado: ignorar.
         if (disposed || channelRef.current !== channel) return;
         if (channelStatus === "SUBSCRIBED") {
-          reconnectDelay = 2000;
+          if (watchdog) { clearTimeout(watchdog); watchdog = null; }
           setStatus("connected");
           void channel.track({ role, online_at: new Date().toISOString() });
         } else if (
@@ -121,18 +120,27 @@ export function useTvChannel({
           channelStatus === "TIMED_OUT" ||
           channelStatus === "CLOSED"
         ) {
-          // Reconexión con backoff (2s→30s): antes el primer error dejaba el
-          // control "muerto" (status error fijo) hasta salir y volver a entrar.
-          setStatus("error");
+          // OJO: realtime-js ya re-une el canal SOLO (auto-rejoin estilo
+          // Phoenix) y este mismo callback vuelve a disparar SUBSCRIBED al
+          // recuperarse. NO hay que destruir/recrear el canal acá: además de
+          // pisar esa recuperación, supabase.channel() DEDUPLICA por topic —
+          // un removeChannel sin esperar devuelve el MISMO canal moribundo y
+          // el subscribe nuevo no se une nunca (pairing colgado para siempre).
+          setStatus("connecting");
           setPaired(false);
-          if (reconnectTimer) return;
-          reconnectTimer = setTimeout(() => {
-            reconnectTimer = null;
-            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          // Último recurso: si en 15s el auto-rejoin no levantó el canal, se
+          // recrea desde cero ESPERANDO el remove (así la instancia es fresca).
+          if (watchdog) return;
+          watchdog = setTimeout(() => {
+            watchdog = null;
+            if (disposed || channelRef.current !== channel) return;
             channelRef.current = null;
-            void supabase.removeChannel(channel);
-            connect();
-          }, reconnectDelay);
+            void Promise.resolve(supabase.removeChannel(channel))
+              .catch(() => undefined)
+              .then(() => {
+                if (!disposed) connect();
+              });
+          }, 15000);
         }
       });
     };
@@ -141,7 +149,7 @@ export function useTvChannel({
 
     return () => {
       disposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (watchdog) clearTimeout(watchdog);
       const ch = channelRef.current;
       channelRef.current = null;
       if (ch) void supabase.removeChannel(ch);

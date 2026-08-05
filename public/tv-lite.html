@@ -1409,20 +1409,34 @@
     }
   }
 
-  // Reconexión con backoff: las TVs quedan encendidas horas y el WiFi parpadea.
-  // Antes, un CHANNEL_ERROR dejaba "Error de conexión" para siempre; ahora se
-  // recrea el canal solo (2s → 4s → … → 30s máx) hasta volver a suscribir.
+  // Reconexión: realtime-js ya RE-UNE el canal solo (auto-rejoin estilo
+  // Phoenix) y el callback de subscribe vuelve a disparar SUBSCRIBED al
+  // recuperarse. Ante un error solo avisamos y dejamos un watchdog de último
+  // recurso (15s) que recrea el canal ESPERANDO el remove — supabase.channel()
+  // deduplica por topic: si no se espera, devuelve el MISMO canal moribundo y
+  // el subscribe nuevo no se une nunca (pairing colgado para siempre).
   var sb = null;
-  var reconnectTimer = null;
-  var reconnectDelay = 2000;
-  function scheduleReconnect() {
-    if (reconnectTimer) return;
+  var watchdogTimer = null;
+  function clearWatchdog() { if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; } }
+  function scheduleWatchdog() {
+    if (watchdogTimer) return;
     setBadge("Reconectando…", "wait");
-    reconnectTimer = setTimeout(function () {
-      reconnectTimer = null;
-      connect();
-    }, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    watchdogTimer = setTimeout(function () {
+      watchdogTimer = null;
+      hardReconnect();
+    }, 15000);
+  }
+  function hardReconnect() {
+    var old = channel;
+    channel = null;
+    var proceed = function () { connect(); };
+    if (old && sb) {
+      try {
+        var p = sb.removeChannel(old);
+        if (p && typeof p.then === "function") { p.then(proceed, proceed); return; }
+      } catch (e) {}
+    }
+    proceed();
   }
   function connect() {
     if (!window.CinefiloSB || !window.CinefiloSB.createClient) {
@@ -1430,7 +1444,7 @@
       return;
     }
     if (!sb) sb = window.CinefiloSB.createClient(SUPABASE_URL, SUPABASE_KEY);
-    if (channel) { try { sb.removeChannel(channel); } catch (e) {} channel = null; }
+    if (channel) return; // ya hay un canal vivo: su auto-rejoin se encarga
     var ch = sb.channel("cinefilo:" + sessionId, {
       config: { broadcast: { self: false }, presence: { key: "tv" } }
     });
@@ -1442,11 +1456,11 @@
     ch.subscribe(function (status) {
       if (ch !== channel) return; // callback de un canal viejo ya reemplazado
       if (status === "SUBSCRIBED") {
-        reconnectDelay = 2000;
+        clearWatchdog();
         setBadge(paired ? "Teléfono vinculado" : "Esperando teléfono", paired ? "on" : "wait");
         ch.track({ role: "tv" });
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        scheduleReconnect();
+        scheduleWatchdog();
       }
     });
   }
