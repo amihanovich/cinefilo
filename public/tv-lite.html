@@ -1008,7 +1008,7 @@
     render();
     emitScreen(true);
     autoDry = false;
-    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked })
+    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [] })
       .then(function (data) {
         loading = false;
         if (data && data.items) {
@@ -1048,11 +1048,11 @@
     for (var i = 0; i < items.length && i < 40; i++) { titles.push(items[i].title); }
     var p;
     if (mode === "search") {
-      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked });
+      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [] });
     } else {
       p = fetch("/api/tv-home-more", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exclude: titles })
+        body: JSON.stringify({ exclude: titles, platforms: userPlatforms || [] })
       }).then(function (r) { return r.json(); });
     }
     p

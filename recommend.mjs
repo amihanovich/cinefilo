@@ -1,10 +1,13 @@
 import { fetchUpstream } from "./upstream.mjs";
+import { validateItems, pickAvailable } from "./availability.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs.
 // Replica la lógica de src/lib/recommendations.functions.ts → recommendConversational.
 
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+// Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm); dejarla acá hacía
+// que Haiku siguiera asignándola y los clientes abrieran una app inexistente.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 
 const SYSTEM_BASE = `Sos Cinéfilo: el experto de tu videoclub de confianza — un cinéfilo apasionado con décadas de inmersión en el cine de todos los géneros y épocas. Tu conocimiento abarca desde el Hollywood clásico hasta el Neorrealismo italiano, la Nouvelle Vague francesa, el New Hollywood de los 70, el cine latinoamericano y el cine asiático contemporáneo. Sos como esos críticos y comunicadores de los programas de televisión de los años 60, 70 y 80 que con una sola frase abrían una puerta a un mundo cinematográfico desconocido — apasionados, directos, con criterio propio.
 
@@ -44,8 +47,9 @@ function buildSystem(alternativesCount = 4) {
 async function callAnthropic(messages, alternativesCount = 4) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
-  // Galería necesita más tokens de salida
-  const maxTokens = alternativesCount > 6 ? 3500 : 1200;
+  // Galería necesita más tokens de salida. El caso normal ahora pide 2
+  // alternativas extra (margen de la validación de disponibilidad): 1600.
+  const maxTokens = alternativesCount > 6 ? 3500 : 1600;
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -81,9 +85,13 @@ async function callAnthropic(messages, alternativesCount = 4) {
  * @param {string|null} params.weatherHint
  * @param {string[]} params.excludeTitles
  * @param {number} [params.alternativesCount=4]
+ * @param {string} [params.country] - ISO2 del usuario (default región del server)
  */
-export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4 }) {
+export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country }) {
   const effectivePlatforms = (platforms && platforms.length > 0) ? platforms : PLATFORMS;
+  // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
+  // por país) puede descartar títulos, y así igual se llega al count pedido.
+  const askCount = alternativesCount + 2;
   const excludeLine = excludeTitles && excludeTitles.length > 0
     ? `\n\nTítulos a excluir (ya vistos o mostrados — NO los recomiendes):\n- ${excludeTitles.join("\n- ")}`
     : "";
@@ -99,15 +107,16 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
         contextHint ? `Contexto temporal: ${contextHint}` : null,
         envLine || null,
         `Plataformas disponibles: ${effectivePlatforms.join(", ")}`,
+        country ? `País del usuario: ${country} (recomendá solo títulos en el catálogo local)` : null,
         excludeLine || null,
-        `Alternativas requeridas: ${alternativesCount}`,
+        `Alternativas requeridas: ${askCount}`,
       ].filter(Boolean).join("\n");
       return { role: "user", content: `${contextBlock}\n\nPedido del usuario: ${m.content}` };
     }
     return m;
   });
 
-  const parsed = await callAnthropic(builtMessages, alternativesCount);
+  const parsed = await callAnthropic(builtMessages, askCount);
 
   // Normalize output
   const normalize = (r) => ({
@@ -120,13 +129,61 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
     reason: String(r.reason || ""),
   });
 
+  let main = normalize(parsed.main || {});
+  let alternatives = (parsed.alternatives || []).slice(0, askCount).map(normalize);
+  let cinephileNote = parsed.cinephile_note || null;
+
+  // Disponibilidad real: confirma/corrige plataformas y separa lo que no está.
+  // El main solo se reemplaza si quedó confirmado como NO disponible ("unknown"
+  // se deja pasar: nunca peor que hoy) — y en ese caso se regenera la intro de
+  // voz, que lo presenta por nombre.
+  await validateItems([main, ...alternatives], platforms && platforms.length ? platforms : null, country);
+  const mainOk = main._avail === "confirmed" || main._avail === "corrected" || main._avail === "unknown";
+  const pool = pickAvailable(alternatives, askCount);
+  delete main._avail;
+  if (!mainOk && pool.length > 0) {
+    main = pool.shift();
+    cinephileNote = await renoteFor(main, messages).catch(() => null) || cinephileNote;
+  }
+
   return {
     filters: parsed.filters || {},
-    main: normalize(parsed.main || {}),
-    alternatives: (parsed.alternatives || []).slice(0, alternativesCount).map(normalize),
+    main,
+    alternatives: pool.slice(0, alternativesCount),
     clarification_needed: parsed.clarification_needed || null,
-    cinephile_note: parsed.cinephile_note || null,
+    cinephile_note: cinephileNote,
   };
+}
+
+// Regenera la intro de voz cuando la validación de disponibilidad bajó al main
+// original y se promovió una alternativa: la nota lo presenta por nombre, así
+// que la vieja quedaría hablando de un título que ya no está en pantalla.
+async function renoteFor(item, messages) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 220,
+      system:
+        "Sos Cinéfilo, experto cálido de videoclub. Devolvé SOLO un texto de 2-3 oraciones (45-65 palabras, español rioplatense, sin emojis ni listas) para ser HABLADO: arrancá con el contexto del pedido, presentá el título indicado con una frase que enganche y deje claro POR QUÉ responde al pedido, y cerrá invitando a mirar las alternativas.",
+      messages: [{
+        role: "user",
+        content: `Pedido del usuario: ${String((lastUser && lastUser.content) || "algo para ver hoy").slice(0, 400)}\n\nTítulo a presentar: "${item.title}" (${item.platform}). Motivo: ${item.reason}`,
+      }],
+    }),
+  }, { timeoutMs: 15000 });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const text = ((data.content && data.content[0] && data.content[0].text) || "").trim();
+  return text || null;
 }
 
 const ASK_SYSTEM = `Sos Cinéfilo: el experto de tu videoclub de confianza — un cinéfilo apasionado, como esos críticos de los programas de TV de los 60/70/80 que con una frase te abrían un mundo. El usuario está mirando la ficha de un título y te hace una pregunta sobre él (de qué trata, si vale la pena, el director, con qué compararla, etc.).

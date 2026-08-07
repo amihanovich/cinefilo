@@ -1,4 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
+import { validateItems, pickAvailable } from "./availability.mjs";
 
 // Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
@@ -6,9 +7,11 @@ import { fetchUpstream } from "./upstream.mjs";
 // Los pósters NO se buscan acá (iTunes bloquea la IP del server): los trae la TV
 // del lado del cliente (IP residencial).
 
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+// Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm). Estaba dejando
+// que Haiku la asigne y la TV disparaba el deep link de una app que ya no existe.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 
-async function callAnthropic(prompt) {
+async function callAnthropic(prompt, maxTokens) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
@@ -20,7 +23,7 @@ async function callAnthropic(prompt) {
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 4500,
+      max_tokens: maxTokens || 4500,
       messages: [{ role: "user", content: prompt }],
     }),
   }, { timeoutMs: 60000 });
@@ -53,9 +56,9 @@ function normalizeItem(r, section) {
 
 const ITEM_SHAPE =
   '{"title":"","platform":"","year":"","type":"Película","synopsis":"","hook":"","reason":""}';
-const ITEM_RULES =
+const itemRules = (plats) =>
   '- "platform" EXACTAMENTE una de: ' +
-  PLATFORMS.join(", ") +
+  plats.join(", ") +
   '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
   '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
   '- "hook": el porqué de la recomendación en UNA frase ultra concreta y visual, ' +
@@ -71,8 +74,11 @@ const ITEM_RULES =
   "como el experto del videoclub que te la recomienda a VOS; sin spoilers ni frases hechas repetidas entre ítems." +
   "\n- Títulos conocidos con disponibilidad estable.";
 
-export async function tvSearch(query, exclude, liked, disliked) {
+export async function tvSearch(query, exclude, liked, disliked, platforms, country) {
   if (!query || !query.trim()) return { items: [] };
+  // Plataformas del usuario (si las mandó el control) — restringen el prompt Y
+  // la validación de disponibilidad. Antes la TV siempre buscaba en las 7.
+  const plats = platforms && platforms.length ? platforms : PLATFORMS;
   const excludeLine =
     exclude && exclude.length
       ? "\n\nNO recomiendes estos títulos (ya vistos o mostrados): " + exclude.join(", ")
@@ -89,7 +95,7 @@ export async function tvSearch(query, exclude, liked, disliked) {
       : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
-    PLATFORMS.join(", ") +
+    plats.join(", ") +
     '.\nEl usuario quiere ver: "' +
     query.trim() +
     '".' +
@@ -99,12 +105,15 @@ export async function tvSearch(query, exclude, liked, disliked) {
     "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[' +
     ITEM_SHAPE +
-    "]}\n\nReglas:\n- EXACTAMENTE 15 ítems distintos entre sí.\n" +
-    ITEM_RULES +
+    "]}\n\nReglas:\n- EXACTAMENTE 18 ítems distintos entre sí.\n" +
+    itemRules(plats) +
     '\n- Si un título se aleja del pedido, aclaralo en "reason" (ej "Se aleja un poco, pero...").';
-  const parsed = await callAnthropic(prompt);
+  // Se piden 18 y se devuelven hasta 15: el margen absorbe los que la
+  // validación de disponibilidad (TMDB, por país) descarta o no confirma.
+  const parsed = await callAnthropic(prompt, 5500);
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
-  return { items };
+  await validateItems(items, platforms && platforms.length ? platforms : null, country);
+  return { items: pickAvailable(items, 15) };
 }
 
 // Póster desde Cinemeta, resuelto EN EL SERVIDOR. Antes cada TV hacía 1 request
@@ -159,44 +168,53 @@ export async function tvHome() {
     '],"latest":[' +
     ITEM_SHAPE +
     "]}\n\nReglas:\n" +
-    '- "recommended": EXACTAMENTE 8 títulos excelentes y variados (distintos géneros y plataformas), atemporales y muy recomendables.\n' +
-    '- "latest": EXACTAMENTE 8 estrenos recientes (2024-2025) populares, variados, repartidos entre las distintas plataformas.\n' +
+    '- "recommended": EXACTAMENTE 10 títulos excelentes y variados (distintos géneros y plataformas), atemporales y muy recomendables.\n' +
+    '- "latest": EXACTAMENTE 10 estrenos recientes (2024-2025) populares, variados, repartidos entre las distintas plataformas.\n' +
     "- Sin repetir títulos entre las dos listas.\n" +
-    ITEM_RULES;
-  const parsed = await callAnthropic(prompt);
+    itemRules(PLATFORMS);
+  // 10+10 → 8+8: el margen absorbe los descartes de la validación de
+  // disponibilidad. El home es global (cacheado para todos), así que valida
+  // contra TODAS las plataformas en la región default — el filtro por usuario
+  // pasa en la búsqueda, que sí es por request.
+  const parsed = await callAnthropic(prompt, 6000);
   const rec = ((parsed && parsed.recommended) || []).map((r) =>
     normalizeItem(r, "Recomendadas para vos"),
   );
   const latest = ((parsed && parsed.latest) || []).map((r) =>
     normalizeItem(r, "Últimas subidas a las plataformas"),
   );
-  const items = await attachPosters(rec.concat(latest));
+  await validateItems(rec.concat(latest), null, undefined);
+  const items = await attachPosters(
+    pickAvailable(rec, 8).concat(pickAvailable(latest, 8)),
+  );
   homeCache = { items: items };
   homeCacheAt = Date.now();
   return homeCache;
 }
 
 // Más recomendaciones para la carga infinita del home.
-export async function tvHomeMore(exclude) {
+export async function tvHomeMore(exclude, platforms, country) {
+  const plats = platforms && platforms.length ? platforms : PLATFORMS;
   const excludeLine =
     exclude && exclude.length
       ? "\n\nNO repitas estos (ya se mostraron): " + exclude.slice(0, 50).join(", ")
       : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
-    PLATFORMS.join(", ") +
+    plats.join(", ") +
     ".\nDevolvé MÁS recomendaciones excelentes y variadas para la pantalla de inicio." +
     excludeLine +
     "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[' +
     ITEM_SHAPE +
-    "]}\n\nReglas:\n- EXACTAMENTE 8 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
-    ITEM_RULES;
-  const parsed = await callAnthropic(prompt);
+    "]}\n\nReglas:\n- EXACTAMENTE 10 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
+    itemRules(plats);
+  const parsed = await callAnthropic(prompt, 4500);
   const items = ((parsed && parsed.items) || []).map((r) =>
     normalizeItem(r, "Más recomendadas para vos"),
   );
-  return { items };
+  await validateItems(items, platforms && platforms.length ? platforms : null, country);
+  return { items: pickAvailable(items, 8) };
 }
 
 // Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).

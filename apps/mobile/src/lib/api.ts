@@ -30,6 +30,8 @@ export async function fetchRecommendation(params: {
   weatherHint: string | null;
   excludeTitles: string[];
   alternativesCount?: number;
+  /** ISO2 del usuario: el backend valida disponibilidad real en ese país. */
+  country?: string;
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",

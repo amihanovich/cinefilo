@@ -260,6 +260,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         weatherHint: null,
         excludeTitles: excludeList(),
         alternativesCount: 4,
+        country: getCountry(),
       });
 
       if (!data?.main) throw new Error("Sin resultado");
@@ -330,10 +331,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         excludeTitles: excludeList(),
-        // 6 alternativas → queda en 1200 tokens (umbral >6 = 3500). Evita la 2ª
+        // 6 alternativas → bajo el umbral >6 = 3500 tokens. Evita la 2ª
         // generación pesada que colgaba "más opciones" 5-6s. La carga infinita
         // sigue trayendo más tandas al scrollear.
         alternativesCount: 6,
+        country: getCountry(),
       });
 
       if (!data?.main) throw new Error("Sin resultado");
@@ -366,6 +368,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         weatherHint: null,
         excludeTitles: excludeList(),
         alternativesCount: 6,
+        country: getCountry(),
       });
       const all = data?.main ? [data.main, ...(data.alternatives ?? [])] : [];
       const existing = new Set([...items, ...galleryItems].map((i) => i.title));
@@ -559,6 +562,16 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     if (avail?.confirmed && (await openNative(avail))) return;
 
     const q = encodeURIComponent(current.title);
+
+    // JustWatch verificó y el título NO está en esa plataforma: abrir su app
+    // igual era mandar al usuario a un "sin resultados". Mejor una búsqueda
+    // neutral de dónde verlo — directo con window.open: openInApp intentaría
+    // el scheme nativo de esa misma app equivocada. (avail === undefined =
+    // sin verificar: se abre la plataforma como siempre.)
+    if (avail && !avail.confirmed) {
+      window.open(`https://www.google.com/search?q=${q}+ver+online`, "_system");
+      return;
+    }
     const urls: Record<string, string> = {
       Netflix: `https://www.netflix.com/search?q=${q}`,
       "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,

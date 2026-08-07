@@ -160,6 +160,8 @@ http
             strArr(p.exclude, 60, 120),
             strArr(p.liked, 50, 120),
             strArr(p.disliked, 50, 120),
+            strArr(p.platforms, 10, 40),
+            str(p.country, 2),
           ));
         });
       } else {
@@ -179,7 +181,7 @@ http
       readBody(req, res, 16384).then((body) => {
         if (body === null) return;
         const p = asJson(body);
-        sendJson(tvHomeMore(strArr(p.exclude, 60, 120)));
+        sendJson(tvHomeMore(strArr(p.exclude, 60, 120), strArr(p.platforms, 10, 40), str(p.country, 2)));
       });
       return;
     }
@@ -361,6 +363,7 @@ http
           weatherHint: str(p.weatherHint, 60),
           excludeTitles: strArr(p.excludeTitles, 100, 120),
           alternativesCount: alt,
+          country: str(p.country, 2),
         }));
       });
       return;
