@@ -1092,6 +1092,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               >
                 ▶ Ver ahora en {label}
               </button>
+              {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
+              <span className="text-center text-[9px] text-white/40">Disponibilidad: JustWatch</span>
 
               {/* 👍 · 👎 (solo íconos) · + Para hoy (carrito). "Ver más tarde" vive en la ficha. */}
               <div className="flex gap-2">
@@ -1293,6 +1295,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     >
                       ▶ Ver ahora en {platformLabel(detailItem.platform)}
                     </button>
+                    {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
+                    <p className="mt-1 text-center text-[9px] text-muted-foreground/60">Disponibilidad: JustWatch</p>
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleCart(detailItem); }}

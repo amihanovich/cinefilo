@@ -87,6 +87,78 @@ export function availabilityStatus() {
   };
 }
 
+// ── Discover: el catálogo REAL por plataforma y región ───────────────────────
+// Pool de títulos realmente disponibles (populares y recientes) para el home
+// de la TV: se invierte el flujo — en vez de que Haiku invente y validemos,
+// TMDB dice qué hay y Haiku escribe el porqué. 4 requests por plataforma
+// (movie/tv × popular/reciente); el caller cachea (el home ya cachea 6 h).
+function discoverItem(c, kind, platform) {
+  const date = c.release_date || c.first_air_date || "";
+  const y = parseInt(date.slice(0, 4), 10);
+  return {
+    title: String(c.title || c.name || ""),
+    platform,
+    type: kind === "tv" ? "Serie" : "Película",
+    year: Number.isFinite(y) ? y : undefined,
+    posterUrl: c.poster_path ? IMG + c.poster_path : undefined,
+    tmdbId: c.id,
+    popularity: c.popularity || 0,
+  };
+}
+
+/**
+ * Títulos disponibles de verdad en `country`, por plataforma.
+ * @returns {Promise<{popular: object[], recent: object[]}>} listas deduplicadas
+ *   ordenadas por popularidad, con `platform` garantizada. Vacías si está
+ *   deshabilitado o TMDB falla (el caller debe tener fallback).
+ */
+export async function discoverPopular(country) {
+  if (!availabilityEnabled()) return { popular: [], recent: [] };
+  const region = String(country || DEFAULT_REGION).toUpperCase().slice(0, 2) || DEFAULT_REGION;
+  const cutoff = new Date(Date.now() - 548 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const base =
+    `language=es-AR&watch_region=${region}&with_watch_monetization_types=flatrate|ads` +
+    "&sort_by=popularity.desc&include_adult=false&vote_count.gte=20";
+
+  const jobs = [];
+  for (const prov of PROVIDER_MAP) {
+    const ids = prov.ids.join("|");
+    for (const kind of ["movie", "tv"]) {
+      const dateField = kind === "movie" ? "primary_release_date" : "first_air_date";
+      jobs.push(
+        tmdbGet(`/discover/${kind}`, `${base}&with_watch_providers=${ids}`)
+          .then((d) => ({ kind, platform: prov.canonical, bucket: "popular", results: d.results || [] }))
+          .catch(() => null),
+        tmdbGet(`/discover/${kind}`, `${base}&with_watch_providers=${ids}&${dateField}.gte=${cutoff}`)
+          .then((d) => ({ kind, platform: prov.canonical, bucket: "recent", results: d.results || [] }))
+          .catch(() => null),
+      );
+    }
+  }
+  const pages = (await Promise.all(jobs)).filter(Boolean);
+
+  // Dedupe por título normalizado: un título en varias plataformas queda con
+  // la primera (todas son válidas — la disponibilidad es real en cualquiera).
+  const out = { popular: [], recent: [] };
+  const seen = { popular: new Set(), recent: new Set() };
+  for (const page of pages) {
+    for (const c of page.results.slice(0, 10)) {
+      const it = discoverItem(c, page.kind, page.platform);
+      if (!it.title) continue;
+      const k = norm(it.title);
+      if (seen[page.bucket].has(k)) continue;
+      seen[page.bucket].add(k);
+      out[page.bucket].push(it);
+    }
+  }
+  // Lo reciente popular también aparece en "popular": sin repetir entre listas.
+  const recentKeys = new Set(out.recent.map((i) => norm(i.title)));
+  out.popular = out.popular.filter((i) => !recentKeys.has(norm(i.title)));
+  out.popular.sort((a, b) => b.popularity - a.popularity);
+  out.recent.sort((a, b) => b.popularity - a.popularity);
+  return out;
+}
+
 // Normalización para comparar títulos: minúsculas, sin tildes ni puntuación.
 function norm(s) {
   return String(s || "")

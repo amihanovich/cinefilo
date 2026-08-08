@@ -133,6 +133,7 @@
   .detail .hactions { display:flex; align-items:center; flex-wrap:wrap; gap:22px; margin-top:4px; }
   .detailhint { text-align:center; color:#8A8A93; font-size:13px; margin-top:8px; }
   .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
+  .jwattr { text-align:left; margin-top:2px; color:#55555C; font-size:11px; }
   /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
   .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
 
@@ -710,6 +711,8 @@
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
     h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
+    // Atribución requerida por TMDB: los watch providers son datos de JustWatch.
+    if (it.platform) h += '<div class="jwattr">Disponibilidad: JustWatch</div>';
     h += "</div></div>";
     return h;
   }

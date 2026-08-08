@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable } from "./availability.mjs";
+import { validateItems, pickAvailable, discoverPopular, availabilityEnabled } from "./availability.mjs";
 
 // Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
@@ -159,9 +159,85 @@ let homeCache = null;
 let homeCacheAt = 0;
 const HOME_TTL = 6 * 60 * 60 * 1000;
 
+// Reparte por plataforma (round-robin) para que el home no quede monocolor:
+// toma el más popular de cada plataforma, después el segundo, hasta llenar.
+function pickVaried(list, want) {
+  const byPlat = new Map();
+  for (const it of list) {
+    if (!byPlat.has(it.platform)) byPlat.set(it.platform, []);
+    byPlat.get(it.platform).push(it);
+  }
+  const out = [];
+  const buckets = [...byPlat.values()];
+  for (let round = 0; out.length < want; round++) {
+    let added = false;
+    for (const b of buckets) {
+      if (b[round]) { out.push(b[round]); added = true; if (out.length >= want) break; }
+    }
+    if (!added) break; // no queda nada en ninguna plataforma
+  }
+  return out;
+}
+
+// Cinéfilo escribe hook/reason/synopsis para títulos REALES del catálogo
+// (Discover): acá NO inventa títulos, solo pone la voz del experto.
+async function writeReasons(items) {
+  const list = items
+    .map((it, i) => `${i + 1}. "${it.title}" (${it.type}, ${it.year || "s/d"}, en ${it.platform})`)
+    .join("\n");
+  const prompt =
+    "Sos Cinéfilo, el experto del videoclub, en español rioplatense. Estos títulos ESTÁN " +
+    "disponibles en las plataformas indicadas (verificado — no lo dudes ni lo cambies):\n\n" +
+    list +
+    "\n\nPara CADA título devolvé synopsis, hook y reason.\n" +
+    "Devolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
+    '{"items":[{"title":"","synopsis":"","hook":"","reason":""}]}\n\nReglas:\n' +
+    '- "title" EXACTAMENTE como te lo di (mismo texto), sin agregar ni sacar títulos.\n' +
+    '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
+    '- "hook": el porqué en UNA frase ultra concreta y visual, empezando con "Porque", ' +
+    "máximo 8 palabras, sin punto final. Es lo único que se lee en la tarjeta chica.\n" +
+    '- "reason": 2 o 3 frases (40 a 60 palabras) que den ganas de darle play: el porqué ' +
+    "central, el tono/clima, qué la vuelve memorable; si suma, un dato de cinéfilo breve. " +
+    "Cálido y conversacional, sin spoilers ni frases hechas repetidas entre ítems.";
+  const parsed = await callAnthropic(prompt, 6000);
+  const byTitle = new Map();
+  for (const r of (parsed && parsed.items) || []) {
+    byTitle.set(String(r.title || "").toLowerCase().trim(), r);
+  }
+  for (const it of items) {
+    const r = byTitle.get(it.title.toLowerCase().trim());
+    if (!r) continue;
+    if (r.synopsis) it.synopsis = String(r.synopsis);
+    if (r.hook) it.hook = String(r.hook);
+    if (r.reason) it.reason = String(r.reason);
+  }
+  return items;
+}
+
 export async function tvHome() {
   const now = Date.now();
   if (homeCache && now - homeCacheAt < HOME_TTL) return homeCache;
+
+  // Camino principal: catálogo REAL por Discover (qué hay de verdad en las
+  // plataformas de la región) + Haiku poniendo la voz. Nada inventado.
+  if (availabilityEnabled()) {
+    const pool = await discoverPopular(undefined);
+    if (pool.popular.length >= 8 && pool.recent.length >= 8) {
+      const rec = pickVaried(pool.popular, 8);
+      const latest = pickVaried(pool.recent, 8);
+      const all = rec.concat(latest);
+      await writeReasons(all);
+      for (const it of all) delete it.popularity;
+      for (const it of rec) it.section = "Recomendadas para vos";
+      for (const it of latest) it.section = "Últimas subidas a las plataformas";
+      homeCache = { items: all };
+      homeCacheAt = Date.now();
+      return homeCache;
+    }
+  }
+
+  // Fallback (sin TMDB_API_KEY o Discover caído): flujo clásico — Haiku
+  // propone de memoria y la validación filtra lo que puede.
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     PLATFORMS.join(", ") +
@@ -176,10 +252,6 @@ export async function tvHome() {
     '- "latest": EXACTAMENTE 10 estrenos recientes (2024-2025) populares, variados, repartidos entre las distintas plataformas.\n' +
     "- Sin repetir títulos entre las dos listas.\n" +
     itemRules(PLATFORMS);
-  // 10+10 → 8+8: el margen absorbe los descartes de la validación de
-  // disponibilidad. El home es global (cacheado para todos), así que valida
-  // contra TODAS las plataformas en la región default — el filtro por usuario
-  // pasa en la búsqueda, que sí es por request.
   const parsed = await callAnthropic(prompt, 6000);
   const rec = ((parsed && parsed.recommended) || []).map((r) =>
     normalizeItem(r, "Recomendadas para vos"),
