@@ -396,6 +396,83 @@
     return map[platform] || ("https://www.google.com/search?q=" + t + "+ver+online");
   }
 
+  // ── Link exacto AL TÍTULO (JustWatch, la misma fuente que usa la app móvil) ─
+  // "Ver en X" idealmente cae EN la película (la app abre su ficha con play),
+  // no en una búsqueda. Se resuelve client-side (IP del living, como el móvil);
+  // si falla (red/CORS/sin match) el fallback silencioso son los esquemas de
+  // búsqueda de siempre. Prime es el gran ganador: no tiene esquema de búsqueda
+  // (hoy cae al browser) y con el deeplink de JustWatch abre la app en el título.
+  var JW_QUERY =
+    "query GetTitleOffers($searchQuery: String!, $country: Country!, $language: Language!, $objectTypes: [ObjectType!]) {" +
+    " popularTitles(country: $country, first: 5, filter: { searchQuery: $searchQuery, objectTypes: $objectTypes }) {" +
+    " edges { node { objectType" +
+    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " } } } }";
+  var JW_PACKAGES = {
+    "Netflix": ["nfx"], "Prime Video": ["amp", "prv"], "Disney+": ["dnp"],
+    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"]
+  };
+  var jwCache = {}; // "titulo|plataforma" → {deeplinkAndroid, standardWebURL} | null (resuelto sin match)
+
+  function jwNorm(s) {
+    var x = String(s || "").toLowerCase();
+    try { x = x.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {}
+    return x.replace(/\s+/g, " ").trim();
+  }
+  function jwScore(result, expected) {
+    var r = jwNorm(result), e = jwNorm(expected);
+    if (!r || !e) return 0;
+    if (r === e) return 3;
+    if (r.indexOf(e) === 0 || e.indexOf(r) === 0) return 2;
+    if (r.indexOf(e) >= 0 || e.indexOf(r) >= 0) return 1;
+    return 0;
+  }
+
+  function jwResolve(it) {
+    if (!it || !it.title || !it.platform) return Promise.resolve(null);
+    var key = it.title + "|" + it.platform;
+    if (Object.prototype.hasOwnProperty.call(jwCache, key)) return Promise.resolve(jwCache[key]);
+    var wanted = JW_PACKAGES[it.platform] || [];
+    if (!wanted.length) { jwCache[key] = null; return Promise.resolve(null); }
+    return fetch("https://apis.justwatch.com/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "App-Version": "3.8.2" },
+      body: JSON.stringify({
+        operationName: "GetTitleOffers",
+        query: JW_QUERY,
+        // País fijo AR (misma región default del backend); la TV no geo-detecta.
+        variables: { searchQuery: it.title, country: "AR", language: "es", objectTypes: [/serie/i.test(it.type || "") ? "SHOW" : "MOVIE"] }
+      })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("JW HTTP " + r.status);
+      return r.json();
+    }).then(function (data) {
+      var edges = (data && data.data && data.data.popularTitles && data.data.popularTitles.edges) || [];
+      var best = null;
+      for (var i = 0; i < edges.length; i++) {
+        var node = edges[i] && edges[i].node;
+        if (!node) continue;
+        var offers = node.offers || [];
+        var match = null;
+        for (var j = 0; j < offers.length; j++) {
+          var o = offers[j];
+          if (o && o.monetizationType === "FLATRATE" && o["package"] && wanted.indexOf(o["package"].technicalName) >= 0) { match = o; break; }
+        }
+        if (!match) continue;
+        // La búsqueda devuelve títulos "populares" que matchean el texto — el
+        // primero puede ser OTRA película. Solo confirmamos si el título coincide.
+        var score = jwScore((node.content && node.content.title) || "", it.title);
+        if (score === 0) continue;
+        if (!best || score > best.score) best = { score: score, offer: match };
+        if (best.score === 3) break;
+      }
+      var out = best ? { deeplinkAndroid: best.offer.deeplinkAndroid || "", standardWebURL: best.offer.standardWebURL || "" } : null;
+      jwCache[key] = out;
+      return out;
+    })["catch"](function () { return null; }); // error: NO se cachea (reintenta la próxima)
+  }
+
   // Dentro de la cáscara Capacitor (Android TV) el bridge inyecta window.Capacitor:
   // AppLauncher dispara un intent VIEW que captura la app de streaming instalada.
   // Fuera de Capacitor (browser de prueba), fallback a window.open.
@@ -682,7 +759,13 @@
     return items.slice(top);
   }
 
-  function openDetail(item) { if (!item) return; detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true); }
+  function openDetail(item) {
+    if (!item) return;
+    detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true);
+    // Prefetch del link exacto al título: cuando el usuario toque "Ver en X",
+    // el deeplink de JustWatch ya está resuelto y abre directo (sin espera).
+    jwResolve(item);
+  }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
   // y quedaría desincronizado. "Mi lista" siempre viaja como screen "search".
@@ -1267,7 +1350,19 @@
     if (!it) it = items[focusedIndex];
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
-    if (it.platform) openExternal(appScheme(it.platform, it.title), deepLink(it.platform, it.title));
+    if (it.platform) {
+      var key = it.title + "|" + it.platform;
+      var jw = Object.prototype.hasOwnProperty.call(jwCache, key) ? jwCache[key] : undefined;
+      if (jw && (jw.deeplinkAndroid || jw.standardWebURL)) {
+        // Link exacto: la app de streaming abre EN el título (post-perfil, play).
+        openExternal(jw.deeplinkAndroid || jw.standardWebURL, jw.standardWebURL || deepLink(it.platform, it.title));
+      } else {
+        // Sin deeplink resuelto (aún cargando, sin match o JW caído): búsqueda
+        // prellenada de siempre. De paso se calienta para el próximo intento.
+        openExternal(appScheme(it.platform, it.title), deepLink(it.platform, it.title));
+        if (jw === undefined) jwResolve(it);
+      }
+    }
   }
 
   function handleCommand(cmd) {
@@ -1549,6 +1644,8 @@
       .catch(function () {});
   }
 
+  render();
+  connect();
   buildLandingRibbons();
   // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
   // vincule, las películas aparecen al instante en vez de recién pedirse.
