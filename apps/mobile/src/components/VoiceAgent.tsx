@@ -1,57 +1,37 @@
 // VoiceAgent: overlay de voz opt-in. Se monta sobre la pantalla de cards.
-// LEY de interacción (igual en toda la app): tocás para hablar (señal clara de
-// que escucha), tocás de nuevo para frenar. Ahí el wizard decide vía `route`:
-// - pedido de búsqueda → la rueda de plataformas (SearchLoading) reemplaza todo
-//   y este overlay se desmonta;
-// - pregunta / charla de asesor → la respuesta se muestra y se habla ACÁ, y el
-//   orbe queda listo para seguir conversando.
+// MVP de voz (LEY en toda la app): tocás para hablar (señal clara de que
+// escucha), tocás de nuevo para frenar, y lo que dijiste SIEMPRE dispara una
+// búsqueda — la rueda de plataformas (SearchLoading) reemplaza todo y este
+// overlay se desmonta. Sin capa conversacional (quedó dormida en el backend).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
 import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
-import { speak, stopSpeaking } from "../lib/tts";
 import { X } from "lucide-react";
 
-type AgentState = "idle" | "listening" | "thinking" | "speaking" | "done";
-
-export type VoiceRoute = { mode: "search" } | { mode: "ask"; answer: string };
+type AgentState = "idle" | "listening" | "thinking";
 
 interface VoiceAgentProps {
-  // Decide el destino de lo dicho (pregunta vs búsqueda). Si devuelve "search",
-  // el wizard ya disparó la rueda y este overlay se va a desmontar solo.
-  route: (text: string) => Promise<VoiceRoute>;
+  /** Dispara la búsqueda con el literal de lo dicho; el overlay se cierra solo. */
+  onSearch: (text: string) => void;
   onDismiss: () => void;
-  // Si es false, NO saluda por TTS: abre escuchando directo (pedido d — "Pedile a
-  // Cinéfilo" desde la Home). La entrada de la app sí saluda.
-  greet?: boolean;
 }
 
-const GREETING = "Hola, soy Cinéfilo. Estoy acá para ayudarte a encontrar esa peli o serie que querés ver hoy. ¿Empezamos? Simplemente decime qué tenés ganas de ver.";
-// Aperturas siguientes en la misma sesión: saludo corto (menos costo TTS, menos espera).
-const GREETING_SHORT = "Decime qué tenés ganas de ver.";
-let greetedThisSession = false;
-
-export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgentProps) {
-  const [state, setState] = useState<AgentState>(greet ? "speaking" : "idle");
+export function VoiceAgentOverlay({ onSearch, onDismiss }: VoiceAgentProps) {
+  const [state, setState] = useState<AgentState>("idle");
   const [volume, setVolume] = useState(0);
-  const [hint, setHint] = useState("...");
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const mountedRef = useRef(true);
 
   const orbPhase: OrbPhase =
-    state === "listening" ? "listening"
-    : state === "thinking" ? "thinking"
-    : state === "speaking" ? "speaking"
-    : "idle";
+    state === "listening" ? "listening" : state === "thinking" ? "thinking" : "idle";
 
   const startListening = useCallback(async () => {
     if (!mountedRef.current) return;
-    stopSpeaking();
-    setAnswer(null);
+    setHint(null);
     setState("listening");
-    setHint("Te escucho...");
 
     const recorder = new VoiceRecorder();
     recorderRef.current = recorder;
@@ -74,38 +54,16 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
     }
   }, []);
 
-  // Al montar: saluda por TTS y arranca escuchando; si greet=false, escucha directo.
   useEffect(() => {
     mountedRef.current = true;
-
-    const boot = async () => {
-      if (!greet) {
-        // Sin auto-escucha: igual que la bienvenida, esperamos que el usuario toque
-        // el orbe (press-to-speak). Recién ahí graba, y al tocar de nuevo busca.
-        return;
-      }
-      setState("speaking");
-      setHint("...");
-      const text = greetedThisSession ? GREETING_SHORT : GREETING;
-      greetedThisSession = true;
-      await speak(text);
-      if (mountedRef.current) {
-        await startListening();
-      }
-    };
-
-    void boot();
-
     return () => {
       // Si el overlay se desmonta por fuera de handleDismiss (re-render del
-      // padre), cortar el saludo TTS y soltar el micrófono: antes el audio
-      // seguía sonando y el MediaStream quedaba caliente.
+      // padre), soltar el micrófono: antes el MediaStream quedaba caliente.
       mountedRef.current = false;
-      stopSpeaking();
       recorderRef.current?.cancel();
       recorderRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const stopListeningManual = useCallback(async () => {
     setVolume(0);
@@ -113,9 +71,7 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
     recorderRef.current = null;
     if (!recorder) return;
 
-    // Cinéfilo "pensando": el orbe pasa a azul mientras transcribe y decide si
-    // es una pregunta (responde acá) o un pedido (rueda de plataformas).
-    setState("thinking");
+    setState("thinking"); // transcribiendo: el orbe pasa a azul un instante
 
     try {
       const blob = await recorder.stop();
@@ -130,47 +86,30 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
         setHint("No te escuché. Probá de nuevo.");
         return;
       }
-      const result = await route(text);
       if (!mountedRef.current) return;
-      if (result.mode === "ask") {
-        setAnswer(result.answer);
-        setState("speaking");
-        await speak(result.answer);
-        if (mountedRef.current) setState("idle");
-      }
-      // mode "search": el wizard ya mostró la rueda; este overlay se desmonta solo.
+      // Siempre búsqueda: el wizard muestra la rueda y este overlay se desmonta.
+      onSearch(text);
     } catch {
       if (mountedRef.current) {
         setState("idle");
-        setHint("No pude responder eso. Probá de nuevo.");
+        setHint("No te escuché. Probá de nuevo.");
       }
     }
-  }, [route]);
+  }, [onSearch]);
 
   const handleOrbClick = useCallback(() => {
-    if (state === "listening") {
-      void stopListeningManual();
-    } else if (state === "idle" || state === "done") {
-      void startListening();
-    } else if (state === "speaking") {
-      // Interrumpir saludo/respuesta y escuchar ya
-      stopSpeaking();
-      void startListening();
-    }
-    // Si está en "thinking" no hacemos nada — ya está procesando
+    if (state === "listening") void stopListeningManual();
+    else if (state === "idle") void startListening();
+    // "thinking": ya está procesando, ignorar taps
   }, [state, startListening, stopListeningManual]);
 
   const handleDismiss = () => {
-    stopSpeaking();
     if (recorderRef.current) {
       recorderRef.current.cancel();
       recorderRef.current = null;
     }
     onDismiss();
   };
-
-  // Solo mensajes de error ("No te escuché…"): la mecánica vive en la VoicePill.
-  const errHint = state === "idle" && hint !== "..." && hint !== "Te escucho..." ? hint : null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md">
@@ -210,16 +149,9 @@ export function VoiceAgentOverlay({ route, onDismiss, greet = true }: VoiceAgent
         <VoicePill state={orbPhase} onClick={handleOrbClick} />
       </div>
 
-      {/* Respuesta del asesor / errores */}
-      {(answer || errHint) && (
-        <div className="mt-6 max-h-[28vh] max-w-sm overflow-y-auto px-6 text-center">
-          {answer ? (
-            <p className="text-base leading-relaxed text-white/85">{answer}</p>
-          ) : (
-            <p className="text-sm font-medium leading-relaxed text-white/75 tracking-wide">{errHint}</p>
-          )}
-        </div>
-      )}
+      <p className="mt-4 max-w-xs text-center text-sm text-white/50">
+        {hint ?? "Pedime qué querés ver hoy"}
+      </p>
     </div>
   );
 }

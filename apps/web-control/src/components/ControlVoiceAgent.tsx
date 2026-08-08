@@ -1,86 +1,38 @@
 // Copia de apps/mobile/src/components/ControlVoiceAgent.tsx — mantener en sync a mano.
-// Orbe de voz para la pantalla de control remoto (ControlScreen). Igual look &
-// feel que el VoiceAgent de la home, pero acá el objetivo es seguir iterando con
-// Cinéfilo sobre lo que se ve en la TV. Ya NO hay que elegir modo: el backend
-// (/api/orb) INFIERE de lo que dice el usuario si quiere PREGUNTAR sobre el
-// título centrado o BUSCAR algo nuevo, y ruteamos según su respuesta.
+// Orbe de voz para la pantalla de control remoto (ControlScreen). MVP de voz:
+// hablarle a Cinéfilo SIEMPRE es pedirle una búsqueda — tocás para hablar,
+// tocás para frenar, y lo que dijiste dispara la búsqueda en la TV (la rueda
+// se ve allá). Sin capa conversacional: ni saludo, ni preguntas, ni respuestas
+// habladas (esa capa quedó dormida en el backend por si se retoma).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Orb, type OrbPhase } from "./Orb";
 import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
-import { speak, stopSpeaking } from "../lib/tts";
-import { fetchOrb } from "../lib/api";
 import { X } from "lucide-react";
 
-type AgentState = "idle" | "listening" | "thinking" | "speaking";
+type AgentState = "idle" | "listening" | "thinking";
 
 interface ControlVoiceAgentProps {
   centeredTitle: string | null;
-  centeredPlatform: string | null;
   /** Dispara una búsqueda en la TV (mismo runSearch del ControlScreen). */
   onSearch: (query: string) => void;
   onDismiss: () => void;
 }
 
-export function ControlVoiceAgent({
-  centeredTitle,
-  centeredPlatform,
-  onSearch,
-  onDismiss,
-}: ControlVoiceAgentProps) {
-  const [state, setState] = useState<AgentState>("speaking");
+export function ControlVoiceAgent({ centeredTitle, onSearch, onDismiss }: ControlVoiceAgentProps) {
+  const [state, setState] = useState<AgentState>("idle");
   const [volume, setVolume] = useState(0);
-  const [answer, setAnswer] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const recorderRef = useRef<VoiceRecorder | null>(null);
   const mountedRef = useRef(true);
 
   const orbPhase: OrbPhase =
-    state === "listening" ? "listening"
-    : state === "thinking" ? "thinking"
-    : state === "speaking" ? "speaking"
-    : "idle";
-
-  // Procesa lo que dijo el usuario. El backend decide: pregunta sobre el título
-  // centrado (contestamos y lo hablamos) o pedido de búsqueda (buscamos en la TV).
-  const handleTranscript = useCallback(
-    async (raw: string) => {
-      const q = raw.trim();
-      if (!q || !mountedRef.current) return;
-      setState("thinking");
-      setAnswer(null);
-      try {
-        const result = await fetchOrb({
-          transcript: q,
-          title: centeredTitle ?? "",
-          platform: centeredPlatform ?? "",
-        });
-        if (!mountedRef.current) return;
-        if (result.mode === "search") {
-          // Quiere algo nuevo → búsqueda en la TV con el LITERAL de lo que dijo
-          // (la TV lo muestra en la rueda; no la query refinada del orb).
-          onSearch(q);
-          onDismiss();
-          return;
-        }
-        // Pregunta sobre el título centrado → contestamos y lo hablamos.
-        setAnswer(result.answer);
-        setState("speaking");
-        await speak(result.answer);
-        if (mountedRef.current) setState("idle");
-      } catch {
-        if (mountedRef.current) {
-          setAnswer("No pude responder eso. Probá de nuevo.");
-          setState("idle");
-        }
-      }
-    },
-    [centeredTitle, centeredPlatform, onSearch, onDismiss],
-  );
+    state === "listening" ? "listening" : state === "thinking" ? "thinking" : "idle";
 
   const startListening = useCallback(async () => {
     if (!mountedRef.current) return;
-    stopSpeaking();
+    setHint(null);
     setState("listening");
     const recorder = new VoiceRecorder();
     recorderRef.current = recorder;
@@ -94,36 +46,23 @@ export function ControlVoiceAgent({
       });
     } catch {
       recorderRef.current = null;
-      if (mountedRef.current) setState("idle");
+      if (mountedRef.current) {
+        setHint("No pude acceder al micrófono. Dale permiso a Cinéfilo y probá de nuevo.");
+        setState("idle");
+      }
     }
   }, []);
 
-  // Al montar: saluda y arranca a escuchar.
   useEffect(() => {
     mountedRef.current = true;
-    const greet = async () => {
-      setState("speaking");
-      const text = centeredTitle
-        ? `Estás viendo ${centeredTitle}. Preguntame lo que quieras sobre esta, o pedime que te busque algo nuevo.`
-        : "Decime qué querés ver, o preguntame sobre lo que estás mirando.";
-      await speak(text);
-      // NO arranca a grabar solo. Antes encadenaba startListening() acá y el mic
-      // "se activaba solo" apenas terminaba el saludo, pisándose con la voz y
-      // sintiéndose errático. Ahora queda en reposo: press-to-speak puro, igual
-      // que la home. Tocás el orbe -> escucha; lo volvés a tocar -> frena y recién
-      // ahí piensa (responde o busca).
-      if (mountedRef.current) setState("idle");
-    };
-    void greet();
     return () => {
       mountedRef.current = false;
-      stopSpeaking();
       if (recorderRef.current) {
         recorderRef.current.cancel();
         recorderRef.current = null;
       }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const stopListeningManual = useCallback(async () => {
     setState("thinking");
@@ -134,26 +73,35 @@ export function ControlVoiceAgent({
     try {
       const blob = await recorder.stop();
       if (blob.size < 1000) {
+        if (mountedRef.current) {
+          setHint("No te escuché. Probá de nuevo.");
+          setState("idle");
+        }
+        return;
+      }
+      const q = (await transcribe(blob)).trim();
+      if (!mountedRef.current) return;
+      if (!q) {
+        setHint("No te escuché. Probá de nuevo.");
         setState("idle");
         return;
       }
-      const text = await transcribe(blob);
-      await handleTranscript(text);
+      // Siempre búsqueda, con el LITERAL de lo que dijo (la TV lo muestra en la rueda).
+      onSearch(q);
+      onDismiss();
     } catch {
-      setState("idle");
+      if (mountedRef.current) {
+        setHint("No te escuché. Probá de nuevo.");
+        setState("idle");
+      }
     }
-  }, [handleTranscript]);
+  }, [onSearch, onDismiss]);
 
   const handleOrbClick = useCallback(() => {
     if (state === "thinking") return; // procesando: ignorar taps (evita reentrar)
-    if (state === "listening") void stopListeningManual(); // 2º tap: frena y procesa
-    else if (state === "idle") void startListening();      // 1er tap: empieza a escuchar
-    else if (state === "speaking") {
-      stopSpeaking(); // te la puedo cortar y hablarle encima
-      void startListening();
-    }
+    if (state === "listening") void stopListeningManual(); // 2º tap: frena y busca
+    else void startListening(); // 1er tap: empieza a escuchar
   }, [state, startListening, stopListeningManual]);
-
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 px-6 backdrop-blur-md">
@@ -197,11 +145,9 @@ export function ControlVoiceAgent({
         <VoicePill state={orbPhase} onClick={handleOrbClick} />
       </div>
 
-      {answer && (
-        <div className="mt-6 max-h-[26vh] max-w-sm overflow-y-auto px-2 text-center">
-          <p className="text-base leading-relaxed text-white/85">{answer}</p>
-        </div>
-      )}
+      <p className="mt-4 max-w-xs text-center text-sm text-white/50">
+        {hint ?? "Pedime qué querés ver y lo busco en la TV"}
+      </p>
     </div>
   );
 }

@@ -5,8 +5,8 @@ import {
   Volume2, VolumeX, Keyboard, ChevronDown, ShoppingCart,
 } from "lucide-react";
 import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/context";
-import { fetchRecommendation, fetchPosters, fetchOrb, warmupBackend } from "./lib/api";
-import { speak, stopSpeaking, isMuted, setMuted } from "./lib/tts";
+import { fetchRecommendation, fetchPosters, warmupBackend } from "./lib/api";
+import { isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
 import { jwSearch, openNative, openInApp } from "./lib/justwatch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
@@ -140,8 +140,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // Chat / conversación
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatText, setChatText] = useState("");
-  const [agentReply, setAgentReply] = useState<string | null>(null);
-  const [thinking, setThinking] = useState(false); // Cinéfilo decidiendo/respondiendo (chat y mic)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -242,7 +240,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
   // ── Recomendación normal (5 cards) ───────────────────────────────────────
   const getReco = async (userQuery: string, queryType: "auto" | "text" | "voice" = "text") => {
-    setAgentReply(null);
     setLoading(true);
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     // Feedback inmediato (≤100ms): plataformas activas + eco literal del pedido.
@@ -280,13 +277,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
 
-      // (e) Cinéfilo explica por voz por qué eligió estas opciones (respeta el mute).
-      // Si detectó duda en el pedido (muletillas, "no sé..."), se atreve a UNA
-      // pregunta para afinar: se habla a continuación y queda como burbuja.
-      const note = data.cinephile_note ?? `Te recomiendo ${data.main.title} en ${data.main.platform}.`;
-      const followUp = data.clarification_needed?.trim() || null;
-      void speak(followUp ? `${note} ${followUp}` : note);
-      if (followUp) setAgentReply(followUp);
+      // MVP de voz: hablarle a Cinéfilo = buscar. Los resultados hablan solos —
+      // ya no se reproduce la intro (cinephile_note sigue viniendo del backend,
+      // dormida, por si se retoma el modo asesor).
 
       void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
       void loadAvailability(allItems);
@@ -406,7 +399,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // ── Navegación ────────────────────────────────────────────────────────────
   const navigate = (newIndex: number) => {
     setCurrentIndex(newIndex);
-    setAgentReply(null); // la respuesta era sobre la card anterior
     track("card_viewed", {
       card_index: newIndex,
       title: items[newIndex]?.title,
@@ -428,54 +420,21 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     if (next >= 0 && next < heroCount) navigate(next);
   };
 
-  // ── Ruteo unificado (LA LEY de la voz/chat) ───────────────────────────────
-  // Todo lo que el usuario dice o escribe pasa por acá: /api/orb infiere si es
-  // una PREGUNTA de asesor (Cinéfilo piensa y responde, sin pisar el deck) o un
-  // PEDIDO de búsqueda (rueda de plataformas + recomendaciones nuevas).
-  const routeCore = async (
-    text: string,
-  ): Promise<{ mode: "search"; query: string } | { mode: "ask"; answer: string }> => {
-    const currentItem = (cart.length > 0 ? cart : items)[currentIndex];
-    // Sin título en pantalla no hay nada que preguntar → siempre búsqueda.
-    if (screen !== "magic" || !currentItem) return { mode: "search", query: text };
-    const result = await fetchOrb({
-      transcript: text,
-      title: currentItem.title,
-      platform: currentItem.platform,
-    });
-    if (result.mode === "search") return { mode: "search", query: result.query || text };
-    track("detail_question", { title: currentItem.title });
-    return { mode: "ask", answer: result.answer };
-  };
-
+  // ── Ruteo unificado (LA LEY de la voz/chat, versión MVP) ──────────────────
+  // Todo lo que el usuario dice o escribe es SIEMPRE un pedido de búsqueda:
+  // rueda de plataformas + recomendaciones nuevas, con el LITERAL de lo dicho.
+  // (La capa conversacional —/api/orb, asesor, mayéutica— quedó dormida en el
+  // backend por si se retoma.)
   const routeUserInput = async (text: string, source: "text" | "voice") => {
-    setThinking(true);
-    setAgentReply(null);
-    try {
-      const r = await routeCore(text);
-      if (r.mode === "search") {
-        setThinking(false);
-        const turnNumber = messages.filter((m) => m.role === "user").length + 1;
-        track("refinement_made", { turn_number: turnNumber });
-        // El LITERAL del usuario (no la query refinada del orb): es lo que se
-        // muestra en la rueda y lo que entra a la conversación con la IA.
-        await getReco(text, source);
-        return;
-      }
-      setThinking(false);
-      setAgentReply(r.answer);
-      // Si lo dijo por voz, la respuesta también se habla (asesor de viva voz).
-      if (source === "voice") void speak(r.answer);
-    } catch {
-      setThinking(false);
-      showError("No pude responder eso. Intentá de nuevo.");
-    }
+    const turnNumber = messages.filter((m) => m.role === "user").length + 1;
+    track("refinement_made", { turn_number: turnNumber });
+    await getReco(text, source);
   };
 
   // ── Chat ──────────────────────────────────────────────────────────────────
   const sendChat = async () => {
     const text = chatText.trim();
-    if (!text || loading || thinking) return;
+    if (!text || loading) return;
     setChatText("");
     await routeUserInput(text, "text");
   };
@@ -864,21 +823,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
         {voiceMode && (
           <VoiceAgentOverlay
-            greet={false} /* desde la Home no saluda: escucha directo */
-            /* LA LEY: al frenar, el orbe pasa a "pensando" y /api/orb decide.
-               Pregunta → la respuesta se muestra y habla EN el overlay (asesor,
-               se puede seguir conversando). Pedido → getReco dispara la rueda de
-               plataformas (SearchLoading reemplaza la pantalla y el overlay se
-               desmonta solo). */
-            route={async (text) => {
-              const r = await routeCore(text);
-              if (r.mode === "search") {
-                void getReco(r.query, "voice");
-                return { mode: "search" as const };
-              }
-              setAgentReply(r.answer); // persiste como burbuja al cerrar el overlay
-              return r;
-            }}
+            /* MVP: al frenar, lo dicho SIEMPRE dispara la búsqueda — la rueda
+               (SearchLoading) reemplaza la pantalla y el overlay se desmonta. */
+            onSearch={(text) => void getReco(text, "voice")}
             onDismiss={() => setVoiceMode(false)}
           />
         )}
@@ -946,10 +893,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {/* Buscador de texto (secundario) — colapsado por defecto, se abre con "escribir" */}
         {chatOpen && (
           <div className="shrink-0 px-5 pb-3">
-            <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", (loading || thinking) && "pointer-events-none")}>
+            <div className={cn("flex items-center gap-2 rounded-2xl bg-muted px-3", loading && "pointer-events-none")}>
               <button
                 onClick={() => void toggleMic()}
-                disabled={loading || thinking}
+                disabled={loading}
                 className={cn(
                   "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
                   micRecording ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground"
@@ -966,46 +913,17 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 value={chatText}
                 onChange={(e) => setChatText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") void sendChat(); }}
-                placeholder={micRecording ? "Escuchando..." : (loading || thinking) ? "Pensando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
-                disabled={loading || micRecording || thinking}
+                placeholder={micRecording ? "Escuchando..." : loading ? "Buscando..." : "Más oscuro · ¿de qué trata? · otra cosa..."}
+                disabled={loading || micRecording}
                 autoFocus
                 className="min-h-[44px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
               />
               <button
                 onClick={() => void sendChat()}
-                disabled={!chatText.trim() || loading || thinking}
+                disabled={!chatText.trim() || loading}
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
               >
-                {loading || thinking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Cinéfilo pensando (decidiendo si responde o sale a buscar) */}
-        {thinking && (
-          <div className="shrink-0 px-5 pb-3">
-            <div className="flex items-center gap-2.5 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <Sparkles className="h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
-              <p className="flex-1 text-[12px] leading-relaxed text-foreground/70">
-                Cinéfilo está pensando…
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Respuesta del Cinéfilo sobre el título en pantalla (siempre que exista) */}
-        {agentReply && (
-          <div className="shrink-0 px-5 pb-3">
-            <div className="flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <p className="flex-1 text-[12px] leading-relaxed text-foreground/85">{agentReply}</p>
-              <button
-                onClick={() => setAgentReply(null)}
-                aria-label="Cerrar respuesta"
-                className="shrink-0 text-muted-foreground/50 active:scale-90 transition-transform"
-              >
-                <X className="h-3.5 w-3.5" />
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>

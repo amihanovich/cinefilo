@@ -359,11 +359,10 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </div>
       </div>
 
-      {/* Cinéfilo AI (voz): buscar / preguntar por lo que está enfocado en la TV */}
+      {/* Cinéfilo AI (voz): pedirle una búsqueda que corre en la TV */}
       {voiceOpen && (
         <ControlVoiceAgent
           centeredTitle={centered?.title ?? null}
-          centeredPlatform={centered?.platform ?? null}
           onSearch={runSearch}
           onDismiss={() => setVoiceOpen(false)}
         />
