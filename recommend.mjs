@@ -139,7 +139,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   // voz, que lo presenta por nombre.
   await validateItems([main, ...alternatives], platforms && platforms.length ? platforms : null, country);
   const mainOk = main._avail === "confirmed" || main._avail === "corrected" || main._avail === "unknown";
-  const pool = pickAvailable(alternatives, askCount);
+  const pool = pickAvailable(alternatives, askCount, alternativesCount);
   delete main._avail;
   if (!mainOk && pool.length > 0) {
     main = pool.shift();

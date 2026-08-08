@@ -239,10 +239,15 @@ export async function validateItems(items, userPlatforms, country) {
 
 /**
  * Filtra el resultado de validateItems: disponibles primero (confirmed +
- * corrected), después los "unknown" (nunca peor que hoy); descarta "none" y
- * "unlisted". Limpia el campo interno _avail y corta en `want`.
+ * corrected); descarta "none" y "unlisted". Los "unknown" (no resueltos en
+ * TMDB — en la práctica, casi siempre títulos inventados por el LLM) solo
+ * rellenan hasta `minFill`: con suficientes verificados, mejor devolver menos
+ * ítems y todos reales que una lista larga con fantasmas. Limpia _avail.
+ * @param {number} want - tope de ítems a devolver
+ * @param {number} [minFill=want] - piso a completar con "unknown" si faltan verificados
  */
-export function pickAvailable(items, want) {
+export function pickAvailable(items, want, minFill) {
+  const fill = typeof minFill === "number" ? minFill : want;
   const ok = [];
   const unknown = [];
   for (const it of items || []) {
@@ -251,5 +256,6 @@ export function pickAvailable(items, want) {
     if (a === "confirmed" || a === "corrected") ok.push(it);
     else if (a === "unknown" || a === undefined) unknown.push(it);
   }
-  return ok.concat(unknown).slice(0, want);
+  const padded = ok.length >= fill ? ok : ok.concat(unknown.slice(0, fill - ok.length));
+  return padded.slice(0, want);
 }

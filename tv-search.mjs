@@ -72,7 +72,9 @@ const itemRules = (plats) =>
   "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional); " +
   "si suma, un dato de cinéfilo breve (director, época, conexión). Cálido y conversacional en rioplatense, " +
   "como el experto del videoclub que te la recomienda a VOS; sin spoilers ni frases hechas repetidas entre ítems." +
-  "\n- Títulos conocidos con disponibilidad estable.";
+  "\n- Títulos conocidos con disponibilidad estable." +
+  "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
+  "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida.";
 
 export async function tvSearch(query, exclude, liked, disliked, platforms, country) {
   if (!query || !query.trim()) return { items: [] };
@@ -113,7 +115,9 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
   const parsed = await callAnthropic(prompt, 5500);
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
   await validateItems(items, platforms && platforms.length ? platforms : null, country);
-  return { items: pickAvailable(items, 15) };
+  // minFill 8: con 8+ verificados no se rellena con títulos no resueltos
+  // (en pedidos nicho Haiku inventa varios y TMDB no los encuentra).
+  return { items: pickAvailable(items, 15, 8) };
 }
 
 // Póster desde Cinemeta, resuelto EN EL SERVIDOR. Antes cada TV hacía 1 request
@@ -185,7 +189,7 @@ export async function tvHome() {
   );
   await validateItems(rec.concat(latest), null, undefined);
   const items = await attachPosters(
-    pickAvailable(rec, 8).concat(pickAvailable(latest, 8)),
+    pickAvailable(rec, 8, 6).concat(pickAvailable(latest, 8, 6)),
   );
   homeCache = { items: items };
   homeCacheAt = Date.now();
@@ -214,7 +218,7 @@ export async function tvHomeMore(exclude, platforms, country) {
     normalizeItem(r, "Más recomendadas para vos"),
   );
   await validateItems(items, platforms && platforms.length ? platforms : null, country);
-  return { items: pickAvailable(items, 8) };
+  return { items: pickAvailable(items, 8, 5) };
 }
 
 // Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).
