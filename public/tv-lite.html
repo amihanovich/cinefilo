@@ -1472,6 +1472,7 @@
   // fondo ambiental detrás del QR. Sin títulos ni sombras al frente.
   // Cada columna lleva su contenido DUPLICADO ([set A][set A]) para que el
   // translateY(-50%) del CSS cierre el ciclo sin salto visible.
+  var RIBBONS_KEY = "cinefilo:tv:ribbons";
   function buildLandingRibbons() {
     var box = document.getElementById("pairribbons");
     if (!box) return;
@@ -1488,53 +1489,66 @@
       track.appendChild(col);
       cols.push(col);
     }
+
+    // Pinta una lista de URLs repartida en columnas, cada una con su contenido
+    // DUPLICADO ([set A][set A]) para que el translateY(-50%) cierre sin salto.
+    function paintUrls(urls) {
+      var byCol = [];
+      for (var c2 = 0; c2 < COLS; c2++) { byCol.push([]); cols[c2].innerHTML = ""; }
+      for (var i = 0; i < urls.length; i++) byCol[i % COLS].push(urls[i]);
+      for (var c3 = 0; c3 < COLS; c3++) {
+        for (var rep = 0; rep < 2; rep++) {
+          for (var k = 0; k < byCol[c3].length; k++) {
+            var img = document.createElement("img");
+            img.alt = "";
+            img.src = byCol[c3][k];
+            cols[c3].appendChild(img);
+          }
+        }
+      }
+    }
+
+    var painted = false;
+    // 1) Caché local: las cintas del arranque anterior pintan AL INSTANTE
+    // (la pantalla del QR es la cara de entrada; no puede esperar al server).
+    try {
+      var saved = JSON.parse(localStorage.getItem(RIBBONS_KEY) || "null");
+      if (saved && saved.length) { paintUrls(saved); painted = true; }
+    } catch (e) {}
+
+    // 2) Endpoint liviano (solo pósters, sin IA): refresca el caché local y
+    // pinta si todavía no había nada. Si ya pintamos, no repintamos (evita el
+    // salto visual); el próximo arranque usa lo fresco.
+    fetch("/api/tv-ribbons")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var posters = (data && data.posters) || [];
+        if (posters.length) {
+          try { localStorage.setItem(RIBBONS_KEY, JSON.stringify(posters.slice(0, 12))); } catch (e) {}
+          if (!painted) { paintUrls(posters); painted = true; }
+        } else if (!painted) {
+          legacyRibbons(paintUrls);
+        }
+      })
+      .catch(function () { if (!painted) legacyRibbons(paintUrls); });
+  }
+
+  // Fallback (backend sin Discover): pósters desde el home completo, como antes.
+  function legacyRibbons(paintUrls) {
     fetch("/api/tv-home")
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var list = (data && data.items) ? data.items.slice(0, 12) : [];
-        var byCol = [];
-        for (var c2 = 0; c2 < COLS; c2++) byCol.push([]);
-        for (var i = 0; i < list.length; i++) byCol[i % COLS].push(list[i]);
-
-        for (var c3 = 0; c3 < COLS; c3++) {
-          (function (col, items) {
-            var pairs = [];
-            // Primera copia (set A), en orden.
-            for (var k = 0; k < items.length; k++) {
-              var a = document.createElement("img");
-              a.alt = "";
-              col.appendChild(a);
-              pairs.push({ a: a, b: null });
-            }
-            // Segunda copia (set B), misma secuencia.
-            for (var k2 = 0; k2 < items.length; k2++) {
-              var b = document.createElement("img");
-              b.alt = "";
-              col.appendChild(b);
-              pairs[k2].b = b;
-            }
-            // El póster se espeja en las dos copias; si no hay, se sacan ambas
-            // (así las dos mitades siguen midiendo igual y el loop no se corre).
-            for (var k3 = 0; k3 < items.length; k3++) {
-              (function (it, p) {
-                var setSrc = function (url) {
-                  if (!url) { p.a.remove(); p.b.remove(); return; }
-                  p.a.src = url;
-                  p.b.src = url;
-                };
-                // Póster ya resuelto por el backend -> las cintas pintan al toque.
-                if (it.posterUrl) setSrc(it.posterUrl);
-                else cinemetaPoster(it.title, it.type, setSrc);
-              })(items[k3], pairs[k3]);
-            }
-          })(cols[c3], byCol[c3]);
+        var urls = [];
+        for (var i = 0; i < list.length; i++) { if (list[i].posterUrl) urls.push(list[i].posterUrl); }
+        if (urls.length) {
+          paintUrls(urls);
+          try { localStorage.setItem(RIBBONS_KEY, JSON.stringify(urls)); } catch (e) {}
         }
       })
       .catch(function () {});
   }
 
-  render();
-  connect();
   buildLandingRibbons();
   // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
   // vincule, las películas aparecen al instante en vez de recién pedirse.

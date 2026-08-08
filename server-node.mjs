@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
-import { tvSearch, tvHome, tvHomeMore, warmHome } from "./tv-search.mjs";
+import { tvSearch, tvHome, tvHomeMore, tvRibbons, warmHome } from "./tv-search.mjs";
 import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
 import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
@@ -176,6 +176,11 @@ http
     // ¿el proceso ve TMDB_API_KEY? ¿TMDB responde desde Railway?
     if (urlPath === "/api/availability-status") {
       sendJson(Promise.resolve(availabilityStatus()));
+      return;
+    }
+    // Pósters de las cintas del pairing (livianas: sin IA, solo Discover cacheado).
+    if (urlPath === "/api/tv-ribbons") {
+      sendJson(tvRibbons(), "public, max-age=300");
       return;
     }
     if (urlPath === "/api/tv-home") {

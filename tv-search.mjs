@@ -159,6 +159,55 @@ let homeCache = null;
 let homeCacheAt = 0;
 const HOME_TTL = 6 * 60 * 60 * 1000;
 
+// Pool de Discover compartido entre el home y las cintas del pairing, con
+// dedupe de llamadas en vuelo (el warm del boot dispara ambos a la vez).
+let poolCache = null;
+let poolCacheAt = 0;
+let poolPromise = null;
+const POOL_TTL = HOME_TTL;
+
+async function getDiscoverPool() {
+  const now = Date.now();
+  if (poolCache && now - poolCacheAt < POOL_TTL) return poolCache;
+  if (!poolPromise) {
+    poolPromise = discoverPopular(undefined)
+      .then((pool) => {
+        poolPromise = null;
+        if (pool.popular.length || pool.recent.length) {
+          poolCache = pool;
+          poolCacheAt = Date.now();
+        }
+        return pool;
+      })
+      .catch((e) => {
+        poolPromise = null;
+        throw e;
+      });
+  }
+  return poolPromise;
+}
+
+// Pósters para las cintas de la pantalla de pairing: SOLO imágenes, sin pasar
+// por Haiku. El QR es la cara de entrada de la TV y no puede esperar a la IA
+// (el home completo puede tardar en frío; esto tarda lo que tarda Discover).
+export async function tvRibbons() {
+  if (homeCache && homeCache.items) {
+    const p = homeCache.items.map((i) => i.posterUrl).filter(Boolean).slice(0, 12);
+    if (p.length >= 6) return { posters: p };
+  }
+  const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [] }));
+  const seen = new Set();
+  const posters = [];
+  for (const it of pool.recent.concat(pool.popular)) {
+    if (it.posterUrl && !seen.has(it.posterUrl)) {
+      seen.add(it.posterUrl);
+      posters.push(it.posterUrl);
+      if (posters.length >= 12) break;
+    }
+  }
+  return { posters };
+}
+
 // Reparte por plataforma (round-robin) para que el home no quede monocolor:
 // toma el más popular de cada plataforma, después el segundo, hasta llenar.
 function pickVaried(list, want) {
@@ -221,7 +270,7 @@ export async function tvHome() {
   // Camino principal: catálogo REAL por Discover (qué hay de verdad en las
   // plataformas de la región) + Haiku poniendo la voz. Nada inventado.
   if (availabilityEnabled()) {
-    const pool = await discoverPopular(undefined);
+    const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [] }));
     if (pool.popular.length >= 8 && pool.recent.length >= 8) {
       const rec = pickVaried(pool.popular, 8);
       const latest = pickVaried(pool.recent, 8);
@@ -295,5 +344,8 @@ export async function tvHomeMore(exclude, platforms, country) {
 
 // Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).
 export function warmHome() {
+  // Cintas primero (Discover solo, ~2 s) — la pantalla del QR es lo primero
+  // que se ve; el home completo (con Haiku) se calienta en paralelo.
+  tvRibbons().catch(function () {});
   tvHome().catch(function () {});
 }
