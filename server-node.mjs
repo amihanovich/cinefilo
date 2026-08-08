@@ -10,6 +10,7 @@ import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsStream } from "./tts.mjs";
 import { startSupabaseKeepAlive } from "./keepalive.mjs";
+import { availabilityStatus } from "./availability.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -169,6 +170,12 @@ http
         const exclude = (reqUrl.searchParams.get("exclude") || "").split("|").filter(Boolean).slice(0, 60);
         sendJson(tvSearch(q, exclude, [], []));
       }
+      return;
+    }
+    // Diagnóstico de la validación de disponibilidad (sin datos sensibles):
+    // ¿el proceso ve TMDB_API_KEY? ¿TMDB responde desde Railway?
+    if (urlPath === "/api/availability-status") {
+      sendJson(Promise.resolve(availabilityStatus()));
       return;
     }
     if (urlPath === "/api/tv-home") {

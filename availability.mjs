@@ -49,14 +49,42 @@ function tmdbAuth() {
     : { header: {}, query: `api_key=${encodeURIComponent(key)}` };
 }
 
+// Telemetría mínima para /api/availability-status: permite diagnosticar en
+// prod (¿el proceso ve la clave? ¿TMDB responde?) sin leer logs.
+const status = { lastOkAt: null, lastErrorAt: null, lastError: null, calls: 0, validated: 0 };
+
 async function tmdbGet(path, params) {
   const auth = tmdbAuth();
   const qs = [params, auth.query].filter(Boolean).join("&");
-  const res = await fetchUpstream(`${TMDB}${path}?${qs}`, {
-    headers: { accept: "application/json", ...auth.header },
-  }, { timeoutMs: 8000, retries: 1 });
-  if (!res.ok) throw new Error(`TMDB HTTP ${res.status} en ${path}`);
-  return res.json();
+  status.calls++;
+  try {
+    const res = await fetchUpstream(`${TMDB}${path}?${qs}`, {
+      headers: { accept: "application/json", ...auth.header },
+    }, { timeoutMs: 8000, retries: 1 });
+    if (!res.ok) throw new Error(`TMDB HTTP ${res.status} en ${path}`);
+    status.lastOkAt = Date.now();
+    return res.json();
+  } catch (e) {
+    status.lastErrorAt = Date.now();
+    status.lastError = String(e.message || e).slice(0, 200);
+    throw e;
+  }
+}
+
+/** Estado del módulo para diagnóstico remoto (sin datos sensibles). */
+export function availabilityStatus() {
+  return {
+    enabled: availabilityEnabled(),
+    keyKind: !process.env.TMDB_API_KEY ? null
+      : process.env.TMDB_API_KEY.startsWith("eyJ") ? "v4-token" : "v3-key",
+    region: DEFAULT_REGION,
+    cacheSize: cache.size,
+    tmdbCalls: status.calls,
+    itemsValidated: status.validated,
+    lastOkAt: status.lastOkAt ? new Date(status.lastOkAt).toISOString() : null,
+    lastErrorAt: status.lastErrorAt ? new Date(status.lastErrorAt).toISOString() : null,
+    lastError: status.lastError,
+  };
 }
 
 // Normalización para comparar títulos: minúsculas, sin tildes ni puntuación.
@@ -188,6 +216,7 @@ export async function validateItems(items, userPlatforms, country) {
     : null;
   const inWanted = (name) => !wanted || wanted.has(norm(name));
 
+  status.validated += items.length;
   await Promise.all(items.map(async (it) => {
     const r = await resolveTitle(it.title, it.year, it.type, country);
     if (!r) { it._avail = "unknown"; return; }
