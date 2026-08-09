@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Loader2, QrCode, Tv } from "lucide-react";
+import { Download, Globe, Loader2, QrCode, Tv } from "lucide-react";
 import QRCode from "qrcode";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +37,11 @@ const WEB_CONTROL_URL = import.meta.env.VITE_WEB_CONTROL_URL as string | undefin
 // NO hay que regenerarlo en cada release.
 const TV_DOWNLOADER_CODE =
   (import.meta.env.VITE_TV_DOWNLOADER_CODE as string | undefined) || "3675666";
+// La app móvil servida como web (mismo código que el APK, servicio Railway
+// propio): la salida para quien no tiene Android — iPhone, desktop, lo que sea.
+const WEB_APP_URL =
+  (import.meta.env.VITE_WEB_APP_URL as string | undefined) ||
+  "https://webappcinefilo-production.up.railway.app";
 
 function formatSize(bytes?: number): string | null {
   if (!bytes || bytes <= 0) return null;
@@ -126,6 +131,16 @@ function MobileHero({ build }: { build?: Build }) {
           )}
         </>
       )}
+
+      {/* Sin Android (iPhone, compu): la misma app corre en el navegador. */}
+      <a
+        href={WEB_APP_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/60 hover:text-primary"
+      >
+        <Globe className="h-4 w-4" /> ¿No tenés Android? Usala en el navegador
+      </a>
     </section>
   );
 }
