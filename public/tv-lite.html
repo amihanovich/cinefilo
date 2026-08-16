@@ -173,10 +173,14 @@
   .blab { display:none; }
   .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
-  /* Chevrons ‹ ›: afirman que el banner se desplaza con ←/→ (affordance). */
-  .hchev { position:absolute; top:50%; margin-top:-22px; z-index:4; font-size:38px; line-height:1;
-    color:rgba(255,255,255,.55); text-shadow:0 2px 10px rgba(0,0,0,.85); pointer-events:none; }
-  .hchev.l { left:10px; } .hchev.r { right:10px; }
+  /* Chevrons ‹ ›: afirman que el banner se desplaza con ←/→ (affordance).
+     Bien visibles a pedido: disco semi-transparente + glyph grande. */
+  .hchev { position:absolute; top:50%; margin-top:-24px; z-index:4; width:48px; height:48px;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    background:rgba(10,10,12,.55); border:1px solid rgba(255,255,255,.18);
+    font-size:30px; line-height:1; color:rgba(255,255,255,.85);
+    text-shadow:0 2px 10px rgba(0,0,0,.85); pointer-events:none; }
+  .hchev.l { left:12px; } .hchev.r { right:12px; }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
   .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
   /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
@@ -875,6 +879,16 @@
     // vive únicamente en el control del teléfono — el banner queda limpio.
     var af = foc ? actionFocus : -1;
     var td = isToday(it);
+    if (uiMode !== "rc") {
+      // Modo vinculado: SIN botones sobre el banner. El control tiene botones
+      // dedicados (Mi lista / Play / Ya la vi) y OK contextual; acá solo
+      // estorbaban — con el foco en un botón, ←/→ dejaba de cambiar de
+      // candidata y la navegación lateral quedaba "bloqueada".
+      h += '</div></div>';
+      h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+      h += "</div>";
+      return h;
+    }
     h += '<div class="hactions">';
     // El label "Mi lista" solo se muestra en la ficha (ahí sobra espacio); en el
     // banner el botón queda como ícono redondo para no robarle aire al hero.
@@ -1705,8 +1719,8 @@
         // del banner; ↓ a la grilla (o de vuelta a los botones si no hay grilla).
         if (dir === "right") { var tr = Math.min(todayFocus + 1, today.length - 1); if (tr !== todayFocus) { todayFocus = tr; changed = true; } }
         else if (dir === "left") { var tl = Math.max(todayFocus - 1, 0); if (tl !== todayFocus) { todayFocus = tl; changed = true; } }
-        else if (dir === "up") { todayFocus = -1; actionFocus = 0; changed = true; }
-        else if (dir === "down") { todayFocus = -1; if (items.length > top) n = top; else actionFocus = 0; changed = true; }
+        else if (dir === "up") { todayFocus = -1; if (uiMode === "rc") actionFocus = 0; changed = true; }
+        else if (dir === "down") { todayFocus = -1; if (items.length > top) n = top; else if (uiMode === "rc") actionFocus = 0; changed = true; }
       } else if (focusedIndex < top) {
         if (actionFocus >= 0) {
           // En la fila de botones del banner: ←/→ entre botones; ↑ vuelve al
@@ -1725,7 +1739,15 @@
           // fila de tabs (solo modo RC — en vinculado no hay tabs).
           if (dir === "right") { n = Math.min(focusedIndex + 1, top - 1); if (n < top) heroIndex = n; }
           else if (dir === "left") { n = Math.max(focusedIndex - 1, 0); if (n < top) heroIndex = n; }
-          else if (dir === "down") { actionFocus = 0; changed = true; }
+          else if (dir === "down") {
+            if (uiMode === "rc") { actionFocus = 0; changed = true; }
+            else {
+              // Vinculado: sin botones en el banner — ↓ va directo a la tira o la grilla.
+              if (today.length) todayFocus = 0;
+              else if (items.length > top) n = top;
+              changed = true;
+            }
+          }
           else if (dir === "up" && uiMode === "rc") { tabFocus = 0; changed = true; }
         }
       } else {
@@ -1739,7 +1761,8 @@
           if (n < top) {
             n = heroIndex;
             if (today.length) todayFocus = 0;
-            else actionFocus = 0;
+            else if (uiMode === "rc") actionFocus = 0;
+            // vinculado sin tira: el foco vuelve directo al banner
           }
         }
       }
