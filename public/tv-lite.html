@@ -124,7 +124,7 @@
      chicas y a pantalla completa se pixelaban mucho. === */
   /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
      comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
-  .hero { position:relative; display:flex; height:38vh; min-height:224px; max-height:340px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
   /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
@@ -136,9 +136,15 @@
   /* Panel de texto semi-transparente: NO tapa más de la mitad del alto del hero
      (pedido de diseño). El blur es progressive enhancement — Tizen 4 (Chrome 56)
      no soporta backdrop-filter e ignora el bloque @supports sin romper. */
-  .hero .hpanel { align-self:flex-start; max-width:100%; max-height:50%; overflow:hidden;
+  .hero .hpanel { align-self:flex-start; max-width:100%; max-height:100%; overflow:hidden;
     background:rgba(10,10,12,.55); border-radius:14px; padding:10px 14px;
     display:flex; flex-direction:column; gap:7px; }
+  /* Título, meta y botones NUNCA se comprimen (flexbox los colapsaba a 0 cuando
+     el panel quedaba corto de alto); la razón es la única que cede espacio y su
+     -webkit-box la trunca por línea. Con los clamps (título 2, meta 1, razón 3)
+     el panel queda compacto: ~la mitad del hero. */
+  .hero .hpanel > * { flex-shrink:0; }
+  .hero .hpanel .hreason { flex-shrink:1; min-height:0; }
   @supports ((-webkit-backdrop-filter:blur(8px)) or (backdrop-filter:blur(8px))) {
     .hero .hpanel { -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); background:rgba(10,10,12,.42); }
   }
