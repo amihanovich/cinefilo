@@ -87,9 +87,9 @@
     text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 12px rgba(0,0,0,.5);
     display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
-  /* Botones sobre el banner (👍/👎/Para hoy/Ver en X), navegables con el D-pad. */
+  /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
-  /* Íconos sutiles (gris minimalista): 👍/👎/Para hoy. "Ver en X" queda prominente. */
+  /* Ícono sutil (gris minimalista): guardar en lista. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
   .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
@@ -545,7 +545,30 @@
   })();
 
   // --- Estado ---
-  var sessionId = makeSessionId();
+  // Sesión persistente: el QR (y el canal de pairing) sobreviven recargas y
+  // reinicios de la TV. TTL de 30 días DESLIZANTE (se refresca en cada
+  // arranque): mientras la TV se use al menos una vez al mes, un control ya
+  // vinculado la re-encuentra por presencia sin re-escanear. Antes cada carga
+  // regeneraba el id y el control quedaba huérfano en un canal muerto
+  // ("Buscando TV…" para siempre).
+  var SESSION_KEY = "miru:tv:session";
+  var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  function loadOrCreateSession() {
+    try {
+      var raw = localStorage.getItem(SESSION_KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && s.id && typeof s.ts === "number" && (Date.now() - s.ts) < SESSION_TTL_MS) {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({ id: s.id, ts: Date.now() }));
+          return s.id;
+        }
+      }
+    } catch (e) { /* sin storage: sesión efímera, como antes */ }
+    var id = makeSessionId();
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ id: id, ts: Date.now() })); } catch (e2) {}
+    return id;
+  }
+  var sessionId = loadOrCreateSession();
   // El QR abre la web-control (apps/web-control, servicio Railway propio): la réplica
   // del control remoto de la app móvil (D-pad, OK contextual, "Para hoy"). NO usar el
   // origin de este host: ahí vive el /control viejo (lista scrolleable), que quedó atrás.
@@ -593,7 +616,7 @@
         var q = window.qrcode(0, "M");
         q.addData(controlUrl);
         q.make();
-        // cellSize 12 (antes 8): el QR se muestra a 400px, así el bitmap nace
+        // cellSize 12 (antes 8): el QR se muestra a 300px, así el bitmap nace
         // con resolución de sobra y no se ve borroso al escalar.
         img.src = q.createDataURL(12, 8);
         return;
@@ -1187,6 +1210,18 @@
     return null;
   }
 
+  // Resuelve un mediaId contra TODO lo que puede estar en pantalla: la ficha
+  // abierta, la lista actual y la lista guardada. Antes ADD_TODAY/OPEN_DETAIL
+  // usaban solo itemById(items) y fallaban EN SILENCIO para ítems del carrito
+  // que ya no estaban en la lista visible (p. ej. después de otra búsqueda).
+  function findItem(mediaId) {
+    if (detailItem && detailItem.id === mediaId) return detailItem;
+    var it = itemById(mediaId);
+    if (it) return it;
+    for (var j = 0; j < today.length; j++) if (today[j].id === mediaId) return today[j];
+    return null;
+  }
+
   function focusById(mediaId) {
     for (var i = 0; i < items.length; i++) {
       if (items[i].id === mediaId) {
@@ -1359,12 +1394,9 @@
   }
 
   function play(mediaId) {
-    var it = null;
-    // La ficha puede ser un ítem del carrito que ya no está en la lista actual:
-    // resolver primero contra detailItem y "Para hoy", después contra items.
-    if (detailItem && detailItem.id === mediaId) it = detailItem;
-    for (var i = 0; i < items.length && !it; i++) { if (items[i].id === mediaId) it = items[i]; }
-    for (var j = 0; j < today.length && !it; j++) { if (today[j].id === mediaId) it = today[j]; }
+    // La ficha puede ser un ítem de la lista guardada que ya no está en la
+    // lista actual: findItem resuelve contra ficha + lista + guardados.
+    var it = findItem(mediaId);
     if (!it) it = items[focusedIndex];
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
@@ -1410,9 +1442,9 @@
       else if (history.length) goBack();
       else if (paired) { forcePair = true; render(); }
     }
-    else if (cmd.type === "ADD_TODAY") { var ta = itemById(cmd.mediaId); if (ta) toggleToday(ta); }
+    else if (cmd.type === "ADD_TODAY") { var ta = findItem(cmd.mediaId); if (ta) toggleToday(ta); }
     else if (cmd.type === "OPEN_DETAIL") {
-      var td2 = itemById(cmd.mediaId);
+      var td2 = findItem(cmd.mediaId);
       if (td2) {
         // Mismo criterio que el doble tap: el scope define entre qué ítems se
         // mueve ←/→ dentro de la ficha.
@@ -1481,6 +1513,10 @@
   // 415=Play, 10252=Play/Pause, 10009=Return).
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode;
+    // En la pantalla de vinculación las flechas/OK NO deben operar: el home ya
+    // está precargado (invisible) y un OK "fantasma" agregaba items[0] a la
+    // lista guardada sin que se viera nada. Solo BACK conserva su rol.
+    if ((!paired || forcePair) && !(k === 10009 || k === 8 || k === 27 || k === 4)) return;
     if (k === 37) moveFocus("left");
     else if (k === 39) moveFocus("right");
     else if (k === 38) moveFocus("up");
