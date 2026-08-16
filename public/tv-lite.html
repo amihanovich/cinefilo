@@ -131,23 +131,19 @@
      así la razón llega más a la derecha y entra en menos líneas. */
   .hero .hside { position:relative; width:26%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
+  .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.55) 40%, rgba(16,16,19,.15) 75%, rgba(16,16,19,0) 100%); }
   .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:14px 22px; }
-  /* Panel de texto semi-transparente: NO tapa más de la mitad del alto del hero
-     (pedido de diseño). El blur es progressive enhancement — Tizen 4 (Chrome 56)
-     no soporta backdrop-filter e ignora el bloque @supports sin romper. */
+  /* Panel de texto SIN caja: fondo transparente para no tapar el hero (pedido
+     de diseño). La legibilidad la dan el degradé del .hfade y el text-shadow de
+     cada línea, no un rectángulo negro. */
   .hero .hpanel { align-self:flex-start; max-width:100%; max-height:100%; overflow:hidden;
-    background:rgba(10,10,12,.55); border-radius:14px; padding:10px 14px;
-    display:flex; flex-direction:column; gap:7px; }
+    background:transparent; padding:2px 0;
+    display:flex; flex-direction:column; gap:5px; }
   /* Título, meta y botones NUNCA se comprimen (flexbox los colapsaba a 0 cuando
-     el panel quedaba corto de alto); la razón es la única que cede espacio y su
-     -webkit-box la trunca por línea. Con los clamps (título 2, meta 1, razón 3)
-     el panel queda compacto: ~la mitad del hero. */
+     el panel quedaba corto de alto); sinopsis y porqué son los únicos que ceden
+     espacio y su -webkit-box los trunca por línea. */
   .hero .hpanel > * { flex-shrink:0; }
-  .hero .hpanel .hreason { flex-shrink:1; min-height:0; }
-  @supports ((-webkit-backdrop-filter:blur(8px)) or (backdrop-filter:blur(8px))) {
-    .hero .hpanel { -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); background:rgba(10,10,12,.42); }
-  }
+  .hero .hpanel .hsyn, .hero .hpanel .hreason { flex-shrink:1; min-height:0; }
   /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
   .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -159,10 +155,15 @@
      imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
      flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
      ni max-width gana ancho y entra en 3 líneas cómodas. */
-  .hero .hreason { margin:2px 0 0; font-size:13px; line-height:1.4; color:#EDEDF0; flex-shrink:0;
-    text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 12px rgba(0,0,0,.5);
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .hero .hreason b { color:#8852E0; margin-right:6px; }
+  /* (a) Sinopsis y (b) Por qué, en ese orden — igual que la ficha. */
+  .hero .hsyn { margin:1px 0 0; font-size:13px; line-height:1.38; color:#D5D5DC; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason { margin:1px 0 0; font-size:13px; line-height:1.38; color:#EDEDF0; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason b { color:#A878FF; margin-right:5px; font-weight:600; }
+  .hero .htitle, .hero .hsub { text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
   /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
   /* Ícono sutil (gris minimalista): guardar en lista. "Ver en X" queda prominente. */
@@ -741,6 +742,7 @@
   //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
   var uiMode = "choose";
   var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
+  var pairReturn = "choose"; // a dónde vuelve el BACK desde la pantalla del QR
   // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
   var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..3 = tab enfocado
   var kbOpen = false, kbBuffer = "", kbRow = 0, kbCol = 0;
@@ -873,7 +875,9 @@
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
-    if (it.reason) h += '<p class="hreason"><b>✦</b> ' + esc(it.reason) + "</p>";
+    // Orden pedido: (a) Sinopsis y (b) por qué te la propongo.
+    if (it.synopsis) h += '<p class="hsyn">' + esc(it.synopsis) + "</p>";
+    if (it.reason) h += '<p class="hreason"><b>✦ Por qué te la propongo:</b> ' + esc(it.reason) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
     // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
     // vive únicamente en el control del teléfono — el banner queda limpio.
@@ -1061,14 +1065,19 @@
   }
 
   // --- Modo RC: tabs de acceso, teclado en pantalla y filtros ---
-  function tabsHTML() {
-    if (uiMode !== "rc") return "";
-    var t = [
+  function tabList() {
+    return [
       { label: "🔍 Buscar", cnt: 0 },
       { label: "Mi lista", cnt: today.length },
       { label: "Ya vistas", cnt: seen.length },
-      { label: "Plataformas", cnt: (userPlatforms && userPlatforms.length) ? userPlatforms.length : 0 }
+      { label: "Plataformas", cnt: (userPlatforms && userPlatforms.length) ? userPlatforms.length : 0 },
+      // Siempre a mano: pasar a manejar la TV desde el teléfono sin volver al inicio.
+      { label: "📱 Vincular teléfono", cnt: 0 }
     ];
+  }
+  function tabsHTML() {
+    if (uiMode !== "rc") return "";
+    var t = tabList();
     var h = '<div class="tabs" id="tabs">';
     for (var i = 0; i < t.length; i++) {
       h += '<span class="tab' + (i === tabFocus ? " foc" : "") + '">' + t[i].label +
@@ -1085,7 +1094,13 @@
       return;
     }
     if (i === 2) { showSeen(); return; }
-    openFilters();
+    if (i === 3) { openFilters(); return; }
+    // Vincular teléfono: muestra el QR y recuerda desde dónde se entró para que
+    // BACK devuelva a la pantalla en la que estabas (y no al inicio).
+    pairReturn = "rc";
+    tabFocus = -1;
+    uiMode = "pair";
+    render();
   }
 
   // Teclado en pantalla propio (no el IME nativo: en Tizen el IME del sistema
@@ -1267,6 +1282,7 @@
     if (c1) c1.className = "chcard" + (chooseFocus === 1 ? " foc" : "");
   }
   function chooseSelect() {
+    pairReturn = "choose";
     uiMode = chooseFocus === 0 ? "pair" : "rc";
     render();
   }
@@ -1295,7 +1311,11 @@
       elDcban.className = "dcban hidden";
       // Si hay un control vivo, BACK vuelve al contenido; si no, al inicio.
       var ph = document.getElementById("pairhint");
-      if (ph) ph.textContent = paired ? "Volver = seguir viendo en la TV" : "Volver = elegir modo";
+      if (ph) {
+        ph.textContent = paired
+          ? "Volver = seguir viendo en la TV"
+          : (pairReturn === "rc" ? "Volver = seguir con el control de la TV" : "Volver = elegir modo");
+      }
       return;
     }
     // uiMode === "rc" | "linked": contenido a pantalla completa.
@@ -2033,9 +2053,12 @@
     }
     if (uiMode === "pair") {
       if (isBack) {
-        // Con control vivo, BACK vuelve al contenido; si no, a elegir modo.
-        if (paired) { uiMode = "linked"; render(); }
-        else { uiMode = "choose"; render(); }
+        // Con control vivo, BACK vuelve al contenido; si no, al lugar desde el
+        // que se abrió el QR (el modo RC si entraste por el tab, o el inicio).
+        if (paired) uiMode = "linked";
+        else uiMode = (pairReturn === "rc" && items.length) ? "rc" : "choose";
+        pairReturn = "choose";
+        render();
         e.preventDefault();
       }
       return; // flechas/OK no operan sobre el DOM oculto
@@ -2075,7 +2098,7 @@
     }
     if (uiMode === "rc" && tabFocus >= 0 && !detailItem) {
       if (k === 37) { tabFocus = Math.max(0, tabFocus - 1); updateFocusClasses(); }
-      else if (k === 39) { tabFocus = Math.min(3, tabFocus + 1); updateFocusClasses(); }
+      else if (k === 39) { tabFocus = Math.min(tabList().length - 1, tabFocus + 1); updateFocusClasses(); }
       else if (k === 40) { tabFocus = -1; updateFocusClasses(); }
       else if (isOk) tabAction(tabFocus);
       else if (isBack) { tabFocus = -1; updateFocusClasses(); }
