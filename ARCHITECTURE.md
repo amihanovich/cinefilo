@@ -1,10 +1,26 @@
-# Cinéfilo — Arquitectura (fuente de verdad)
+# Miru — Arquitectura (fuente de verdad)
 
-Referencia técnica de qué ES Cinéfilo hoy. Para el resumen de producto y las convenciones de trabajo,
+Referencia técnica de qué ES Miru hoy. Para el resumen de producto y las convenciones de trabajo,
 ver `CLAUDE.md`. Este documento se mantiene al día cuando cambia la arquitectura.
 
 > Monorepo: **1 backend Node + varios frontends** que lo consumen. Todo lo de AI pasa por el backend
 > en Railway; las apps Capacitor y las webs son clientes. Branch activo: **`dev`** (deploy automático).
+
+## ⚠️ Identificadores legacy "cinefilo" que NO se renombran (rebranding Miru, 2026-08)
+
+La marca visible, los prompts y las claves de localStorage ya son **Miru** (las claves viejas se
+migran al boot de cada cliente). Estos identificadores conservan el nombre viejo A PROPÓSITO —
+renombrarlos rompe cosas en producción:
+
+| Identificador | Dónde | Por qué no se toca |
+|---|---|---|
+| appIds `com.cinefilo.app` / `com.cinefilo.tv` | `apps/{mobile,tv}/capacitor.config.ts` | Cambiar el appId = app Android NUEVA: pierde datos y updates de los usuarios |
+| Dominios `cinefilo-production` / `cinefilo-copy-production` / `webappcinefilo-production` | fallbacks en `lib/api.ts`/`stt.ts`/`tts.ts` de móvil y web-control, `CONTROL_BASE` en `tv-lite.html`, `server.url` del APK TV | Los APKs instalados los llevan **compilados**; si el dominio muere, las apps quedan muertas hasta reinstalar |
+| Canal Realtime `cinefilo:${sessionId}` | `tv-lite.html` + las 3 copias de `use-tv-channel.ts` | Es el wire del pairing: renombrar de un lado rompe el pairing con APKs viejos en silencio |
+| Wire-names `ADD_TODAY` / `SHOW_TODAY` / `todayTitles` | `tv-protocol.ts` (3 copias) + `tv-lite.html` | Mismo motivo: contrato TV↔control ya desplegado. En UI el concepto ahora es "Mi lista" |
+| Campo JSON `cinephile_note` | prompts + clientes | Contrato de datos entre backend y clientes |
+| Global `window.CinefiloSB` | `public/tv-supabase.js` | El bundle puede quedar cacheado en WebViews; el entry nuevo expone `MiruSB` **y** `CinefiloSB`, y tv-lite acepta ambos |
+| Claves localStorage `cinefilo:*` / `queveo:*` viejas | código de migración (`lib/storage.ts` de cada app, IIFE en tv-lite) | Se leen una vez para migrar a `miru:*`; no borrar el código de migración hasta que la base instalada rote |
 
 ---
 
@@ -12,11 +28,11 @@ ver `CLAUDE.md`. Este documento se mantiene al día cuando cambia la arquitectur
 
 El foco es la **app móvil**:
 
-1. El usuario baja la **app móvil**, le pide a Cinéfilo qué ver (voz o texto), y lo **reproduce en la app
+1. El usuario baja la **app móvil**, le pide a Miru qué ver (voz o texto), y lo **reproduce en la app
    de streaming** que ya tiene instalada (Netflix, Max, etc.) vía deep-link. Esto funciona sin nada más.
 2. Si además tiene la **app de TV** instalada en su televisor, toca **"Conectar TV"** en la móvil: escanea
    el QR de la TV y la **app móvil se transforma en control remoto** — la experiencia visual pasa a la TV.
-3. Si llega a una TV que ya tiene Cinéfilo y **no** quiere instalar la app móvil, **escanea el QR** con el
+3. Si llega a una TV que ya tiene Miru y **no** quiere instalar la app móvil, **escanea el QR** con el
    navegador y la controla desde la **web-control** (réplica de lo que hace la móvil como control).
 
 La **UI web del recomendador** (`src/routes`) es una versión browser del recomendador — **legacy/secundaria**,

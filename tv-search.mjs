@@ -228,14 +228,14 @@ function pickVaried(list, want) {
   return out;
 }
 
-// Cinéfilo escribe hook/reason/synopsis para títulos REALES del catálogo
+// Miru escribe hook/reason/synopsis para títulos REALES del catálogo
 // (Discover): acá NO inventa títulos, solo pone la voz del experto.
 async function writeReasons(items) {
   const list = items
     .map((it, i) => `${i + 1}. "${it.title}" (${it.type}, ${it.year || "s/d"}, en ${it.platform})`)
     .join("\n");
   const prompt =
-    "Sos Cinéfilo, el experto del videoclub, en español rioplatense. Estos títulos ESTÁN " +
+    "Sos Miru, el experto del videoclub, en español rioplatense. Estos títulos ESTÁN " +
     "disponibles en las plataformas indicadas (verificado — no lo dudes ni lo cambies):\n\n" +
     list +
     "\n\nPara CADA título devolvé synopsis, hook y reason.\n" +

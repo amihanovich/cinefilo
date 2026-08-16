@@ -315,7 +315,7 @@ function ControlPage() {
       >
         <div className="mb-3 flex items-center justify-between gap-2">
           <span className="text-xl font-semibold" style={{ fontFamily: SERIF }}>
-            Cinéfilo<span style={{ color: C.accent }}> ✦</span>
+            Miru<span style={{ color: C.accent }}> ✦</span>
           </span>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button

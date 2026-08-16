@@ -1,4 +1,4 @@
-# Cinéfilo — Wizard Experience
+# Miru — Wizard Experience
 
 Experimento de validación de hipótesis: *"El usuario sabe qué hacer desde el segundo 1 y completa el wizard en menos de 60 segundos."*
 
@@ -51,7 +51,7 @@ Layout de tres zonas:
 
 ```
 ┌─────────────────────────────┐
-│ ✦ Cinéfilo      📺 TV en vivo│  header
+│ ✦ Miru      📺 TV en vivo│  header
 ├─────────────────────────────┤
 │  AGENTE CINÉFILO            │
 │  [🎤 orb grande] [input →] │  agente (top, prominente)
@@ -72,7 +72,7 @@ Layout de tres zonas:
 
 ---
 
-## Agente Cinéfilo — Intents
+## Agente Miru — Intents
 
 El campo de texto y el micrófono detectan automáticamente el intent y rutean a la función correcta:
 
@@ -133,7 +133,7 @@ La TV envía `tv_ready` al conectarse al canal. El wizard envía `wizard_ping` c
 
 ```
 ┌────────────────────────────────────────────┐
-│ ✦ Cinéfilo              ●●●●● (dots)        │  70% alto
+│ ✦ Miru              ●●●●● (dots)        │  70% alto
 │                                             │
 │ [poster de fondo, full bleed]               │
 │ gradient oscuro sobre la imagen             │

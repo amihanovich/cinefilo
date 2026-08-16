@@ -11,7 +11,7 @@ import { VoicePill } from "./VoicePill";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
-const GREETING = "Hola, soy Cinéfilo. ¿Listo para que encontremos algo para que veas hoy?";
+const GREETING = "Hola, soy Miru. ¿Listo para que encontremos algo para que veas hoy?";
 // Ejemplos tocables para arrancar (anti-parálisis): muestran QUÉ se puede pedir.
 const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto", "Documental"];
 
@@ -36,13 +36,13 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   const [phase, setPhase] = useState<"splash" | "agent">("splash");
   const [text, setText] = useState("");
   const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
-  const [speaking, setSpeaking] = useState(false); // Cinéfilo saludando por TTS
+  const [speaking, setSpeaking] = useState(false); // Miru saludando por TTS
   const [notice, setNotice] = useState<string | null>(null); // mic denegado / no te escuché
   const [volume, setVolume] = useState(0);
   const micRef = useRef<VoiceRecorder | null>(null);
   const greetedRef = useRef(false);
 
-  // (a) Al aparecer el agente, Cinéfilo te recibe por voz (TTS). Best-effort:
+  // (a) Al aparecer el agente, Miru te recibe por voz (TTS). Best-effort:
   // si el WebView bloquea el autoplay sin gesto, falla en silencio. El orbe
   // refleja que ÉL está hablando (misma señal que los overlays de voz).
   useEffect(() => {
@@ -107,7 +107,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
         // Antes fallaba EN SILENCIO: tocabas y no pasaba nada.
         micRef.current = null;
         setMicState("idle");
-        setNotice("No pude acceder al micrófono. Dale permiso a Cinéfilo y probá de nuevo.");
+        setNotice("No pude acceder al micrófono. Dale permiso a Miru y probá de nuevo.");
       }
     }
   };
@@ -118,7 +118,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-8 text-center safe-top safe-bottom">
         <div className="flex items-center gap-2">
           <Sparkles className="h-7 w-7 text-primary" />
-          <span className="text-2xl font-bold tracking-tight text-foreground">Cinéfilo</span>
+          <span className="text-2xl font-bold tracking-tight text-foreground">Miru</span>
         </div>
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
         <p className="max-w-xs text-sm text-muted-foreground">
@@ -176,7 +176,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
             qué hacer y en qué estado está (mismo componente en toda la app). */}
         <VoicePill state={orbPhase} onClick={() => void toggleMic()} />
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Cinéfilo</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Miru</h1>
           <p className="text-base text-muted-foreground leading-snug">
             ¿Listo para encontrar qué ver hoy?<br />
             Decime por mood, por el momento, o lo que se te ocurra.

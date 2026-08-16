@@ -22,16 +22,16 @@ import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
-const WATCHLIST_KEY = "cinefilo:watchlist";
-const LIKED_KEY = "cinefilo:liked";
-const DISLIKED_KEY = "cinefilo:disliked";
+const WATCHLIST_KEY = "miru:watchlist";
+const LIKED_KEY = "miru:liked";
+const DISLIKED_KEY = "miru:disliked";
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable,
 // pero los mapeos internos (color, label, deeplink) se mantienen para datos viejos.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
-const COUNTRY_KEY = "cinefilo:country";
-const PLATFORMS_KEY = "queveo:guest:default_platforms";
-const TV_BANNER_KEY = "cinefilo:tvBannerDismissed";
-const OPENED_KEY = "cinefilo:opened_before";
+const COUNTRY_KEY = "miru:country";
+const PLATFORMS_KEY = "miru:platforms";
+const TV_BANNER_KEY = "miru:tvBannerDismissed";
+const OPENED_KEY = "miru:opened_before";
 
 type SavedItem = { title: string; platform: string; type: string };
 type Screen = "welcome" | "magic" | "gallery";
@@ -277,7 +277,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
 
-      // MVP de voz: hablarle a Cinéfilo = buscar. Los resultados hablan solos —
+      // MVP de voz: hablarle a Miru = buscar. Los resultados hablan solos —
       // ya no se reproduce la intro (cinephile_note sigue viniendo del backend,
       // dormida, por si se retoma el modo asesor).
 
@@ -448,7 +448,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       micRecorderRef.current = null;
       if (blob.size < 500) return;
       try {
-        // Misma ley que el orbe: hablaste → Cinéfilo decide (pregunta o búsqueda)
+        // Misma ley que el orbe: hablaste → Miru decide (pregunta o búsqueda)
         // y actúa. Ya no es solo dictado al input.
         const text = (await transcribe(blob)).trim();
         if (text) await routeUserInput(text, "voice");
@@ -555,7 +555,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         : [item, ...prev],
     );
     // Al sumar, abrimos el carrito discreto para dar feedback (el hero NO salta:
-    // sigue mostrando las recomendaciones de Cinéfilo).
+    // sigue mostrando las recomendaciones de Miru).
     if (adding) setCartOpen(true);
   };
   const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
@@ -654,7 +654,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   if (screen === "welcome") {
     return (
       <WelcomeScreen
-        firstTime={true} /* Cinéfilo te recibe en CADA apertura (no solo la 1ª) */
+        firstTime={true} /* Miru te recibe en CADA apertura (no solo la 1ª) */
         busy={loading}
         error={error}
         onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
@@ -767,7 +767,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   // PANTALLA: MAGIC (cards)
   // ════════════════════════════════════════════════════════════════════════════
   if (screen === "magic" && items.length > 0) {
-    // El héroe muestra SIEMPRE las recomendaciones de Cinéfilo (top-5), sin importar
+    // El héroe muestra SIEMPRE las recomendaciones de Miru (top-5), sin importar
     // el carrito. Lo que sumás a "Para ver hoy" vive en la barra discreta de arriba.
     const heroItems = items.slice(0, 5);
     const heroIndex = Math.min(currentIndex, Math.max(0, heroItems.length - 1));
@@ -818,7 +818,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           onOpenTvRemote={() => void openTvRemote()}
         />
 
-        {/* (El banner promo dummy de "Cinéfilo para tu TV" se quitó: la entrada a
+        {/* (El banner promo dummy de "Miru para tu TV" se quitó: la entrada a
             la TV es el botón "TV" del header, que abre el escáner del QR.) */}
 
         {voiceMode && (
@@ -834,7 +834,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         <div className="flex shrink-0 items-center justify-between px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-base font-bold text-foreground">Cinéfilo</span>
+            <span className="text-base font-bold text-foreground">Miru</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -855,7 +855,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </div>
         </div>
 
-        {/* Acción principal: Pedile a Cinéfilo (voz) + escribir (texto, secundario) + mute */}
+        {/* Acción principal: Pedile a Miru (voz) + escribir (texto, secundario) + mute */}
         <div className="shrink-0 px-5 pt-3 pb-3 flex items-center gap-2">
           <button
             onClick={() => { track("voice_used"); setVoiceMode(true); }}
@@ -864,7 +864,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full">
               <Orb phase="idle" size="mini" />
             </span>
-            <span className="text-sm font-semibold text-primary">Pedile a Cinéfilo</span>
+            <span className="text-sm font-semibold text-primary">Pedile a Miru</span>
           </button>
           <button
             onClick={() => setChatOpen((v) => !v)}
@@ -879,7 +879,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           </button>
           <button
             onClick={toggleMute}
-            aria-label={ttsMuted ? "Activar la voz de Cinéfilo" : "Silenciar la voz de Cinéfilo"}
+            aria-label={ttsMuted ? "Activar la voz de Miru" : "Silenciar la voz de Miru"}
             title={ttsMuted ? "Voz silenciada" : "Voz activada"}
             className={cn(
               "flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95",
@@ -932,7 +932,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         {/* Contenido en scroll continuo: héroe + carrito + grilla (con carga infinita) */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8" onScroll={onGridScroll}>
           {/* Tarjetas grandes (cinematográficas): póster de fondo + info sobre gradiente.
-              SIEMPRE las recomendaciones de Cinéfilo (top-5), swipe ←/→. */}
+              SIEMPRE las recomendaciones de Miru (top-5), swipe ←/→. */}
           <div
             key={current.title}
             onTouchStart={onHeroTouchStart}

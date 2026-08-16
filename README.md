@@ -1,6 +1,6 @@
-# Cinéfilo
+# Miru
 
-Cinéfilo es una aplicación web fullstack que te ayuda a decidir qué ver. Busca películas y series, filtra por plataforma y recibe recomendaciones personalizadas impulsadas por IA.
+Miru es una aplicación web fullstack que te ayuda a decidir qué ver. Busca películas y series, filtra por plataforma y recibe recomendaciones personalizadas impulsadas por IA.
 
 ## Tech Stack
 
@@ -27,8 +27,8 @@ Cinéfilo es una aplicación web fullstack que te ayuda a decidir qué ver. Busc
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/amihanovich/que_veo.git
-cd que_veo
+git clone https://github.com/amihanovich/cinefilo.git
+cd cinefilo
 
 # Instalar dependencias
 npm install --legacy-peer-deps

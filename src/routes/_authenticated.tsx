@@ -46,7 +46,7 @@ function AuthLayout() {
           >
             <Sparkles className="h-7 w-7 text-primary" />
             <span className="text-[30px] font-semibold tracking-tight text-foreground">
-              Cinéfilo
+              Miru
             </span>
           </Link>
 

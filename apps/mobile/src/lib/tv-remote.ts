@@ -5,7 +5,7 @@
 // abre esa URL, solo extrae el session id y se conecta al mismo canal Realtime
 // (lado "control" del protocolo). Así el móvil reemplaza a la página /control.
 
-const SESSION_KEY = "cinefilo:tv-session";
+const SESSION_KEY = "miru:tv-session";
 const MAX_AGE_MS = 2 * 60 * 60 * 1000; // 2h
 
 /** Extrae el session id de lo que sea que traiga el QR (URL o el id pelado). */

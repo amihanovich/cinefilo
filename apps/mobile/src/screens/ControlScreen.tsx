@@ -1,6 +1,6 @@
 // Control remoto de la TV desde la app móvil. Se activa al escanear el QR de la
 // App TV. Layout (como el control de Carlos): arriba un preview de lo que se ve en
-// la TV + "Cinéfilo AI" (voz start/stop); abajo un D-pad direccional que mueve la
+// la TV + "Miru AI" (voz start/stop); abajo un D-pad direccional que mueve la
 // selección entre las tarjetas de la TV (envía NAVIGATE/SELECT/BACK/PLAY por el
 // mismo canal Realtime, lado "control"). No reinventa el protocolo.
 
@@ -16,11 +16,11 @@ import { colorForPlatform } from "../lib/deeplink";
 import { ControlVoiceAgent } from "../components/ControlVoiceAgent";
 import { Orb } from "../components/Orb";
 
-const WATCHLIST_KEY = "cinefilo:watchlist";
-const LIKED_KEY = "cinefilo:liked";
-const DISLIKED_KEY = "cinefilo:disliked";
+const WATCHLIST_KEY = "miru:watchlist";
+const LIKED_KEY = "miru:liked";
+const DISLIKED_KEY = "miru:disliked";
 // Plataformas que el usuario ya eligió en la app móvil (wizard / AccountSheet).
-const PLATFORMS_KEY = "queveo:guest:default_platforms";
+const PLATFORMS_KEY = "miru:platforms";
 
 type SavedItem = { title: string; platform?: string; posterUrl?: string; year?: number };
 
@@ -206,7 +206,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       {/* Preview: SOLO cuando hay algo reproduciéndose. Espejar el ítem centrado
           era redundante (la TV ya lo muestra, más grande), le robaba alto a la
           lista y su chrome de tarjeta parecía apretable sin serlo. En cambio, al
-          lanzar a la app de streaming la TV se va de Cinéfilo y el teléfono queda
+          lanzar a la app de streaming la TV se va de Miru y el teléfono queda
           como el único lugar que dice qué lanzaste: ahí sí informa. */}
       {nowPlaying && (
       <div className="shrink-0 px-4 pt-4">
@@ -236,7 +236,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       </div>
       )}
 
-      {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia */}
+      {/* Miru AI: hablarle por voz — EL diferencial, con presencia */}
       <div className="shrink-0 px-4 pt-3">
         <button
           onClick={() => setVoiceOpen(true)}
@@ -249,7 +249,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
             <Mic className="absolute h-7 w-7 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           </span>
           <span className="flex flex-col items-start text-left">
-            <span className="text-xl font-bold text-primary">Hablarle a Cinéfilo</span>
+            <span className="text-xl font-bold text-primary">Hablarle a Miru</span>
             <span className="text-xs text-muted-foreground">
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
@@ -383,7 +383,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </div>
       )}
 
-      {/* Cinéfilo AI (voz): pedirle una búsqueda que corre en la TV */}
+      {/* Miru AI (voz): pedirle una búsqueda que corre en la TV */}
       {voiceOpen && (
         <ControlVoiceAgent
           centeredTitle={centered?.title ?? null}

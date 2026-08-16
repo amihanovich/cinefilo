@@ -1,4 +1,4 @@
-# Cinéfilo Mobile (Capacitor)
+# Miru Mobile (Capacitor)
 
 Vite SPA + Capacitor → APK / IPA nativa.
 
@@ -58,8 +58,8 @@ El botón "Ver ahora" usa Universal Links (URLs HTTPS). En iOS/Android, si la ap
 
 ## Control remoto de la TV (escaneo de QR)
 
-El ícono de TV en el header (y la sección "Cinéfilo TV" en Mi cuenta) abre la
-cámara para escanear el QR de la app de Cinéfilo TV y usar el teléfono como
+El ícono de TV en el header (y la sección "Miru TV" en Mi cuenta) abre la
+cámara para escanear el QR de la app de Miru TV y usar el teléfono como
 control remoto (`src/screens/ControlScreen.tsx`). Usa el plugin
 `@capacitor-mlkit/barcode-scanning`.
 

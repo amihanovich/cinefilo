@@ -540,7 +540,7 @@ function ResultsScreen({
         </button>
       </div>
 
-      {/* Cinéfilo note */}
+      {/* Miru note */}
       {result.cinephile_note && (
         <div className="mb-4 flex items-start gap-3 animate-fade-in">
           <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -587,7 +587,7 @@ function ResultsScreen({
       {/* Refine bar */}
       <div className="mt-8">
         <p className="mb-2 text-center text-[12px] text-muted-foreground/55">
-          Conversá con Cinéfilo para afinar la recomendación
+          Conversá con Miru para afinar la recomendación
         </p>
         <div className={cn(
           "flex items-center gap-3 rounded-2xl bg-white px-4 shadow-card transition-all duration-200",
@@ -598,7 +598,7 @@ function ResultsScreen({
             value={refineText}
             onChange={(e) => setRefineText(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") handleRefine(); }}
-            placeholder={isLoading ? "Cinéfilo está pensando…" : "Algo más oscuro, de los 70s, con Scorsese…"}
+            placeholder={isLoading ? "Miru está pensando…" : "Algo más oscuro, de los 70s, con Scorsese…"}
             disabled={isLoading}
             className="min-h-[52px] min-w-0 flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/35 focus:outline-none"
           />

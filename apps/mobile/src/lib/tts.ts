@@ -10,9 +10,9 @@ let currentAudio: HTMLAudioElement | null = null;
 // pendientes del anterior (p.ej. el fallback nativo) no deben ejecutarse.
 let speakGen = 0;
 
-// Mute global de la voz de Cinéfilo (saludo + explicación de resultados).
+// Mute global de la voz de Miru (saludo + explicación de resultados).
 // Persistido para que la elección del usuario sobreviva entre sesiones.
-const MUTE_KEY = "cinefilo:tts_muted";
+const MUTE_KEY = "miru:tts_muted";
 
 export function isMuted(): boolean {
   try {
@@ -52,7 +52,7 @@ export function stopSpeaking(): void {
 
 // Fallback: voz nativa del dispositivo (Android/iOS TTS vía Web Speech). Gratis y
 // sin cuota — se usa cuando /api/tts falla (p.ej. ElevenLabs sin créditos). La
-// calidad es más robótica que ElevenLabs, pero Cinéfilo igual te narra.
+// calidad es más robótica que ElevenLabs, pero Miru igual te narra.
 function speakNative(text: string): Promise<void> {
   return new Promise((resolve) => {
     const synth = nativeSynth();

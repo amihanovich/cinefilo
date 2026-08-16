@@ -1,9 +1,9 @@
 // Control remoto web de la TV. Se abre al escanear el QR de la App TV desde un
 // navegador (SIN la app móvil). MISMA experiencia que el control de la app:
-// preview + "Hablarle a Cinéfilo" (agente conversacional completo: pregunta →
+// preview + "Hablarle a Miru" (agente conversacional completo: pregunta →
 // responde y habla; pedido → busca en la TV) + D-pad + acciones, por el mismo
 // canal Realtime (lado "control"). El CTA de la app queda como invitación a
-// llevarte Cinéfilo en el bolsillo.
+// llevarte Miru en el bolsillo.
 
 import { useCallback, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
@@ -24,9 +24,9 @@ const MOBILE_APP_URL =
   (import.meta.env.VITE_MOBILE_APP_URL as string | undefined) ||
   "https://landing-page-cinefilo-production.up.railway.app/";
 
-const MYLIST_KEY = "cinefilo:web-mylist";
-const LIKED_KEY = "cinefilo:web-liked";
-const DISLIKED_KEY = "cinefilo:web-disliked";
+const MYLIST_KEY = "miru:web-mylist";
+const LIKED_KEY = "miru:web-liked";
+const DISLIKED_KEY = "miru:web-disliked";
 
 type SavedItem = { title: string; platform?: string; posterUrl?: string; year?: number };
 
@@ -183,7 +183,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       {/* Header */}
       <header className="flex shrink-0 items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
         <span className="flex items-center gap-1.5 text-lg font-semibold">
-          <Sparkles className="h-4 w-4 text-primary" /> Cinéfilo
+          <Sparkles className="h-4 w-4 text-primary" /> Miru
         </span>
         <span className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
           <Smartphone className="h-3.5 w-3.5" style={{ color: paired ? "#4ade80" : status === "connecting" ? "#d9a23b" : "#888" }} />
@@ -194,7 +194,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       {/* Preview: SOLO cuando hay algo reproduciéndose. Espejar el ítem centrado
           era redundante (la TV ya lo muestra, más grande), le robaba alto a la
           lista y su chrome de tarjeta parecía apretable sin serlo. En cambio, al
-          lanzar a la app de streaming la TV se va de Cinéfilo y el teléfono queda
+          lanzar a la app de streaming la TV se va de Miru y el teléfono queda
           como el único lugar que dice qué lanzaste: ahí sí informa. */}
       {nowPlaying && (
       <div className="shrink-0 px-4 pt-4">
@@ -224,7 +224,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </div>
       )}
 
-      {/* Cinéfilo AI: hablarle por voz — EL diferencial, con presencia (como la app) */}
+      {/* Miru AI: hablarle por voz — EL diferencial, con presencia (como la app) */}
       <div className="shrink-0 px-4 pt-3">
         <button
           onClick={() => setVoiceOpen(true)}
@@ -237,7 +237,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
             <Mic className="absolute h-7 w-7 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           </span>
           <span className="flex flex-col items-start text-left">
-            <span className="text-xl font-bold text-primary">Hablarle a Cinéfilo</span>
+            <span className="text-xl font-bold text-primary">Hablarle a Miru</span>
             <span className="text-xs text-muted-foreground">
               Pedile qué ver, o preguntale sobre lo que estás viendo
             </span>
@@ -245,7 +245,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </button>
       </div>
 
-      {/* Búsqueda por texto (la voz vive en "Hablarle a Cinéfilo": un solo micrófono) */}
+      {/* Búsqueda por texto (la voz vive en "Hablarle a Miru": un solo micrófono) */}
       <div className="shrink-0 px-4 pt-3">
         <form onSubmit={(e) => { e.preventDefault(); runSearch(text); }} className="flex gap-2">
           <input
@@ -359,7 +359,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </div>
       </div>
 
-      {/* Cinéfilo AI (voz): pedirle una búsqueda que corre en la TV */}
+      {/* Miru AI (voz): pedirle una búsqueda que corre en la TV */}
       {voiceOpen && (
         <ControlVoiceAgent
           centeredTitle={centered?.title ?? null}

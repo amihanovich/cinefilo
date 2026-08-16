@@ -9,10 +9,10 @@ import { fetchPostersClient } from "../lib/posters";
 
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
-const PLATFORMS_KEY = "queveo:guest:default_platforms";
-const WATCHLIST_KEY = "cinefilo:watchlist";
-const LIKED_KEY = "cinefilo:liked";
-const COUNTRY_KEY = "cinefilo:country";
+const PLATFORMS_KEY = "miru:platforms";
+const WATCHLIST_KEY = "miru:watchlist";
+const LIKED_KEY = "miru:liked";
+const COUNTRY_KEY = "miru:country";
 
 // Países soportados para verificar disponibilidad (códigos JustWatch/ISO).
 const COUNTRIES: { code: string; label: string }[] = [
@@ -250,10 +250,10 @@ function MainSection({
         </div>
       </section>
 
-      {/* Cinéfilo TV — controlar la TV desde el teléfono */}
+      {/* Miru TV — controlar la TV desde el teléfono */}
       <section>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Cinéfilo TV
+          Miru TV
         </h3>
         <button
           onClick={onOpenTvRemote}

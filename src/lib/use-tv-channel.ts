@@ -28,6 +28,8 @@ const EVENT_STATE = "state";
 
 /** Nombre del canal a partir del id de sesión. Único punto que lo define. */
 export function channelName(sessionId: string): string {
+  // wire-legacy: el prefijo sigue siendo "cinefilo" aunque la marca sea Miru.
+  // Cambiarlo rompería el pairing con APKs ya instalados; NO renombrar.
   return `cinefilo:${sessionId}`;
 }
 

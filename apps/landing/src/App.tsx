@@ -93,7 +93,7 @@ function MobileHero({ build }: { build?: Build }) {
   return (
     <section className="flex flex-col items-center gap-6 rounded-2xl border border-border bg-muted/40 p-6 text-center">
       <div className="flex flex-col gap-2">
-        <h2 className="text-2xl font-bold leading-tight">Cinéfilo en tu celular</h2>
+        <h2 className="text-2xl font-bold leading-tight">Miru en tu celular</h2>
         <p className="text-muted-foreground">
           Decile qué tenés ganas de ver, por voz o escribiendo. Te recomienda y te lo abre en la app
           de streaming que ya tenés.
@@ -110,7 +110,7 @@ function MobileHero({ build }: { build?: Build }) {
             href={build.url}
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-lg font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
-            <Download className="h-5 w-5" /> Descargar Cinéfilo
+            <Download className="h-5 w-5" /> Descargar Miru
           </a>
 
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -122,7 +122,7 @@ function MobileHero({ build }: { build?: Build }) {
           {!isPhone && qr && (
             <div className="flex flex-col items-center gap-2 border-t border-border pt-6">
               <div className="rounded-xl bg-white p-2">
-                <img src={qr} alt="Descargar Cinéfilo" className="h-40 w-40" />
+                <img src={qr} alt="Descargar Miru" className="h-40 w-40" />
               </div>
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <QrCode className="h-3 w-3" /> O escaneá con el celular
@@ -176,7 +176,7 @@ function TvSection({ build }: { build?: Build }) {
             ¿Querés la experiencia completa?
           </h2>
           <p className="text-sm text-muted-foreground">
-            Instalá Cinéfilo en tu tele y el celular te queda de control remoto.
+            Instalá Miru en tu tele y el celular te queda de control remoto.
           </p>
         </div>
       </div>
@@ -218,7 +218,7 @@ function TvSection({ build }: { build?: Build }) {
           </ol>
 
           <p className="text-xs text-muted-foreground">
-            Después abrí Cinéfilo en el celular y tocá “Conectar TV”.{" "}
+            Después abrí Miru en el celular y tocá “Conectar TV”.{" "}
             <a href={build.url} className="text-primary underline underline-offset-2">
               ¿Preferís pasarla por pendrive? Descargá el APK
             </a>{" "}
@@ -310,10 +310,10 @@ export function App() {
             rel="noreferrer"
             className="underline underline-offset-2 hover:text-foreground"
           >
-            Ya tenés Cinéfilo en la tele: abrir el control desde el navegador
+            Ya tenés Miru en la tele: abrir el control desde el navegador
           </a>
         )}
-        <span>{lastUpdated ? `Última actualización: ${lastUpdated}` : "Cinéfilo"}</span>
+        <span>{lastUpdated ? `Última actualización: ${lastUpdated}` : "Miru"}</span>
       </footer>
     </div>
   );

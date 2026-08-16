@@ -61,7 +61,7 @@ async function loadTrending(): Promise<TrendingTitle[]> {
       signal: ctrl.signal,
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; QueVeo/1.0)",
+        "User-Agent": "Mozilla/5.0 (compatible; Miru/1.0)",
         "App-Version": "3.8.2-web",
       },
       body: JSON.stringify({

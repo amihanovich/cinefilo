@@ -1,5 +1,5 @@
 // Keep-alive de Supabase: el plan free pausa los proyectos tras ~1 semana sin
-// actividad de base de datos, y Cinéfilo usa Supabase SOLO para el canal
+// actividad de base de datos, y Miru usa Supabase SOLO para el canal
 // Realtime del pairing (nunca toca la DB) — así que para Supabase el proyecto
 // parece muerto aunque se use todos los días (2026-08: se pausó y el pairing
 // quedó caído). Una query mínima diaria alcanza para que cuente como activo.

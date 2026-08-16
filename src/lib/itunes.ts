@@ -1,6 +1,6 @@
 // Poster fetching (client-side): Cinemeta (catálogo de Stremio) como fuente
 // PRINCIPAL, con iTunes + Wikipedia como respaldo. Las tres soportan CORS desde
-// el browser. Estándar único de pósters en todo Cinéfilo (móvil, TV y web) — ver
+// el browser. Estándar único de pósters en todo Miru (móvil, TV y web) — ver
 // ARCHITECTURE.md. Mantiene las firmas públicas `fetchPosterClient` /
 // `fetchPostersClient` (los consumidores no cambian).
 //

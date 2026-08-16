@@ -59,5 +59,5 @@ http
     sendFile(res, path.join(distDir, "index.html"));
   })
   .listen(port, () => {
-    console.log(`cinefilo-web listening on port ${port}`);
+    console.log(`miru-web listening on port ${port}`);
   });

@@ -65,12 +65,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Cinéfilo — Tu asistente de cine y series" },
+      { title: "Miru — Tu asistente de cine y series" },
       {
         name: "description",
-        content: "Describí lo que querés ver y Cinéfilo te encuentra la película o serie perfecta en tus plataformas.",
+        content: "Describí lo que querés ver y Miru te encuentra la película o serie perfecta en tus plataformas.",
       },
-      { property: "og:title", content: "Cinéfilo" },
+      { property: "og:title", content: "Miru" },
       {
         property: "og:description",
         content: "Tu asistente de cine y series con IA.",

@@ -1,4 +1,4 @@
-# Cinéfilo TV
+# Miru TV
 
 App de Android TV / Google TV. Mismo motor de recomendaciones que `apps/mobile`,
 adaptada a pantalla grande + control remoto (D-pad) + el teléfono como control

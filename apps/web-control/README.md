@@ -1,14 +1,14 @@
-# Cinéfilo Web-Control
+# Miru Web-Control
 
 Réplica web del control remoto de la TV, en el tema oscuro de la app nueva y en
 un proyecto/dominio propio (separado del `/control` original de Railway).
 
-Cuando escaneás el QR de **Cinéfilo TV**, se abre esta web:
+Cuando escaneás el QR de **Miru TV**, se abre esta web:
 `https://<tu-dominio>/?session=<id>`. Desde ahí buscás (texto o voz), navegás la
 lista deslizando (se resalta en la TV en vivo) y reproducís — igual que la app
 móvil, pero sin instalar nada.
 
-La voz acá es **solo dictado de búsqueda**. El agente conversacional Cinéfilo
+La voz acá es **solo dictado de búsqueda**. El agente conversacional Miru
 (hablar, preguntar sobre una peli) es exclusivo de la app móvil: por eso hay un
 CTA fijo arriba para descargarla.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cinéfilo TV</title>
+<title>Miru TV</title>
 <style>
   /* Paleta oscura / cinematográfica: casi-negro + texto claro + acento coral. */
   * { box-sizing: border-box; }
@@ -154,7 +154,7 @@
   .card .cinfo .tt { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; font-weight:600; line-height:1.2; color:#fff; }
   .card .cinfo .csub { display:block; margin-top:3px; font-size:10px; color:#C9C9CE; }
   .card .cinfo .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
-  /* Detalle (razón de Cinéfilo): al enfocar, reemplaza la info con el "por qué". */
+  /* Detalle (razón de Miru): al enfocar, reemplaza la info con el "por qué". */
   .card .det { display:none; position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,10,12,.94); padding:9px 10px; border-top:1px solid rgba(136,82,224,.35); }
   .card.foc .det { display:block; }
   .card.foc .cinfo { display:none; }
@@ -193,7 +193,7 @@
 </head>
 <body>
   <div class="top">
-    <div class="brand">Cinéfilo <span>TV</span><span class="ai">✦ recomendado con IA</span></div>
+    <div class="brand">Miru <span>TV</span><span class="ai">✦ recomendado con IA</span></div>
     <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
   </div>
 
@@ -283,7 +283,7 @@
 <script src="/tv-supabase.js"></script>
 <script src="/tv-qrcode.js"></script>
 <script>
-/* === Cinéfilo TV liviana — JS clásico para navegadores viejos (Tizen 4.0). ===
+/* === Miru TV liviana — JS clásico para navegadores viejos (Tizen 4.0). ===
    Sin spread {...} ni optional chaining ?. — ese navegador no los soporta. */
 (function () {
   "use strict";
@@ -491,10 +491,10 @@
           try {
             return AL.openUrl({ url: url }).then(function (r) {
               var ok = !r || r.completed !== false; // sin campo = asumimos que abrió
-              console.log("[cinefilo] openUrl", url, "->", ok);
+              console.log("[miru] openUrl", url, "->", ok);
               return ok;
             })["catch"](function (e) {
-              console.log("[cinefilo] openUrl FALLÓ", url, e && e.message);
+              console.log("[miru] openUrl FALLÓ", url, e && e.message);
               return false;
             });
           } catch (e3) { return Promise.resolve(false); }
@@ -526,6 +526,24 @@
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // --- Migración de claves (rebranding Cinefilo → Miru) ---
+  // Copia el valor viejo a la clave nueva solo si la nueva no existe todavía.
+  // Las claves viejas se dejan (rollback barato).
+  (function migrateLegacyKeys() {
+    var MAP = [
+      ["cinefilo:tv:today", "miru:tv:mylist"],
+      ["cinefilo:tv:ribbons", "miru:tv:ribbons"]
+    ];
+    try {
+      for (var i = 0; i < MAP.length; i++) {
+        if (localStorage.getItem(MAP[i][1]) === null) {
+          var old = localStorage.getItem(MAP[i][0]);
+          if (old !== null) localStorage.setItem(MAP[i][1], old);
+        }
+      }
+    } catch (e) { /* sin storage: la TV funciona igual */ }
+  })();
+
   // --- Estado ---
   var sessionId = makeSessionId();
   // El QR abre la web-control (apps/web-control, servicio Railway propio): la réplica
@@ -547,7 +565,7 @@
   var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
   var detailScope = "grid"; // de qué lista salió la ficha: cands | grid | today | list
                             // (define entre qué ítems se mueve con ←/→ adentro de la ficha)
-  var TODAY_KEY = "cinefilo:tv:today";
+  var TODAY_KEY = "miru:tv:mylist";
   var today = loadToday(); // ítems en "Para hoy" (carrito de la TV, persistido en la sesión)
   var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Para hoy", 1 = "Ver en X"
   var todayFocus = -1;     // -1 = fuera de la tira "Para ver hoy"; 0.. = tile enfocado del carrito
@@ -656,7 +674,7 @@
   }
 
   // Héroe: la recomendación principal (item 0) a lo grande, con póster de fondo,
-  // doble gradiente cinematográfico y la razón de Cinéfilo. Comparte el id
+  // doble gradiente cinematográfico y la razón de Miru. Comparte el id
   // "card-<id>" con las tarjetas para reusar foco/scroll.
   function heroHTML(it, foc) {
     var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
@@ -722,7 +740,7 @@
   }
 
   // --- Carrito "Para ver hoy" (identidad por título, estable entre listas) ---
-  function loadToday() { try { var v = localStorage.getItem("cinefilo:tv:today"); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function loadToday() { try { var v = localStorage.getItem(TODAY_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
   function saveToday() { try { localStorage.setItem(TODAY_KEY, JSON.stringify(today)); } catch (e) {} }
   function isToday(item) { if (!item) return false; for (var i = 0; i < today.length; i++) if (today[i].title === item.title) return true; return false; }
   function toggleToday(item) {
@@ -1080,7 +1098,7 @@
     if (!q) return;
     pushHistory(); // recordá la pantalla actual antes de mostrar resultados
     // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
-    // nunca veías la rueda de "buscando…" al hablarle a Cinéfilo desde ahí.
+    // nunca veías la rueda de "buscando…" al hablarle a Miru desde ahí.
     detailItem = null;
     query = q;
     mode = "search";
@@ -1537,12 +1555,17 @@
     proceed();
   }
   function connect() {
-    if (!window.CinefiloSB || !window.CinefiloSB.createClient) {
+    // Rebranding: el bundle nuevo expone MiruSB, pero uno viejo cacheado en la
+    // WebView expone solo CinefiloSB — aceptamos cualquiera de los dos.
+    var SB = window.MiruSB || window.CinefiloSB;
+    if (!SB || !SB.createClient) {
       setBadge("Error cargando librería", "wait");
       return;
     }
-    if (!sb) sb = window.CinefiloSB.createClient(SUPABASE_URL, SUPABASE_KEY);
+    if (!sb) sb = SB.createClient(SUPABASE_URL, SUPABASE_KEY);
     if (channel) return; // ya hay un canal vivo: su auto-rejoin se encarga
+    // wire-legacy: el prefijo del canal sigue siendo "cinefilo" aunque la marca
+    // sea Miru — cambiarlo rompe el pairing con APKs de control ya instalados.
     var ch = sb.channel("cinefilo:" + sessionId, {
       config: { broadcast: { self: false }, presence: { key: "tv" } }
     });
@@ -1567,7 +1590,7 @@
   // fondo ambiental detrás del QR. Sin títulos ni sombras al frente.
   // Cada columna lleva su contenido DUPLICADO ([set A][set A]) para que el
   // translateY(-50%) del CSS cierre el ciclo sin salto visible.
-  var RIBBONS_KEY = "cinefilo:tv:ribbons";
+  var RIBBONS_KEY = "miru:tv:ribbons";
   function buildLandingRibbons() {
     var box = document.getElementById("pairribbons");
     if (!box) return;

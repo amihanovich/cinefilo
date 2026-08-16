@@ -1,4 +1,4 @@
-// Cliente REST para el backend de Cinéfilo (Railway).
+// Cliente REST para el backend de Miru (Railway).
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
 

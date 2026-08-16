@@ -1,6 +1,6 @@
-# Cinéfilo — Guía del proyecto (fuente de verdad)
+# Miru — Guía del proyecto (fuente de verdad)
 
-Este archivo se autocarga en cada sesión. Es el **resumen** de qué es Cinéfilo, cómo trabajar acá, y qué
+Este archivo se autocarga en cada sesión. Es el **resumen** de qué es Miru, cómo trabajar acá, y qué
 enfoques descartamos. Para el detalle técnico (endpoints, pairing, deploy, env vars) ver **`ARCHITECTURE.md`**.
 
 ## Git Workflow
@@ -10,15 +10,15 @@ contraria (`git push origin dev`). Railway deploya `dev` automáticamente.
 
 ---
 
-## Qué es Cinéfilo (producto real)
+## Qué es Miru (producto real)
 
 Recomendador conversacional de pelis/series. El foco es la **app móvil**:
 
-1. El usuario baja la **app móvil**, le pide a Cinéfilo qué ver (**voz o texto**), y lo reproduce en la app
+1. El usuario baja la **app móvil**, le pide a Miru qué ver (**voz o texto**), y lo reproduce en la app
    de **streaming** que ya tiene (deep-link). Funciona solo con eso.
 2. Si tiene la **app de TV**, toca **"Conectar TV"**, escanea el QR, y la **app móvil se vuelve control
    remoto** (la experiencia visual pasa a la TV).
-3. Si llega a una TV con Cinéfilo y no quiere instalar la móvil, **escanea el QR** y la maneja desde la
+3. Si llega a una TV con Miru y no quiere instalar la móvil, **escanea el QR** y la maneja desde la
    **web-control**.
 
 El AI es **Claude Haiku** (`claude-haiku-4-5-20251001`) vía un backend Node en Railway. Devuelve 1
@@ -48,7 +48,7 @@ divergió — cuidado al tocarlo.
 
 ## Enfoques descartados y por qué (NO revivir)
 
-Cinéfilo pasó por varias versiones. Estos enfoques se **eliminaron del repo** (2026-07) — si aparecen en
+Miru pasó por varias versiones. Estos enfoques se **eliminaron del repo** (2026-07) — si aparecen en
 memorias viejas o en tu cabeza, ignorarlos:
 
 - **Modo Social** (usuarios cercanos, matches por geolocalización): `social.functions.ts` +

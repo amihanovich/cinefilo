@@ -1,4 +1,4 @@
-# Cinéfilo Landing
+# Miru Landing
 
 Landing de descarga. Tiene **un solo mensaje**: bajate la app del celular (botón
 grande + QR si entrás desde una compu). Debajo, en segundo plano, están los pasos
@@ -42,8 +42,8 @@ que vive en **Supabase Storage**. No tiene backend propio.
 
 ```
 Terminal ──publish-build.mjs──▶ Supabase Storage (bucket público "app-builds")
-                                   ├─ tv/cinefilo-tv-<ver>.apk
-                                   ├─ mobile-android/cinefilo-mobile-android-<ver>.apk
+                                   ├─ tv/miru-tv-<ver>.apk
+                                   ├─ mobile-android/miru-mobile-android-<ver>.apk
                                    └─ manifest.json
                                         │  (URL pública)
                                         ▼
@@ -75,7 +75,7 @@ npm start       # sirve dist/ con server.mjs (SPA fallback) en $PORT
 ```bash
 SUPABASE_URL=https://<proj>.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-npm run publish -- --app=tv --version=1.2.0 ./cinefilo-tv.apk
+npm run publish -- --app=tv --version=1.2.0 ./miru-tv.apk
 ```
 
 `--app` puede ser `tv` o `mobile-android`. El script sube el APK, actualiza el

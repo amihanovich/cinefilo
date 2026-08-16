@@ -156,7 +156,7 @@ function WizardPage() {
       <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-10 bg-background px-8 text-center">
         <div className="flex flex-col items-center gap-4">
           <Sparkles className="h-12 w-12 text-primary" />
-          <h1 className="text-5xl font-bold tracking-tight">Cinéfilo</h1>
+          <h1 className="text-5xl font-bold tracking-tight">Miru</h1>
           <p className="text-lg leading-snug text-muted-foreground">
             Tu guía personal para elegir<br />qué ver esta noche.
           </p>
@@ -240,7 +240,7 @@ function WizardPage() {
         <div className="flex shrink-0 items-center px-5 pt-6 pb-1">
           <div className="flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span className="text-sm font-semibold">Cinéfilo</span>
+            <span className="text-sm font-semibold">Miru</span>
           </div>
         </div>
 

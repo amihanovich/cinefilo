@@ -1,6 +1,6 @@
 // Copia de apps/mobile/src/components/ControlVoiceAgent.tsx — mantener en sync a mano.
 // Orbe de voz para la pantalla de control remoto (ControlScreen). MVP de voz:
-// hablarle a Cinéfilo SIEMPRE es pedirle una búsqueda — tocás para hablar,
+// hablarle a Miru SIEMPRE es pedirle una búsqueda — tocás para hablar,
 // tocás para frenar, y lo que dijiste dispara la búsqueda en la TV (la rueda
 // se ve allá). Sin capa conversacional: ni saludo, ni preguntas, ni respuestas
 // habladas (esa capa quedó dormida en el backend por si se retoma).
@@ -47,7 +47,7 @@ export function ControlVoiceAgent({ centeredTitle, onSearch, onDismiss }: Contro
     } catch {
       recorderRef.current = null;
       if (mountedRef.current) {
-        setHint("No pude acceder al micrófono. Dale permiso a Cinéfilo y probá de nuevo.");
+        setHint("No pude acceder al micrófono. Dale permiso a Miru y probá de nuevo.");
         setState("idle");
       }
     }

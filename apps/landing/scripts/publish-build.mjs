@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Publica un build (APK) de una app de Cinéfilo en Supabase Storage y actualiza
+// Publica un build (APK) de una app de Miru en Supabase Storage y actualiza
 // el manifest.json que lee la landing. Se corre desde la terminal:
 //
 //   SUPABASE_URL=https://<proj>.supabase.co \
 //   SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
-//   node scripts/publish-build.mjs --app=tv --version=1.2.0 ./cinefilo-tv.apk
+//   node scripts/publish-build.mjs --app=tv --version=1.2.0 ./miru-tv.apk
 //
 // Apps válidas: tv | mobile-android
 //
@@ -79,7 +79,7 @@ async function ensureBucket() {
 async function main() {
   const fileBuffer = fs.readFileSync(filePath);
   const size = fileBuffer.byteLength;
-  const objectPath = `${app}/cinefilo-${app}-${version}.apk`;
+  const objectPath = `${app}/miru-${app}-${version}.apk`;
 
   // 0. Asegurar que el bucket público exista.
   await ensureBucket();

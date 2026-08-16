@@ -1,4 +1,4 @@
-# Deployment — Cinéfilo en Railway
+# Deployment — Miru en Railway
 
 Detalle de arquitectura completo en **`ARCHITECTURE.md`**; resumen de producto en `CLAUDE.md`. Este archivo
 es solo el checklist de deploy.

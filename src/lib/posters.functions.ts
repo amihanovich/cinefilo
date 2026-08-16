@@ -44,7 +44,7 @@ function stripArticle(title: string): string {
 }
 
 // Cinemeta (Stremio): fuente PRINCIPAL de pósters. Anda server-side sin el
-// IP-block que sufre iTunes. Estándar único en todo Cinéfilo (ver ARCHITECTURE.md).
+// IP-block que sufre iTunes. Estándar único en todo Miru (ver ARCHITECTURE.md).
 async function searchCinemeta(title: string, type: string): Promise<string | null> {
   const cType = isSeries(type) ? "series" : "movie";
   const controller = new AbortController();
@@ -83,7 +83,7 @@ async function searchItunes(
   try {
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; Cinefilo/1.0)" },
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; Miru/1.0)" },
     });
     clearTimeout(timer);
     if (!res.ok) return null;
