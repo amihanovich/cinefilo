@@ -7,7 +7,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 // `cap sync` no falle. Ver ARCHITECTURE.md.
 const config: CapacitorConfig = {
   appId: "com.cinefilo.tv",
-  appName: "Miru TV",
+  appName: "Miru",
   webDir: "dist",
   // Fondo del WebView = violeta de marca. La app de TV es una cáscara que baja
   // tv-lite.html REMOTO: durante esa descarga el WebView pinta su fondo, que por

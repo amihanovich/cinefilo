@@ -58,8 +58,8 @@ El botón "Ver ahora" usa Universal Links (URLs HTTPS). En iOS/Android, si la ap
 
 ## Control remoto de la TV (escaneo de QR)
 
-El ícono de TV en el header (y la sección "Miru TV" en Mi cuenta) abre la
-cámara para escanear el QR de la app de Miru TV y usar el teléfono como
+El ícono de TV en el header (y la sección "Miru en tu TV" en Mi cuenta) abre la
+cámara para escanear el QR de la app de TV y usar el teléfono como
 control remoto (`src/screens/ControlScreen.tsx`). Usa el plugin
 `@capacitor-mlkit/barcode-scanning`.
 

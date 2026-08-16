@@ -28,7 +28,7 @@ export function App() {
           <Tv className="mx-auto h-10 w-10 text-muted-foreground" />
           <h1 className="mt-4 text-xl font-semibold">Sin sesión</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Abrí este control escaneando el código QR que aparece en tu Miru TV.
+            Abrí este control escaneando el código QR que aparece en tu TV con Miru.
           </p>
         </div>
       </main>

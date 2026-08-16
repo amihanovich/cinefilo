@@ -3,7 +3,7 @@
 Réplica web del control remoto de la TV, en el tema oscuro de la app nueva y en
 un proyecto/dominio propio (separado del `/control` original de Railway).
 
-Cuando escaneás el QR de **Miru TV**, se abre esta web:
+Cuando escaneás el QR de la **app de TV de Miru**, se abre esta web:
 `https://<tu-dominio>/?session=<id>`. Desde ahí buscás (texto o voz), navegás la
 lista deslizando (se resalta en la TV en vivo) y reproducís — igual que la app
 móvil, pero sin instalar nada.

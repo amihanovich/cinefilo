@@ -250,10 +250,10 @@ function MainSection({
         </div>
       </section>
 
-      {/* Miru TV — controlar la TV desde el teléfono */}
+      {/* Miru en tu TV — controlar la TV desde el teléfono */}
       <section>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          Miru TV
+          Miru en tu TV
         </h3>
         <button
           onClick={onOpenTvRemote}
