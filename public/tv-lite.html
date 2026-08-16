@@ -32,6 +32,31 @@
   .pairleft .sub { font-size:15px; color:#B4B4BC; margin:0; max-width:340px; line-height:1.35; }
   .sess { margin-top:2px; color:#6A6A72; font-size:13px; }
 
+  /* === Pantalla de elección (mecánica Disney): elegir cómo manejar la TV === */
+  .choose { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
+  .chooseleft { width:54%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:14px; padding:0 30px; border-right:1px solid #1E1E22; }
+  .chooseleft h1 { font-size:24px; font-weight:600; margin:0; color:#F5F5F7; line-height:1.15; }
+  .chcards { display:flex; gap:14px; }
+  .chcard { flex:1; background:#151518; border:2px solid #26262B; border-radius:16px; padding:18px 16px; }
+  .chcard .chico { font-size:30px; margin-bottom:8px; }
+  .chcard h2 { font-size:17px; font-weight:600; margin:0 0 6px; color:#F5F5F7; }
+  .chcard p { font-size:13px; color:#B4B4BC; margin:0; line-height:1.4; }
+  .chcard.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.28), 0 10px 30px rgba(136,82,224,.18); background:#191722; }
+  .chhint { font-size:12px; color:#6A6A72; }
+
+  /* Banner discreto de "control desconectado" (modo vinculado): informa sin
+     expulsar al QR — el contenido sigue en pantalla y el D-pad sigue vivo. */
+  .dcban { position:fixed; left:0; right:0; bottom:0; z-index:60; background:#1C1C1F; border-top:1px solid #2A2A30;
+    color:#D9D9DE; font-size:13px; padding:9px 16px; display:flex; align-items:center; gap:8px; }
+  .dcban b { color:#F0B429; font-weight:600; }
+
+  /* Toast de 3s (ej. "Control vinculado"). */
+  .toast { position:fixed; top:60px; right:18px; z-index:70; background:rgba(20,20,24,.94); border:1px solid #8852E0;
+    color:#F5F5F7; font-size:13px; padding:9px 14px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    opacity:0; -webkit-transform:translateY(-6px); transform:translateY(-6px);
+    transition:opacity .25s, -webkit-transform .25s, transform .25s; pointer-events:none; }
+  .toast.show { opacity:1; -webkit-transform:translateY(0); transform:translateY(0); }
+
   /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
      fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
   .ribbons { flex:1; position:relative; overflow:hidden; opacity:.40;
@@ -197,7 +222,27 @@
     <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
   </div>
 
-  <div id="pair" class="pair">
+  <div id="choose" class="choose">
+    <div class="chooseleft">
+      <h1 class="serif">¿Cómo querés manejar Miru?</h1>
+      <div class="chcards">
+        <div class="chcard foc" id="ch0">
+          <div class="chico">📱</div>
+          <h2>Vincular el teléfono</h2>
+          <p>Escaneá un QR y usá tu celu como control: le hablás a Miru y manejás todo desde ahí.</p>
+        </div>
+        <div class="chcard" id="ch1">
+          <div class="chico">🕹</div>
+          <h2>Usar el control de la TV</h2>
+          <p>Navegá con las flechas del control remoto: búsqueda, tu lista y filtros en pantalla.</p>
+        </div>
+      </div>
+      <div class="chhint">← → elegir · OK confirmar</div>
+    </div>
+    <div class="ribbons" id="chooseribbons"></div>
+  </div>
+
+  <div id="pair" class="pair hidden">
     <div class="pairleft">
       <div class="qrbox"><img id="qr" alt="QR"></div>
       <h1 class="serif">Usá tu teléfono como control</h1>
@@ -207,6 +252,9 @@
     </div>
     <div class="ribbons" id="pairribbons"></div>
   </div>
+
+  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — podés seguir con el control de la TV · Volver = elegir modo / re-vincular</div>
+  <div id="toast" class="toast"></div>
 
   <div id="results" class="wrap hidden">
     <div class="topline" id="topline"></div>
@@ -596,10 +644,19 @@
   var loading = false;
   var loadingMore = false;
   var paired = false;
-  var forcePair = false; // true = mostrar la pantalla de vinculación (QR) aunque haya control vivo
+  // uiMode = ELECCIÓN de interfaz; paired = HECHO de red (presencia del control).
+  //   "choose" = pantalla inicial (elegir modo, mecánica Disney)
+  //   "pair"   = pantalla del QR
+  //   "rc"     = manejo con el control remoto físico de la TV (tabs y teclado en pantalla)
+  //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
+  var uiMode = "choose";
+  var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
   var homeLoaded = false;
   var channel = null;
 
+  var elChoose = document.getElementById("choose");
+  var elDcban = document.getElementById("dcban");
+  var elToast = document.getElementById("toast");
   var elPair = document.getElementById("pair");
   var elResults = document.getElementById("results");
   var elTopline = document.getElementById("topline");
@@ -846,7 +903,7 @@
     if (detailItem) { elContent.innerHTML = detailHTML(detailItem); return; }
     if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); startSearchAnim(); return; }
     if (items.length === 0) {
-      elContent.innerHTML = '<div class="center">' + (paired ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
+      elContent.innerHTML = '<div class="center">' + ((paired || uiMode === "rc") ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
       return;
     }
     // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
@@ -883,22 +940,57 @@
       html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
               (onCands ? " · ← → para cambiar" : "") + "</span>";
     }
-    html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = vincular control</span>';
+    html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = elegir modo</span>';
     html += "</div>";
     return html;
   }
 
+  // --- Pantalla de elección + avisos ---
+  function updateChooseFocus() {
+    var c0 = document.getElementById("ch0"), c1 = document.getElementById("ch1");
+    if (c0) c0.className = "chcard" + (chooseFocus === 0 ? " foc" : "");
+    if (c1) c1.className = "chcard" + (chooseFocus === 1 ? " foc" : "");
+  }
+  function chooseSelect() {
+    uiMode = chooseFocus === 0 ? "pair" : "rc";
+    render();
+  }
+  var toastTimer = null;
+  function showToast(msg) {
+    if (!elToast) return;
+    elToast.textContent = msg;
+    elToast.className = "toast show";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { elToast.className = "toast"; }, 3000);
+  }
+
   function render() {
-    if (!paired || forcePair) {
-      elPair.className = "pair";
+    if (uiMode === "choose") {
+      elChoose.className = "choose";
+      elPair.className = "pair hidden";
       elResults.className = "wrap hidden";
-      // Si se llegó acá con BACK (control apagado/colgado), avisar la salida.
-      var ph = document.getElementById("pairhint");
-      if (ph) ph.textContent = paired ? "Volver = seguir viendo en la TV" : "";
+      elDcban.className = "dcban hidden";
+      updateChooseFocus();
       return;
     }
+    if (uiMode === "pair") {
+      elChoose.className = "choose hidden";
+      elPair.className = "pair";
+      elResults.className = "wrap hidden";
+      elDcban.className = "dcban hidden";
+      // Si hay un control vivo, BACK vuelve al contenido; si no, al inicio.
+      var ph = document.getElementById("pairhint");
+      if (ph) ph.textContent = paired ? "Volver = seguir viendo en la TV" : "Volver = elegir modo";
+      return;
+    }
+    // uiMode === "rc" | "linked": contenido a pantalla completa.
+    elChoose.className = "choose hidden";
     elPair.className = "pair hidden";
     elResults.className = "wrap";
+    // Banner discreto: en modo vinculado sin control presente NO se expulsa al
+    // QR (antes updatePaired te tiraba a la pantalla de vinculación en medio
+    // del uso); se avisa abajo y el contenido sigue navegable con el D-pad.
+    elDcban.className = (uiMode === "linked" && !paired) ? "dcban" : "dcban hidden";
     if (detailItem) {
       // Ficha a pantalla completa: sin la línea instructiva de arriba (ruido).
       elTopline.innerHTML = "";
@@ -972,6 +1064,10 @@
     if (channel) { try { channel.send({ type: "broadcast", event: "state", payload: payload }); } catch (e) {} }
   }
   function emitScreenNow() {
+    // En modo RC (o en las pantallas de inicio) no hay control escuchando y las
+    // vistas nuevas (teclado, filtros) no existen en el enum del protocolo: no
+    // emitir nada fuera del modo vinculado.
+    if (uiMode !== "linked") return;
     var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
     // todayTitles: qué está en "Para hoy" (por título, estable) para que el control
     // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
@@ -1417,9 +1513,9 @@
 
   function handleCommand(cmd) {
     if (!cmd || !cmd.type) return;
-    // Llega un comando = hay un control vivo manejando la TV: si estábamos en
-    // la pantalla de vinculación forzada, volver al contenido.
-    if (forcePair) { forcePair = false; render(); }
+    // Llega un comando = hay un control vivo manejando la TV: la UI pasa al
+    // modo vinculado venga de donde venga (inicio, QR o modo RC).
+    if (uiMode !== "linked") { uiMode = "linked"; render(); }
     if (cmd.type === "SEARCH") runSearch(cmd);
     else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
     else if (cmd.type === "LOAD_MORE") loadMore();
@@ -1434,13 +1530,13 @@
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
     else if (cmd.type === "HOME") goHome();
     else if (cmd.type === "SHOW_TODAY") showToday();
-    // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si no
-    // hay ficha ni historial, vuelve a la pantalla de vinculación (QR). Antes
-    // solo hacía goBack() y desde el control no había forma de volver al pairing.
+    // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si
+    // no hay ficha ni historial, la TV vuelve a la pantalla de elección (desde
+    // ahí se puede re-vincular mostrando el QR).
     else if (cmd.type === "BACK") {
       if (detailItem) closeDetail();
       else if (history.length) goBack();
-      else if (paired) { forcePair = true; render(); }
+      else { uiMode = "choose"; render(); }
     }
     else if (cmd.type === "ADD_TODAY") { var ta = findItem(cmd.mediaId); if (ta) toggleToday(ta); }
     else if (cmd.type === "OPEN_DETAIL") {
@@ -1513,31 +1609,45 @@
   // 415=Play, 10252=Play/Pause, 10009=Return).
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode;
-    // En la pantalla de vinculación las flechas/OK NO deben operar: el home ya
-    // está precargado (invisible) y un OK "fantasma" agregaba items[0] a la
-    // lista guardada sin que se viera nada. Solo BACK conserva su rol.
-    if ((!paired || forcePair) && !(k === 10009 || k === 8 || k === 27 || k === 4)) return;
+    var isOk = (k === 13 || k === 415 || k === 10252);
+    var isBack = (k === 10009 || k === 8 || k === 27 || k === 4);
+
+    // Dispatcher por modo de UI — las guardas van ANTES del flujo de contenido
+    // para que un OK en la pantalla de elección no caiga en okPress() sobre el
+    // home precargado (invisible).
+    if (uiMode === "choose") {
+      if (k === 37 || k === 39) { chooseFocus = chooseFocus === 0 ? 1 : 0; updateChooseFocus(); }
+      else if (isOk) { chooseSelect(); }
+      else return; // BACK en el inicio: no interceptar (que el sistema salga de la app)
+      e.preventDefault();
+      return;
+    }
+    if (uiMode === "pair") {
+      if (isBack) {
+        // Con control vivo, BACK vuelve al contenido; si no, a elegir modo.
+        if (paired) { uiMode = "linked"; render(); }
+        else { uiMode = "choose"; render(); }
+        e.preventDefault();
+      }
+      return; // flechas/OK no operan sobre el DOM oculto
+    }
+
+    // uiMode === "rc" | "linked": flujo de contenido.
     if (k === 37) moveFocus("left");
     else if (k === 39) moveFocus("right");
     else if (k === 38) moveFocus("up");
     else if (k === 40) moveFocus("down");
-    else if (k === 13 || k === 415 || k === 10252) {
+    else if (isOk) {
       okPress();
-    } else if (k === 10009 || k === 8 || k === 27 || k === 4) {
+    } else if (isBack) {
       if (detailItem) { closeDetail(); }
       else if (history.length) { goBack(); }
-      else if (forcePair) {
-        // En la pantalla de vinculación: si hay un control vivo, BACK vuelve al
-        // contenido; si no, no interceptar (que el sistema pueda salir de la app).
-        if (paired) { forcePair = false; render(); }
-        else return;
-      } else if (paired) {
-        // Salida siempre disponible: BACK en el home vuelve a la pantalla de
-        // vinculación con QR (para re-vincular si el control se apagó/colgó).
-        forcePair = true;
+      else {
+        // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
+        // QR, una sorpresa para el que solo quería "salir" de donde estaba).
+        uiMode = "choose";
         render();
       }
-      else return; // sin control y sin ficha: no interceptar
     } else return;
     e.preventDefault();
   });
@@ -1548,15 +1658,22 @@
     var present = !!st && Object.prototype.hasOwnProperty.call(st, "control");
     if (present && !paired) {
       paired = true;
-      forcePair = false; // control nuevo vinculado: salir de la pantalla de QR
       setBadge("Teléfono vinculado", "on");
       sendState({ type: "PAIRED" });
+      var prev = uiMode;
+      uiMode = "linked"; // el control manda: la UI pasa al modo vinculado
+      if (prev === "rc") {
+        // Venía usando el control físico: avisar sin resetear items ni foco.
+        showToast("Control vinculado — ahora manejás desde el teléfono");
+      }
       render();
       emitScreen(true); // el home ya está precargado: mandárselo al teléfono ya
-      loadHome();
+      loadHome(); // no-op si ya cargó (guard homeLoaded): no pisa la vista actual
     } else if (!present && paired) {
       paired = false;
       setBadge("Esperando teléfono", "wait");
+      // Ya NO se expulsa al QR: render() muestra el banner discreto de
+      // desconexión (si uiMode === "linked") y el contenido sigue en pantalla.
       render();
     }
   }
@@ -1628,35 +1745,50 @@
   // translateY(-50%) del CSS cierre el ciclo sin salto visible.
   var RIBBONS_KEY = "miru:tv:ribbons";
   function buildLandingRibbons() {
-    var box = document.getElementById("pairribbons");
-    if (!box) return;
+    // Las cintas visten DOS pantallas de entrada: la de elección (#choose) y la
+    // del QR (#pair). Un solo fetch pinta ambas.
+    var boxes = [];
+    var ids = ["chooseribbons", "pairribbons"];
+    for (var b = 0; b < ids.length; b++) {
+      var el = document.getElementById(ids[b]);
+      if (el) boxes.push(el);
+    }
+    if (!boxes.length) return;
     var COLS = 3;
     // Track absoluto: saca las cintas del flujo para que su altura (mucho mayor
-    // que la pantalla) no estire .pair ni empuje el QR fuera de la vista.
-    var track = document.createElement("div");
-    track.className = "track";
-    box.appendChild(track);
-    var cols = [];
-    for (var c = 0; c < COLS; c++) {
-      var col = document.createElement("div");
-      col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
-      track.appendChild(col);
-      cols.push(col);
+    // que la pantalla) no estire el contenedor ni empuje el QR fuera de vista.
+    var colsByBox = [];
+    for (var x = 0; x < boxes.length; x++) {
+      var track = document.createElement("div");
+      track.className = "track";
+      boxes[x].appendChild(track);
+      var cols = [];
+      for (var c = 0; c < COLS; c++) {
+        var col = document.createElement("div");
+        col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
+        track.appendChild(col);
+        cols.push(col);
+      }
+      colsByBox.push(cols);
     }
 
-    // Pinta una lista de URLs repartida en columnas, cada una con su contenido
-    // DUPLICADO ([set A][set A]) para que el translateY(-50%) cierre sin salto.
+    // Pinta una lista de URLs repartida en columnas (en cada pantalla), cada una
+    // con su contenido DUPLICADO ([set A][set A]) para que el translateY(-50%)
+    // cierre sin salto.
     function paintUrls(urls) {
       var byCol = [];
-      for (var c2 = 0; c2 < COLS; c2++) { byCol.push([]); cols[c2].innerHTML = ""; }
+      for (var c2 = 0; c2 < COLS; c2++) byCol.push([]);
       for (var i = 0; i < urls.length; i++) byCol[i % COLS].push(urls[i]);
-      for (var c3 = 0; c3 < COLS; c3++) {
-        for (var rep = 0; rep < 2; rep++) {
-          for (var k = 0; k < byCol[c3].length; k++) {
-            var img = document.createElement("img");
-            img.alt = "";
-            img.src = byCol[c3][k];
-            cols[c3].appendChild(img);
+      for (var bx = 0; bx < colsByBox.length; bx++) {
+        for (var c3 = 0; c3 < COLS; c3++) {
+          colsByBox[bx][c3].innerHTML = "";
+          for (var rep = 0; rep < 2; rep++) {
+            for (var k = 0; k < byCol[c3].length; k++) {
+              var img = document.createElement("img");
+              img.alt = "";
+              img.src = byCol[c3][k];
+              colsByBox[bx][c3].appendChild(img);
+            }
           }
         }
       }
