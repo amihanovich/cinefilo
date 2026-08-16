@@ -131,19 +131,20 @@ export function ControlScreen({ session }: ControlScreenProps) {
     });
   };
 
-  // OK contextual (espeja el móvil): en la ficha OK = botón enfocado de la TV;
-  // en la lista guardada 1 OK = ficha; fuera 1 OK = "Mi lista", doble OK = ficha.
   const okTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const okPress = () => {
     const item = centered;
     if (!item) { send({ type: "SELECT", mediaId: centeredId ?? undefined }); return; }
+    // En la ficha, OK activa el botón enfocado de la TV (default: "Ver en X" →
+    // un tap más adentro = ir a la plataforma).
     if (tvScreen === "detail") { send({ type: "SELECT" }); return; }
-    if (inToday(item)) { send({ type: "OPEN_DETAIL", mediaId: item.id }); return; }
+    // Regla de tapping: 1 OK = ver la ficha; doble OK (<350ms) = guardar/sacar
+    // de "Mi lista".
     if (okTimerRef.current) {
       clearTimeout(okTimerRef.current); okTimerRef.current = null;
-      send({ type: "OPEN_DETAIL", mediaId: item.id }); return;
+      send({ type: "ADD_TODAY", mediaId: item.id }); return;
     }
-    okTimerRef.current = setTimeout(() => { okTimerRef.current = null; send({ type: "ADD_TODAY", mediaId: item.id }); }, 350);
+    okTimerRef.current = setTimeout(() => { okTimerRef.current = null; send({ type: "OPEN_DETAIL", mediaId: item.id }); }, 350);
   };
   const toggleMyList = () => { if (centeredId) send({ type: "ADD_TODAY", mediaId: centeredId }); };
 
