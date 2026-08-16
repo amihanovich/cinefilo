@@ -163,6 +163,7 @@ http
             strArr(p.disliked, 50, 120),
             strArr(p.platforms, 10, 40),
             str(p.country, 2),
+            p.preferRecent === true,
           ));
         });
       } else {

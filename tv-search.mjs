@@ -76,7 +76,7 @@ const itemRules = (plats) =>
   "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
   "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida.";
 
-export async function tvSearch(query, exclude, liked, disliked, platforms, country) {
+export async function tvSearch(query, exclude, liked, disliked, platforms, country, preferRecent) {
   if (!query || !query.trim()) return { items: [] };
   // Plataformas del usuario (si las mandó el control) — restringen el prompt Y
   // la validación de disponibilidad. Antes la TV siempre buscaba en las 7.
@@ -95,6 +95,9 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
       ? "\n\nNO le gustaron (señal negativa: evitá títulos similares en tono/género/director): " +
         disliked.join(", ")
       : "";
+  const recentLine = preferRecent
+    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
+    : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     plats.join(", ") +
@@ -104,6 +107,7 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
     excludeLine +
     likedLine +
     dislikedLine +
+    recentLine +
     "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[' +
     ITEM_SHAPE +
@@ -287,6 +291,9 @@ export async function tvHome() {
 
   // Fallback (sin TMDB_API_KEY o Discover caído): flujo clásico — Haiku
   // propone de memoria y la validación filtra lo que puede.
+  const recentLine = preferRecent
+    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
+    : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     PLATFORMS.join(", ") +
@@ -324,6 +331,9 @@ export async function tvHomeMore(exclude, platforms, country) {
     exclude && exclude.length
       ? "\n\nNO repitas estos (ya se mostraron): " + exclude.slice(0, 50).join(", ")
       : "";
+  const recentLine = preferRecent
+    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
+    : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     plats.join(", ") +

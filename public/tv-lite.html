@@ -1534,7 +1534,7 @@
       });
   }
 
-  var lastLiked = [], lastDisliked = [];
+  var lastLiked = [], lastDisliked = [], lastPreferRecent = false;
   function postSearch(body) {
     return fetch("/api/tv-search", {
       method: "POST",
@@ -1554,6 +1554,7 @@
     mode = "search";
     lastLiked = (cmd && cmd.liked) || [];
     lastDisliked = (cmd && cmd.disliked) || [];
+    lastPreferRecent = !!(cmd && cmd.preferRecent);
     screen = "search";
     loading = true;
     items = [];
@@ -1562,7 +1563,7 @@
     render();
     emitScreen(true);
     autoDry = false;
-    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [] })
+    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [], preferRecent: lastPreferRecent })
       .then(function (data) {
         loading = false;
         if (data && data.items) {
@@ -1602,7 +1603,7 @@
     for (var i = 0; i < items.length && i < 40; i++) { titles.push(items[i].title); }
     var p;
     if (mode === "search") {
-      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [] });
+      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [], preferRecent: lastPreferRecent });
     } else {
       p = fetch("/api/tv-home-more", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1916,8 +1917,9 @@
       }
     }
     else if (cmd.type === "SET_PLATFORMS") {
-      // Fix: antes la TV descartaba esto → nunca heredaba las plataformas del usuario.
-      if (cmd.platforms && cmd.platforms.length) userPlatforms = cmd.platforms;
+      // Lista vacía = "todas" (limpia el filtro). Antes lo vacío se ignoraba y
+      // no había forma de des-filtrar desde el control.
+      userPlatforms = (cmd.platforms && cmd.platforms.length) ? cmd.platforms : null;
       if (loading) renderContent(); // refrescar el loader si está en pantalla
     }
   }

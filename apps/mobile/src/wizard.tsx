@@ -23,6 +23,9 @@ import type { JwResult } from "./lib/justwatch";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "miru:watchlist";
+// Ítems completos de "Mi lista" (el WATCHLIST_KEY guarda solo título/plataforma
+// para el AccountSheet; acá va la Recommendation entera para restaurar la lista).
+const MYLIST_ITEMS_KEY = "miru:mylist-items";
 const LIKED_KEY = "miru:liked";
 const DISLIKED_KEY = "miru:disliked";
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable,
@@ -119,9 +122,22 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [gallerySelected, setGallerySelected] = useState<Set<string>>(new Set());
   const [galleryLoading, setGalleryLoading] = useState(false);
 
-  // Carrito "Para ver hoy" (solo sesión) + ficha en overlay (long-press).
-  const [cart, setCart] = useState<Recommendation[]>([]);
-  const [cartOpen, setCartOpen] = useState(false); // carrito discreto expandible
+  // "Mi lista" (ex carrito "Para hoy"): persistida en el dispositivo con los
+  // ítems completos (póster/razón) para restaurarla entre sesiones, y en sync
+  // con el store compartido miru:watchlist (lo que ve el AccountSheet).
+  const [cart, setCart] = useState<Recommendation[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(MYLIST_ITEMS_KEY) ?? "[]") as Recommendation[];
+    } catch {
+      return [];
+    }
+  });
+  const [cartOpen, setCartOpen] = useState(false); // lista discreta expandible
+  useEffect(() => {
+    try {
+      localStorage.setItem(MYLIST_ITEMS_KEY, JSON.stringify(cart.slice(0, 60)));
+    } catch { /* noop */ }
+  }, [cart]);
   const [chatOpen, setChatOpen] = useState(false); // buscador de texto (secundario) colapsado
   const [detailItem, setDetailItem] = useState<Recommendation | null>(null);
   // Lista de origen de la ficha (carrito o grilla) para poder deslizar ←/→ dentro de ella.
@@ -161,7 +177,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   const [accountOpen, setAccountOpen] = useState(false);
   const [micRecording, setMicRecording] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [watchlisted, setWatchlisted] = useState<Set<string>>(() => loadSet(WATCHLIST_KEY));
   const [liked, setLiked] = useState<Set<string>>(() => loadSet(LIKED_KEY));
   const [disliked, setDisliked] = useState<Set<string>>(() => loadSet(DISLIKED_KEY));
   const [tvBanner, setTvBanner] = useState(() => localStorage.getItem(TV_BANNER_KEY) !== "1");
@@ -471,12 +486,6 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   };
 
   // ── Acciones de cards ─────────────────────────────────────────────────────
-  const toggleWatchlist = (item: Recommendation) => {
-    const isIn = watchlisted.has(item.title);
-    setWatchlisted((prev) => { const n = new Set(prev); isIn ? n.delete(item.title) : n.add(item.title); return n; });
-    if (isIn) removeFromStore(WATCHLIST_KEY, item.title);
-    else { addToStore(WATCHLIST_KEY, { title: item.title, platform: item.platform, type: item.type }); track("saved", { title: item.title, platform: item.platform }); }
-  };
 
   const toggleLike = (item: Recommendation) => {
     const isIn = liked.has(item.title);
@@ -545,7 +554,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     void openInApp(current.platform, webUrl, current.title);
   };
 
-  // ── Carrito "Para ver hoy" + long-press de la grilla ──────────────────────
+  // ── "Mi lista" + long-press de la grilla ──────────────────────────────────
   const inCart = (title: string) => cart.some((c) => c.title === title);
   const toggleCart = (item: Recommendation) => {
     const adding = !cart.some((c) => c.title === item.title);
@@ -554,11 +563,20 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         ? prev.filter((c) => c.title !== item.title)
         : [item, ...prev],
     );
-    // Al sumar, abrimos el carrito discreto para dar feedback (el hero NO salta:
-    // sigue mostrando las recomendaciones de Miru).
-    if (adding) setCartOpen(true);
+    // "Mi lista" es UNA sola: el store compartido (AccountSheet) va en sync.
+    if (adding) {
+      addToStore(WATCHLIST_KEY, { title: item.title, platform: item.platform, type: item.type });
+      track("saved", { title: item.title, platform: item.platform });
+      // Al sumar, abrimos la lista discreta para dar feedback (el hero NO salta).
+      setCartOpen(true);
+    } else {
+      removeFromStore(WATCHLIST_KEY, item.title);
+    }
   };
-  const removeFromCart = (title: string) => setCart((prev) => prev.filter((c) => c.title !== title));
+  const removeFromCart = (title: string) => {
+    removeFromStore(WATCHLIST_KEY, title);
+    setCart((prev) => prev.filter((c) => c.title !== title));
+  };
 
   // Abre la ficha guardando su lista de origen (carrito o grilla) para poder
   // deslizar ←/→ dentro de ella (la ficha es un "zoom" de esa lista).
@@ -1013,7 +1031,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
               {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
               <span className="text-center text-[9px] text-white/40">Disponibilidad: JustWatch</span>
 
-              {/* 👍 · 👎 (solo íconos) · + Para hoy (carrito). "Ver más tarde" vive en la ficha. */}
+              {/* 👍 · 👎 (solo íconos) · + Mi lista. */}
               <div className="flex gap-2">
                 <button
                   onClick={() => toggleLike(current)}
@@ -1033,7 +1051,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   onClick={() => toggleCart(current)}
                   className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[12px] font-semibold backdrop-blur-sm transition-all active:scale-95", inCart(current.title) ? "border-primary bg-primary/30 text-white" : "border-white/20 bg-black/40 text-white/90")}
                 >
-                  {inCart(current.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {inCart(current.title) ? "En Para hoy" : "Para hoy"}
+                  {inCart(current.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {inCart(current.title) ? "En Mi lista" : "Mi lista"}
                 </button>
               </div>
             </div>
@@ -1061,17 +1079,17 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             </>
           )}
 
-          {/* Carrito "Para ver hoy" — discreto y expandible, debajo del héroe y arriba
+          {/* "Mi lista" — discreta y expandible, debajo del héroe y arriba
               de la grilla. No invade las recomendaciones. */}
           {cart.length > 0 && (
             <div className="mt-4">
               <button
                 onClick={() => setCartOpen((v) => !v)}
                 className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1.5 text-[12px] font-semibold text-foreground active:scale-95 transition-transform"
-                aria-label={cartOpen ? "Ocultar tu lista de hoy" : "Ver tu lista de hoy"}
+                aria-label={cartOpen ? "Ocultar Mi lista" : "Ver Mi lista"}
               >
                 <ShoppingCart className="h-3.5 w-3.5 text-primary" />
-{cart.length} en Para hoy
+{cart.length} en Mi lista
                 <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", cartOpen && "rotate-180")} />
               </button>
 
@@ -1152,7 +1170,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           {gridItems.length > 0 && (
             <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
-1 toque = Para hoy (otro lo saca) · 2 toques = ver la ficha
+1 toque = guardar en Mi lista (otro lo saca) · 2 toques = ver la ficha
             </p>
           )}
         </div>
@@ -1215,20 +1233,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                     </button>
                     {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
                     <p className="mt-1 text-center text-[9px] text-muted-foreground/60">Disponibilidad: JustWatch</p>
+                    {/* Un solo botón de guardado: "Mi lista" (antes convivían
+                        "Para hoy" y "Ver más tarde" — dos listas para lo mismo). */}
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleCart(detailItem); }}
                         className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[13px] font-semibold active:scale-95", inCart(detailItem.title) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
                       >
-                        {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                        {inCart(detailItem.title) ? "En Para hoy" : "Para hoy"}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleWatchlist(detailItem); }}
-                        className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-full border py-2.5 text-[13px] font-semibold active:scale-95", watchlisted.has(detailItem.title) ? "border-amber-500 bg-amber-500/15 text-amber-400" : "border-border text-foreground")}
-                      >
-                        <Bookmark className="h-4 w-4" />
-                        {watchlisted.has(detailItem.title) ? "En mi lista" : "Ver más tarde"}
+                        {inCart(detailItem.title) ? <Check className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                        {inCart(detailItem.title) ? "En Mi lista" : "Mi lista"}
                       </button>
                     </div>
                   </div>

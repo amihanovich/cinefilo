@@ -28,6 +28,8 @@ export const ControlCommand = z.discriminatedUnion("type", [
     exclude: z.array(z.string()).optional(),
     liked: z.array(z.string()).optional(),
     disliked: z.array(z.string()).optional(),
+    // "Priorizar los más recientes" (aditivo: la TV vieja lo ignora).
+    preferRecent: z.boolean().optional(),
   }),
   z.object({ type: z.literal("FOCUS"), mediaId: z.string() }),
   z.object({ type: z.literal("LOAD_MORE") }),

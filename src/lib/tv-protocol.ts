@@ -30,6 +30,8 @@ export const ControlCommand = z.discriminatedUnion("type", [
     exclude: z.array(z.string()).optional(), // ya vistos: no recomendar
     liked: z.array(z.string()).optional(), // le gustaron: buscar en esa línea
     disliked: z.array(z.string()).optional(), // no le gustaron: evitar similares
+    // Filtro "Priorizar los más recientes" del control (aditivo: la TV vieja lo ignora).
+    preferRecent: z.boolean().optional(),
   }),
   // FOCUS: el teléfono scrollea su lista y avisa qué ítem quedó centrado, para
   // que la TV lo resalte en vivo (reemplaza la navegación por flechas).

@@ -1,7 +1,7 @@
 // La mecánica del orbe, explícita: una píldora-botón pegada al orbe que dice
 // SIEMPRE qué hacer y qué está pasando, con color por estado. Es el blend entre
 // la esencia del agente (el orbe) y la claridad mecánica del botón del welcome.
-// La usan WelcomeScreen, VoiceAgentOverlay y ControlVoiceAgent — misma ley en
+// La usan WelcomeScreen y VoiceAgentOverlay — misma ley en
 // todas las superficies de voz.
 
 import { Loader2 } from "lucide-react";
