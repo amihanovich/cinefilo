@@ -99,19 +99,30 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   el APK**. Solo hace falta rebuild si cambia la URL, el manifest, el icono/banner o los `<queries>`.
 - `public/tv-lite.html` (+ `public/tv-supabase.js`, `/api/tv-*`) es la TV real. `public/tv-lite.html` es
   self-contained; `tv-supabase.js` (bundle de Supabase) lo carga para el pairing Realtime.
+- **Modos de UI de la TV** (rebranding Miru, 2026-08): al abrir muestra una **pantalla de elección**
+  (mecánica Disney+) — "Vincular el teléfono" (QR) o "Usar el control de la TV". Estado `uiMode`
+  (`choose|pair|rc|linked`). En **modo RC** la home suma una fila de tabs (Buscar con teclado en
+  pantalla D-pad / Mi lista / Ya vistas / Plataformas); en **modo vinculado** la UI queda limpia y
+  todo se maneja desde el control. Si el control pierde presencia ya NO se expulsa al QR: banner
+  discreto y el contenido sigue navegable. La **sesión de pairing persiste 30 días** en
+  `miru:tv:session` (QR estable entre recargas). El "carrito Para hoy" pasó a ser **"Mi lista"**
+  (`miru:tv:mylist`, wire-legacy `ADD_TODAY`/`todayTitles`); "Ya vistas" del modo RC en `miru:tv:seen`;
+  filtros RC en `miru:tv:platforms`. Al lanzar una app de streaming se muestra la rueda "Abriendo X…".
 
 ### C. `apps/web-control` — control web standalone (D-pad)
 - SPA Vite servida por su propio `server.mjs` en un **servicio Railway aparte**. `src/ControlScreen.tsx` +
   `use-tv-channel.ts` + `tv-protocol.ts`. Es la página que abre el QR de la TV cuando NO se usa la app móvil,
-  y es la **réplica del control remoto de la app móvil** (preview + D-pad + OK contextual + "Para hoy"). La
-  única diferencia deliberada: la voz acá es solo dictado de búsqueda (el agente conversacional vive en la
-  app móvil) y hay un CTA para descargarla.
+  y es la **réplica del control remoto de la app móvil**: mic vivo integrado (tap = grabar, tap =
+  buscar), input de texto, filtros (plataformas + "Priorizar los más recientes", persistidos y
+  re-emitidos con `SET_PLATFORMS` en cada cambio), atajos Mi lista (sheet con carátulas desde
+  `SCREEN.myList`) / Ya vistas, D-pad + OK contextual, y rueda de búsqueda propia (además de la de
+  la TV). Ambos controles se mantienen espejados a mano.
 
 ### D. `src/` — web app del recomendador (TanStack Start, SSR) — LEGACY/secundaria
 - La misma que sirve `server-node.mjs`. Rutas vivas: `_authenticated/index.tsx` (home + resultados),
   `wizard.tsx`, `login.tsx`, `reset-password.tsx`. Lógica AI en `src/lib/recommendations.functions.ts`
   (server fns).
-- **`control.tsx` (`/control`) quedó viejo** (lista scrolleable + FOCUS, sin D-pad ni "Para hoy") y **el QR de
+- **`control.tsx` (`/control`) quedó viejo** (lista scrolleable + FOCUS, sin D-pad ni "Mi lista") y **el QR de
   la TV ya no lo abre**: apunta a la web-control (C). Se mantiene solo por links viejos; el control web que se
   mantiene es `apps/web-control`.
 - La UI del recomendador (`index.tsx`/`wizard.tsx`) es legacy; se mantiene pero no es el foco.
@@ -129,9 +140,13 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 - **Canal:** `cinefilo:${sessionId}` (`channelName()` en `use-tv-channel.ts`), sessionId = 6 bytes hex.
 - **Roles / presence:** `"tv"` y `"control"`; `broadcast.self=false`; el pairing se detecta por presencia.
 - **Eventos:** `"command"` (control→TV) y `"state"` (TV→control). Validados con Zod (`discriminatedUnion`).
-  - Control→TV: `SEARCH`, `FOCUS`, `LOAD_MORE`, `REMOVE`, `SET_PLATFORMS`, `SHOW_LIST`, `NAVIGATE`, `SELECT`,
-    `BACK`, `PLAY`, `ADD_TODAY`, `OPEN_DETAIL`.
-  - TV→Control: `PAIRED`, `SCREEN` (home/search/detail/player + items + focusedId + todayTitles), `NOW_PLAYING`.
+  - Control→TV: `SEARCH` (+ `preferRecent` opcional), `FOCUS`, `LOAD_MORE`, `REMOVE`, `SET_PLATFORMS`
+    (lista vacía = todas), `SHOW_LIST`, `NAVIGATE`, `SELECT`, `BACK`, `PLAY`, `ADD_TODAY`, `OPEN_DETAIL`.
+  - TV→Control: `PAIRED`, `SCREEN` (home/search/detail/player + items + focusedId + todayTitles +
+    `myList` opcional con los ítems completos de "Mi lista"), `NOW_PLAYING`.
+  - Wire-legacy: `ADD_TODAY`/`SHOW_TODAY`/`todayTitles` conservan su nombre aunque la UI diga
+    "Mi lista" (ver tabla de identificadores legacy arriba). Los campos nuevos son aditivos:
+    los clientes viejos los ignoran (Zod no-strict).
 - **QR:** la TV genera `<CONTROL_BASE>/control?session=<id>`, donde `CONTROL_BASE` es el **servicio
   web-control** (`cinefilo-copy-production.up.railway.app`), definido en `public/tv-lite.html` (override para
   dev: abrir tv-lite con `?control=<base-url>`). ⚠️ NO usar el origin del backend: ahí vive el `/control`

@@ -20,6 +20,9 @@ Recomendador conversacional de pelis/series. El foco es la **app móvil**:
    remoto** (la experiencia visual pasa a la TV).
 3. Si llega a una TV con Miru y no quiere instalar la móvil, **escanea el QR** y la maneja desde la
    **web-control**.
+4. Y si no quiere vincular nada: al abrir, la TV ofrece **"Usar el control de la TV"** (mecánica
+   Disney+) — home navegable con el D-pad físico, búsqueda con teclado en pantalla, Mi lista,
+   Ya vistas y filtros de plataformas, todo local a la TV.
 
 El AI es **Claude Haiku** (`claude-haiku-4-5-20251001`) vía un backend Node en Railway. Devuelve 1
 recomendación principal + N alternativas, con refinamiento conversacional, feedback de gustos y voz (STT/TTS).
@@ -40,9 +43,14 @@ autónomos: `recommend.mjs`, `tv-search.mjs`, `transcribe.mjs`, `tts.mjs`.
 
 **Pósters:** Cinemeta (Stremio) primero, iTunes + Wikipedia de fallback — en TODOS los clientes.
 
-**Pairing TV↔control:** Supabase Realtime, canal `cinefilo:<sessionId>`, roles `tv`/`control`, protocolo en
-`tv-protocol.ts`. ⚠️ Ese archivo (+ `use-tv-channel.ts`, `stt.ts`) está copiado a mano en 4 lugares y ya
-divergió — cuidado al tocarlo.
+**Pairing TV↔control:** Supabase Realtime, canal `cinefilo:<sessionId>` (wire-legacy: NO renombrar
+aunque la marca sea Miru), roles `tv`/`control`, protocolo en `tv-protocol.ts`. La sesión de la TV
+persiste 30 días (`miru:tv:session`): el QR es estable entre recargas. ⚠️ El protocolo (+
+`use-tv-channel.ts`, `stt.ts`) está copiado a mano en 4 lugares y ya divergió — cuidado al tocarlo.
+
+**"Mi lista"** (ex "Para hoy"): una sola lista guardada por dispositivo — TV en `miru:tv:mylist`
+(viaja al control como `SCREEN.myList`), móvil en `miru:mylist-items` + `miru:watchlist`. En el wire
+sigue siendo `ADD_TODAY`/`todayTitles` (legacy, ver ARCHITECTURE.md).
 
 ---
 
@@ -83,7 +91,8 @@ memorias viejas o en tu cabeza, ignorarlos:
 4. **Build APK (móvil/TV):** desde el checkout PRINCIPAL (`apps/mobile` o `apps/tv`), `JAVA_HOME` seteado,
    `./gradlew.bat clean assembleDebug` (gotcha: NO `cmd.exe /c "gradlew.bat"` — no ejecuta gradle). Verificar
    el mtime del APK antes de instalar. Detalle en `ARCHITECTURE.md` y en las memorias del proyecto.
-5. **Watchlist / "Guardar":** `localStorage`, no DB.
+5. **Watchlist / "Mi lista":** `localStorage` con claves `miru:*` (las viejas `cinefilo:*`/`queveo:*`
+   se migran al boot de cada cliente), no DB.
 6. **Actualizar la TV sin rebuild:** editar `public/tv-lite.html` + redeployar el backend → el APK de TV ya
    instalado muestra la versión nueva (carga la URL remota).
 
