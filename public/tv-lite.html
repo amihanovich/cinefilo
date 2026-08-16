@@ -57,6 +57,39 @@
     transition:opacity .25s, -webkit-transform .25s, transform .25s; pointer-events:none; }
   .toast.show { opacity:1; -webkit-transform:translateY(0); transform:translateY(0); }
 
+  /* === Modo RC (control físico): fila de accesos + teclado + filtros === */
+  .tabs { display:flex; gap:8px; margin:2px 0 8px; }
+  .tab { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:600;
+    color:#B4B4BC; background:#151518; border:2px solid #26262B; }
+  .tab.foc { color:#fff; border-color:#8852E0; background:#191722; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
+  .tab .cnt { font-size:11px; color:#8A8A93; font-weight:600; }
+
+  /* Teclado en pantalla (grid propio navegable con D-pad). */
+  .kb { max-width:660px; margin:12px auto 0; }
+  .kbbuf { background:#151518; border:2px solid #26262B; border-radius:12px; min-height:46px; padding:10px 14px;
+    font-size:20px; color:#F5F5F7; margin-bottom:12px; }
+  .kbbuf .cur { display:inline-block; width:2px; height:22px; background:#8852E0; vertical-align:middle; margin-left:2px; }
+  .kbbuf .ph { color:#55555C; }
+  .kbrow { display:flex; gap:6px; justify-content:center; margin-bottom:6px; }
+  .key { min-width:56px; height:44px; display:inline-flex; align-items:center; justify-content:center;
+    background:#151518; border:2px solid #26262B; border-radius:10px; font-size:16px; color:#D9D9DE; }
+  .key.wide { min-width:120px; font-size:13px; }
+  .key.go { background:#3A2465; border-color:#8852E0; color:#fff; }
+  .key.foc { border-color:#fff; box-shadow:0 0 0 3px rgba(136,82,224,.4); color:#fff; }
+  .kbhint { text-align:center; font-size:12px; color:#6A6A72; margin-top:8px; }
+
+  /* Filtros de plataformas (modo RC). */
+  .filters { max-width:640px; margin:20px auto 0; }
+  .filters h2 { font-size:20px; font-weight:600; margin:0 0 4px; }
+  .filters .fsub { font-size:13px; color:#8A8A93; margin:0 0 14px; }
+  .fchips { display:flex; flex-wrap:wrap; gap:10px; }
+  .fchip { display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600;
+    color:#B4B4BC; background:#151518; border:2px solid #26262B; }
+  .fchip .fdot { width:9px; height:9px; border-radius:50%; }
+  .fchip.on { color:#fff; background:#191722; }
+  .fchip.foc { border-color:#fff; box-shadow:0 0 0 3px rgba(136,82,224,.4); }
+  .fchip.done { background:#3A2465; border-color:#8852E0; color:#fff; }
+
   /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
      fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
   .ribbons { flex:1; position:relative; overflow:hidden; opacity:.40;
@@ -651,6 +684,19 @@
   //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
   var uiMode = "choose";
   var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
+  // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
+  var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..3 = tab enfocado
+  var kbOpen = false, kbBuffer = "", kbRow = 0, kbCol = 0;
+  var filtersOpen = false, filterFocus = 0;
+  var RC_PLATFORMS_KEY = "miru:tv:platforms";
+  var SEEN_KEY = "miru:tv:seen";
+  var seen = loadSeen(); // "Ya vistas" del modo RC (persistida en el dispositivo)
+  // Filtros persistidos del modo RC → alimentan userPlatforms (el mismo
+  // pipeline que usa SET_PLATFORMS cuando hay control vinculado).
+  try {
+    var rcSaved = JSON.parse(localStorage.getItem(RC_PLATFORMS_KEY) || "null");
+    if (rcSaved && rcSaved.length) userPlatforms = rcSaved;
+  } catch (e) {}
   var homeLoaded = false;
   var channel = null;
 
@@ -828,9 +874,34 @@
     var found = -1;
     for (var i = 0; i < today.length; i++) if (today[i].title === item.title) { found = i; break; }
     if (found >= 0) today.splice(found, 1);
-    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating });
+    // Se guarda TAMBIÉN synopsis/hook: la ficha abierta desde la lista los
+    // necesita (antes se perdían y la ficha quedaba sin sinopsis).
+    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
     if (todayFocus >= today.length) todayFocus = today.length ? today.length - 1 : -1;
     saveToday(); render(); emitScreen(true);
+  }
+
+  // --- "Ya vistas" del modo RC (mismo patrón que la lista guardada) ---
+  function loadSeen() { try { var v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function saveSeen() { try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {} }
+  function isSeen(item) { if (!item) return false; for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) return true; return false; }
+  function toggleSeen(item) {
+    if (!item) return;
+    var found = -1;
+    for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) { found = i; break; }
+    if (found >= 0) seen.splice(found, 1);
+    else seen.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
+    saveSeen(); render();
+  }
+  function showSeen() {
+    if (!seen.length) { showToast("Todavía no marcaste nada como visto"); return; }
+    var li = [];
+    for (var i = 0; i < seen.length; i++) {
+      var t = seen[i];
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: "Ya vistas" });
+    }
+    tabFocus = -1;
+    showList(li);
   }
   // El like/dislike local de la TV (tvLiked/tvDisliked) se eliminó: el feedback
   // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
@@ -890,6 +961,13 @@
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
          (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    // 3er botón SOLO en modo RC: marca "Ya la vi" (en modo vinculado ese flujo
+    // vive en el control del teléfono, con su hoja de rating).
+    if (uiMode === "rc") {
+      var sn = isSeen(it);
+      h += '<button class="hbtn ico' + (actionFocus === 2 ? " bfoc" : "") + (sn ? " on" : "") + '" title="Ya la vi">' +
+           (sn ? "✓" : "◉") + '<span class="blab">Ya la vi</span></button>';
+    }
     h += "</div>";
     h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
     // Atribución requerida por TMDB: los watch providers son datos de JustWatch.
@@ -898,7 +976,154 @@
     return h;
   }
 
+  // --- Modo RC: tabs de acceso, teclado en pantalla y filtros ---
+  function tabsHTML() {
+    if (uiMode !== "rc") return "";
+    var t = [
+      { label: "🔍 Buscar", cnt: 0 },
+      { label: "Mi lista", cnt: today.length },
+      { label: "Ya vistas", cnt: seen.length },
+      { label: "Plataformas", cnt: (userPlatforms && userPlatforms.length) ? userPlatforms.length : 0 }
+    ];
+    var h = '<div class="tabs" id="tabs">';
+    for (var i = 0; i < t.length; i++) {
+      h += '<span class="tab' + (i === tabFocus ? " foc" : "") + '">' + t[i].label +
+           (t[i].cnt ? ' <span class="cnt">' + t[i].cnt + "</span>" : "") + "</span>";
+    }
+    return h + "</div>";
+  }
+  function tabAction(i) {
+    if (i === 0) { openKb(); return; }
+    if (i === 1) {
+      if (!today.length) { showToast("Tu lista está vacía — OK sobre una película la guarda"); return; }
+      tabFocus = -1;
+      showToday();
+      return;
+    }
+    if (i === 2) { showSeen(); return; }
+    openFilters();
+  }
+
+  // Teclado en pantalla propio (no el IME nativo: en Tizen el IME del sistema
+  // es errático y pelea el foco con el keydown global; un grid renderizado por
+  // innerHTML es determinista y navega igual en todas las TVs).
+  var KB_ROWS = [
+    ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+    ["J", "K", "L", "M", "N", "Ñ", "O", "P", "Q"],
+    ["R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    ["0", { k: "space", label: "ESPACIO", cls: "wide" }, { k: "del", label: "⌫ Borrar", cls: "wide" }, { k: "go", label: "BUSCAR", cls: "wide go" }]
+  ];
+  function kbBufHTML() {
+    return kbBuffer
+      ? esc(kbBuffer) + '<span class="cur"></span>'
+      : '<span class="ph">¿Qué querés ver?</span>';
+  }
+  function kbHTML() {
+    var h = '<div class="kb"><div class="kbbuf" id="kbbuf">' + kbBufHTML() + "</div>";
+    for (var r = 0; r < KB_ROWS.length; r++) {
+      h += '<div class="kbrow">';
+      for (var c = 0; c < KB_ROWS[r].length; c++) {
+        var kdef = KB_ROWS[r][c];
+        var label = typeof kdef === "string" ? kdef : kdef.label;
+        var cls = typeof kdef === "string" ? "" : (" " + (kdef.cls || ""));
+        h += '<span class="key' + cls + (r === kbRow && c === kbCol ? " foc" : "") + '" id="key-' + r + "-" + c + '">' + label + "</span>";
+      }
+      h += "</div>";
+    }
+    return h + '<div class="kbhint">OK escribe · BUSCAR lanza la búsqueda · Volver cierra</div></div>';
+  }
+  function updateKbFocus() {
+    // Patrón "render una vez + toggle de clases": regenerar el grid entero por
+    // pulsación lagea en TVs de gama baja.
+    for (var r = 0; r < KB_ROWS.length; r++) {
+      for (var c = 0; c < KB_ROWS[r].length; c++) {
+        var el = document.getElementById("key-" + r + "-" + c);
+        if (!el) continue;
+        var kdef = KB_ROWS[r][c];
+        var cls = "key" + (typeof kdef === "string" ? "" : (" " + (kdef.cls || "")));
+        el.className = cls + (r === kbRow && c === kbCol ? " foc" : "");
+      }
+    }
+  }
+  function openKb() { kbOpen = true; kbBuffer = ""; kbRow = 0; kbCol = 0; render(); }
+  function closeKb() { kbOpen = false; render(); }
+  function kbMove(dir) {
+    var r = kbRow, c = kbCol;
+    if (dir === "left") c = Math.max(0, c - 1);
+    else if (dir === "right") c = Math.min(KB_ROWS[r].length - 1, c + 1);
+    else if (dir === "up") r = Math.max(0, r - 1);
+    else if (dir === "down") r = Math.min(KB_ROWS.length - 1, r + 1);
+    if (r !== kbRow) {
+      // Columna proporcional al cambiar entre filas de distinto largo (la última
+      // fila tiene 4 teclas anchas contra 9 letras de las de arriba).
+      c = Math.round(kbCol * (KB_ROWS[r].length - 1) / Math.max(1, KB_ROWS[kbRow].length - 1));
+    }
+    if (r === kbRow && c === kbCol) return;
+    kbRow = r; kbCol = c;
+    updateKbFocus();
+  }
+  function kbPress() {
+    var kdef = KB_ROWS[kbRow][kbCol];
+    var k = typeof kdef === "string" ? kdef : kdef.k;
+    if (k === "space") kbBuffer += " ";
+    else if (k === "del") kbBuffer = kbBuffer.slice(0, -1);
+    else if (k === "go") {
+      var q = kbBuffer.trim();
+      if (!q) return;
+      kbOpen = false; tabFocus = -1;
+      runSearch({ query: q });
+      return;
+    } else kbBuffer += (kbBuffer ? k.toLowerCase() : k);
+    var buf = document.getElementById("kbbuf");
+    if (buf) buf.innerHTML = kbBufHTML();
+  }
+
+  // Filtros de plataformas del modo RC: la selección se vuelca en userPlatforms
+  // (el mismo pipeline que SET_PLATFORMS del control) y persiste en el equipo.
+  function filtersHTML() {
+    var sel = userPlatforms || [];
+    var h = '<div class="filters"><h2>Plataformas</h2><p class="fsub">Elegí dónde buscar. Sin selección = todas.</p><div class="fchips">';
+    for (var i = 0; i < PLATFORMS.length; i++) {
+      var p = PLATFORMS[i];
+      var on = sel.indexOf(p) >= 0;
+      h += '<span class="fchip' + (on ? " on" : "") + (i === filterFocus ? " foc" : "") + '">' +
+           '<span class="fdot" style="background:' + colorFor(p) + '"></span>' + esc(p) + (on ? " ✓" : "") + "</span>";
+    }
+    h += '<span class="fchip done' + (filterFocus === PLATFORMS.length ? " foc" : "") + '">Listo</span>';
+    return h + '</div><div class="kbhint">OK marca/desmarca · «Listo» aplica · Volver cierra</div></div>';
+  }
+  function openFilters() { filtersOpen = true; filterFocus = 0; render(); }
+  function applyFilters() {
+    filtersOpen = false; tabFocus = -1;
+    try {
+      if (userPlatforms && userPlatforms.length) localStorage.setItem(RC_PLATFORMS_KEY, JSON.stringify(userPlatforms));
+      else localStorage.removeItem(RC_PLATFORMS_KEY);
+    } catch (e) {}
+    goHome(); // re-carga el home aplicando filterByPlatforms
+  }
+  function filterMove(dir) {
+    var n = filterFocus;
+    if (dir === "left" || dir === "up") n = Math.max(0, n - 1);
+    else if (dir === "right" || dir === "down") n = Math.min(PLATFORMS.length, n + 1);
+    if (n === filterFocus) return;
+    filterFocus = n;
+    renderContent(); // pocos nodos: regenerar acá es barato
+  }
+  function filterPress() {
+    if (filterFocus === PLATFORMS.length) { applyFilters(); return; }
+    var p = PLATFORMS[filterFocus];
+    var sel = userPlatforms ? userPlatforms.slice() : [];
+    var ix = sel.indexOf(p);
+    if (ix >= 0) sel.splice(ix, 1); else sel.push(p);
+    userPlatforms = sel.length ? sel : null;
+    renderContent();
+  }
+
   function renderContent() {
+    // Pantallas propias del modo RC: teclado y filtros reemplazan el contenido.
+    if (uiMode === "rc" && kbOpen) { elContent.innerHTML = kbHTML(); return; }
+    if (uiMode === "rc" && filtersOpen) { elContent.innerHTML = filtersHTML(); return; }
     // Ficha abierta: mostramos el ítem elegido a lo grande (estilo banner).
     if (detailItem) { elContent.innerHTML = detailHTML(detailItem); return; }
     if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); startSearchAnim(); return; }
@@ -911,9 +1136,12 @@
     // listas ("Mi lista" / "Tus marcadas para hoy") quedan como grilla plana.
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
+      // Fila de accesos del modo RC (Buscar / Mi lista / Ya vistas / Plataformas):
+      // en modo vinculado no se renderiza — la UI queda limpia, todo va por el control.
+      var html = tabsHTML();
       // Banner + dots en un contenedor estable: al mover el foco solo se
       // regenera #herobox (ver updateFocusClasses), no la grilla entera.
-      var html = '<div id="herobox">' + heroBoxHTML() + "</div>";
+      html += '<div id="herobox">' + heroBoxHTML() + "</div>";
       // Tira "Para ver hoy" (carrito), debajo del carrusel.
       html += todayStripHTML();
       // El resto, desde el ítem 5.
@@ -929,11 +1157,11 @@
   function heroBoxHTML() {
     var top = Math.min(TOP, items.length);
     var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
-    var html = heroHTML(items[hi], todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
+    var html = heroHTML(items[hi], tabFocus < 0 && todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
     // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
     // ocupaba una línea entera propia y le robaba alto al "Para ver hoy", que
     // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
-    var onCands = (todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
+    var onCands = (tabFocus < 0 && todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
     html += '<div class="hdots' + (onCands ? " act" : "") + '">';
     if (top > 1) {
       for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
@@ -991,7 +1219,10 @@
     // QR (antes updatePaired te tiraba a la pantalla de vinculación en medio
     // del uso); se avisa abajo y el contenido sigue navegable con el D-pad.
     elDcban.className = (uiMode === "linked" && !paired) ? "dcban" : "dcban hidden";
-    if (detailItem) {
+    if (uiMode === "rc" && (kbOpen || filtersOpen)) {
+      // Teclado / filtros a pantalla completa: sin topline.
+      elTopline.innerHTML = "";
+    } else if (detailItem) {
       // Ficha a pantalla completa: sin la línea instructiva de arriba (ruido).
       elTopline.innerHTML = "";
     } else if (loading && items.length === 0) {
@@ -1036,6 +1267,12 @@
       var hb = document.getElementById("herobox");
       if (!hb) { renderContent(); return; }
       hb.innerHTML = heroBoxHTML();
+      // Tabs del modo RC: toggle de clase (mismo patrón que las tarjetas).
+      var tabsEl = document.getElementById("tabs");
+      if (tabsEl) {
+        var tEls = tabsEl.getElementsByClassName("tab");
+        for (var tb = 0; tb < tEls.length; tb++) tEls[tb].className = "tab" + (tb === tabFocus ? " foc" : "");
+      }
       var top = Math.min(TOP, items.length);
       var hcards = elContent.getElementsByClassName("card");
       for (var j = 0; j < hcards.length; j++) {
@@ -1171,6 +1408,23 @@
     return out;
   }
 
+  // Filtro de plataformas client-side para el home: /api/tv-home es un caché
+  // global (sin parámetro de plataformas) y conviene que siga así. Acá se
+  // descartan los ítems fuera del filtro; autoFill/tv-home-more (que SÍ mandan
+  // platforms) rellenan el resto.
+  function filterByPlatforms(list) {
+    if (!userPlatforms || !userPlatforms.length) return list;
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i].platform;
+      if (!p) continue;
+      for (var j = 0; j < userPlatforms.length; j++) {
+        if (p === userPlatforms[j] || platLabel(p) === platLabel(userPlatforms[j])) { out.push(list[i]); break; }
+      }
+    }
+    return out;
+  }
+
   var homeRetryDelay = 4000;
   function loadHome() {
     if (homeLoaded) return;
@@ -1184,7 +1438,7 @@
       .then(function (data) {
         if (query) return; // si el usuario ya buscó, no piso sus resultados
         homeRetryDelay = 4000;
-        if (data && data.items) { items = assignIds(data.items, 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1; }
+        if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1; }
         render();
         emitScreen(true);
         loadPosters();
@@ -1289,6 +1543,9 @@
           for (var k = 0; k < data.items.length; k++) {
             if (!seen[String(data.items[k].title).toLowerCase()]) fresh.push(data.items[k]);
           }
+          // Defensa extra en home: aunque tv-home-more respeta platforms, si el
+          // server mandó algo fuera del filtro del usuario, no lo mostramos.
+          if (mode === "home") fresh = filterByPlatforms(fresh);
           added = fresh.length;
           items = items.concat(assignIds(fresh, items.length));
         }
@@ -1339,7 +1596,10 @@
         // contenido": INVERT[up]=down). Con el mapeo absoluto, apretar ↑ para el
         // "+" llegaba como "down" y seleccionaba "Ver en X" → OK disparaba play()
         // y abría el browser de la TV. Alternando, la inversión deja de importar.
-        actionFocus = (actionFocus === 0) ? 1 : 0;
+        // En modo RC hay un 3er botón ("Ya la vi"): se cicla módulo 3 — ahí las
+        // direcciones no vienen invertidas porque no hay teléfono en el medio.
+        var nBtns = (uiMode === "rc") ? 3 : 2;
+        actionFocus = (actionFocus + 1) % nBtns;
         render();
         return;
       }
@@ -1377,11 +1637,12 @@
             changed = true;
           }
         } else {
-          // En el banner: ←/→ recorre los 5; ↓ entra a los botones.
+          // En el banner: ←/→ recorre los 5; ↓ entra a los botones; ↑ sube a la
+          // fila de tabs (solo modo RC — en vinculado no hay tabs).
           if (dir === "right") { n = Math.min(focusedIndex + 1, top - 1); if (n < top) heroIndex = n; }
           else if (dir === "left") { n = Math.max(focusedIndex - 1, 0); if (n < top) heroIndex = n; }
           else if (dir === "down") { actionFocus = 0; changed = true; }
-          // ↑ no hace nada
+          else if (dir === "up" && uiMode === "rc") { tabFocus = 0; changed = true; }
         }
       } else {
         // En la grilla: ←/→ ±1, ↓ +6, ↑ −6 (y si sube del tope, va al carrito
@@ -1564,8 +1825,9 @@
   var okTimer = null, okTitle = "";
   function okPress() {
     if (detailItem) {
-      // En la ficha los botones se eligen con ←/→: 0 = "Para hoy", 1 = "Ver en X".
+      // En la ficha: 0 = guardar en lista, 1 = "Ver en X", 2 = "Ya la vi" (solo RC).
       if (actionFocus === 0) { toggleToday(detailItem); return; }
+      if (actionFocus === 2 && uiMode === "rc") { toggleSeen(detailItem); return; }
       play(detailItem.id);
       return;
     }
@@ -1630,6 +1892,42 @@
         e.preventDefault();
       }
       return; // flechas/OK no operan sobre el DOM oculto
+    }
+
+    // Pantallas propias del modo RC — se evalúan ANTES del flujo de contenido
+    // para que OK sobre un tab/tecla no caiga en okPress() (orden de guardas:
+    // teclado → filtros → tabs → contenido).
+    if (uiMode === "rc" && kbOpen) {
+      if (k === 37) kbMove("left");
+      else if (k === 39) kbMove("right");
+      else if (k === 38) kbMove("up");
+      else if (k === 40) kbMove("down");
+      else if (isOk) kbPress();
+      else if (isBack) closeKb();
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (uiMode === "rc" && filtersOpen) {
+      if (k === 37) filterMove("left");
+      else if (k === 39) filterMove("right");
+      else if (k === 38) filterMove("up");
+      else if (k === 40) filterMove("down");
+      else if (isOk) filterPress();
+      else if (isBack) { filtersOpen = false; tabFocus = -1; render(); }
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (uiMode === "rc" && tabFocus >= 0 && !detailItem) {
+      if (k === 37) { tabFocus = Math.max(0, tabFocus - 1); updateFocusClasses(); }
+      else if (k === 39) { tabFocus = Math.min(3, tabFocus + 1); updateFocusClasses(); }
+      else if (k === 40) { tabFocus = -1; updateFocusClasses(); }
+      else if (isOk) tabAction(tabFocus);
+      else if (isBack) { tabFocus = -1; updateFocusClasses(); }
+      else return;
+      e.preventDefault();
+      return;
     }
 
     // uiMode === "rc" | "linked": flujo de contenido.
