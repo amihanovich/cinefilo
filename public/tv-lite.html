@@ -132,10 +132,22 @@
   .hero .hside { position:relative; width:26%; flex:0 0 auto; overflow:hidden; }
   .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.35) 30%, rgba(16,16,19,0) 60%); }
-  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; gap:7px; padding:16px 24px; }
-  .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7; }
-  .hero .hmeta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-  .hero .hsub { font-size:14px; color:#B4B4BC; }
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:14px 22px; }
+  /* Panel de texto semi-transparente: NO tapa más de la mitad del alto del hero
+     (pedido de diseño). El blur es progressive enhancement — Tizen 4 (Chrome 56)
+     no soporta backdrop-filter e ignora el bloque @supports sin romper. */
+  .hero .hpanel { align-self:flex-start; max-width:100%; max-height:50%; overflow:hidden;
+    background:rgba(10,10,12,.55); border-radius:14px; padding:10px 14px;
+    display:flex; flex-direction:column; gap:7px; }
+  @supports ((-webkit-backdrop-filter:blur(8px)) or (backdrop-filter:blur(8px))) {
+    .hero .hpanel { -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); background:rgba(10,10,12,.42); }
+  }
+  /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
+  .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hmeta { display:flex; flex-wrap:nowrap; align-items:center; gap:12px; overflow:hidden; }
+  .hero .hmeta .pill { flex:0 0 auto; }
+  .hero .hsub { font-size:14px; color:#B4B4BC; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* La razón va como TEXTO PELADO sobre el hero (sin caja gris): el degradado
      de la izquierda ya la hace legible y el text-shadow la asegura sobre la
      imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
@@ -143,7 +155,7 @@
      ni max-width gana ancho y entra en 3 líneas cómodas. */
   .hero .hreason { margin:2px 0 0; font-size:13px; line-height:1.4; color:#EDEDF0; flex-shrink:0;
     text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 12px rgba(0,0,0,.5);
-    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hreason b { color:#8852E0; margin-right:6px; }
   /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
@@ -151,10 +163,14 @@
   .hbtn { border:none; border-radius:999px; font-weight:600; }
   .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
-  /* Label del botón "Para hoy": oculto por defecto (banner), visible en la ficha. */
+  /* Label del botón "Mi lista": oculto por defecto (banner), visible en la ficha. */
   .blab { display:none; }
   .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
+  /* Chevrons ‹ ›: afirman que el banner se desplaza con ←/→ (affordance). */
+  .hchev { position:absolute; top:50%; margin-top:-22px; z-index:4; font-size:38px; line-height:1;
+    color:rgba(255,255,255,.55); text-shadow:0 2px 10px rgba(0,0,0,.85); pointer-events:none; }
+  .hchev.l { left:10px; } .hchev.r { right:10px; }
   /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
   .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
   /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
@@ -165,8 +181,15 @@
   .hdots.act .hdot.on { background:#A878FF; box-shadow:0 0 0 3px rgba(136,82,224,.28); }
   .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
   .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
-  /* Tira "Para ver hoy" (carrito de la TV). */
+  /* Tira "Mi lista" (lista guardada de la TV). */
+  .rowwrap { position:relative; }
   .todayrow { display:flex; gap:10px; overflow:hidden; margin-bottom:3px; }
+  /* Cuando hay más tiles fuera de vista: fade en el borde derecho + flecha ›.
+     (Antes el overflow era mudo y los tiles extra simplemente "no existían".) */
+  .todayrow.fade { -webkit-mask-image:linear-gradient(to right, #000 82%, transparent 100%);
+                           mask-image:linear-gradient(to right, #000 82%, transparent 100%); }
+  .rowmore { position:absolute; right:2px; top:50%; margin-top:-16px; font-size:26px; line-height:1;
+    color:rgba(255,255,255,.7); text-shadow:0 2px 8px rgba(0,0,0,.85); pointer-events:none; }
   .ttile { width:76px; height:114px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
   .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
   .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
@@ -178,12 +201,28 @@
   .dph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
   .dph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; color:#9A9AA2; font-size:19px; font-weight:500; }
   .detail .dinfo { flex:1; min-width:0; display:flex; flex-direction:column; gap:9px; }
-  .detail .dtitle { font-family:inherit; font-size:31px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7; }
-  .detail .dreason { margin:0; font-size:15px; line-height:1.45; color:#EDEDF0; }
+  /* Título + meta compactos: clamp 2 líneas + meta en UNA línea con ellipsis. */
+  .detail .dtitle { font-family:inherit; font-size:31px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .detail .hmeta { flex-wrap:nowrap; overflow:hidden; }
+  .detail .hmeta .pill { flex:0 0 auto; }
+  .detail .hsub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Secciones tituladas de la ficha: a) Sinopsis, b) Por qué verla. */
+  .detail .dsec { font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:#8A8A93; margin:5px 0 0; }
+  /* Red de seguridad de largo: el límite real vive en los prompts del backend
+     (sinopsis 30-40 palabras, reason 40-60), pero si el modelo se pasa, el
+     bloque de texto se recorta con fade en vez de desbordar la pantalla
+     (.detail está centrado verticalmente y sin scroll en TV). */
+  .detail .dtext { position:relative; max-height:42vh; overflow:hidden; }
+  .detail .dtext:after { content:""; position:absolute; left:0; right:0; bottom:0; height:24px;
+    background:linear-gradient(to bottom, rgba(14,14,16,0), #0E0E10); pointer-events:none; }
+  .detail .dreason { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0;
+    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
   .detail .dreason b { color:#8852E0; margin-right:6px; }
-  .detail .dsyn { margin:0; font-size:14px; line-height:1.4; color:#B4B4BC; }
+  .detail .dsyn { margin:2px 0 0; font-size:14px; line-height:1.4; color:#B4B4BC;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
-  /* En la ficha, "Para hoy" deja de ser un ícono redondo y se vuelve píldora con
+  /* En la ficha, "Mi lista" deja de ser un ícono redondo y se vuelve píldora con
      texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
      outline 3px + scale(1.06), y con 12px quedaba pisando al "Ver en X". */
   .detail .hbtn.ico { width:auto; height:36px; padding:0 15px; gap:7px; font-size:15px; border-radius:999px; }
@@ -219,7 +258,7 @@
   .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
     display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
   .card .det .why b { color:#8852E0; }
-  /* Guardada en "Para hoy": degradé violeta + check centrado (como la móvil). */
+  /* Guardada en "Mi lista": degradé violeta + check centrado (como la móvil). */
   .card .csaved { position:absolute; top:0; left:0; right:0; bottom:0; z-index:3;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
     background:linear-gradient(to top, rgba(18,9,34,.9) 0%, rgba(136,82,224,.42) 100%); }
@@ -651,7 +690,7 @@
   }
   var sessionId = loadOrCreateSession();
   // El QR abre la web-control (apps/web-control, servicio Railway propio): la réplica
-  // del control remoto de la app móvil (D-pad, OK contextual, "Para hoy"). NO usar el
+  // del control remoto de la app móvil (D-pad, OK contextual, "Mi lista"). NO usar el
   // origin de este host: ahí vive el /control viejo (lista scrolleable), que quedó atrás.
   // Override para probar otro deploy: cargar tv-lite.html con ?control=<base-url>.
   var controlOverride = /[?&]control=([^&]+)/.exec(window.location.search);
@@ -670,9 +709,12 @@
   var detailScope = "grid"; // de qué lista salió la ficha: cands | grid | today | list
                             // (define entre qué ítems se mueve con ←/→ adentro de la ficha)
   var TODAY_KEY = "miru:tv:mylist";
-  var today = loadToday(); // ítems en "Para hoy" (carrito de la TV, persistido en la sesión)
-  var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Para hoy", 1 = "Ver en X"
-  var todayFocus = -1;     // -1 = fuera de la tira "Para ver hoy"; 0.. = tile enfocado del carrito
+  // Nombre visible de la lista guardada. En el wire sigue viajando como
+  // ADD_TODAY/todayTitles (legacy, ver ARCHITECTURE.md) — solo cambia la UI.
+  var MYLIST_SECTION = "Mi lista";
+  var today = loadToday(); // ítems en "Mi lista" (lista guardada de la TV; wire-legacy: "today")
+  var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Mi lista", 1 = "Ver en X", 2 = "Ya la vi" (RC)
+  var todayFocus = -1;     // -1 = fuera de la tira "Mi lista"; 0.. = tile enfocado de la tira
   var history = []; // pila de pantallas anteriores (para "Volver")
   var loading = false;
   var loadingMore = false;
@@ -773,13 +815,13 @@
   // cardHTML y también al recargar el póster (loadPosters), para no perder la info.
   function cardPh(it) {
     var h = posterHTML(it) + '<div class="cgrad"></div>';
-    // Guardada en "Para hoy": degradé + check encima (mismo lenguaje que la
+    // Guardada en "Mi lista": degradé + check encima (mismo lenguaje que la
     // app móvil) — sensación inmediata de "quedó reservada".
-    // PERO no en la lista "Tus marcadas para hoy": ahí TODAS están guardadas, así
+    // PERO no en la lista "Mi lista": ahí TODAS están guardadas, así
     // que la marca no informa nada y el degradé violeta + el tilde solo tapan la
     // carátula. Se muestra solo donde distingue (grilla general, "Mi lista").
-    if (isToday(it) && it.section !== "Tus marcadas para hoy") {
-      h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">Para hoy</span></div>';
+    if (isToday(it) && it.section !== MYLIST_SECTION) {
+      h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">En mi lista</span></div>';
     }
     // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
     h += '<div class="cinfo"><span class="tt">' + esc(it.title) + "</span>";
@@ -802,9 +844,11 @@
   // Héroe: la recomendación principal (item 0) a lo grande, con póster de fondo,
   // doble gradiente cinematográfico y la razón de Miru. Comparte el id
   // "card-<id>" con las tarjetas para reusar foco/scroll.
-  function heroHTML(it, foc) {
+  function heroHTML(it, foc, chevL, chevR) {
     var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
-    h += '<div class="info">';
+    if (chevL) h += '<span class="hchev l">‹</span>';
+    if (chevR) h += '<span class="hchev r">›</span>';
+    h += '<div class="info"><div class="hpanel">';
     h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
     if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
@@ -816,18 +860,18 @@
     h += "</div>";
     if (it.reason) h += '<p class="hreason"><b>✦</b> ' + esc(it.reason) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
-    // Solo 2 acciones: "Para hoy" y "Ver en X". El feedback de gustos (👍/👎)
+    // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
     // vive únicamente en el control del teléfono — el banner queda limpio.
     var af = foc ? actionFocus : -1;
     var td = isToday(it);
     h += '<div class="hactions">';
-    // El label "Para hoy" solo se muestra en la ficha (ahí sobra espacio); en el
+    // El label "Mi lista" solo se muestra en la ficha (ahí sobra espacio); en el
     // banner el botón queda como ícono redondo para no robarle aire al hero.
-    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
-         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
+         (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
     h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     h += "</div>";
-    h += "</div>"; // cierra .info
+    h += "</div></div>"; // cierra .hpanel y .info
     // Columna del póster a la derecha (acotada, con blend hacia el panel negro).
     h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
     h += "</div>";
@@ -865,7 +909,7 @@
     return html;
   }
 
-  // --- Carrito "Para ver hoy" (identidad por título, estable entre listas) ---
+  // --- Lista guardada "Mi lista" (identidad por título, estable entre listas) ---
   function loadToday() { try { var v = localStorage.getItem(TODAY_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
   function saveToday() { try { localStorage.setItem(TODAY_KEY, JSON.stringify(today)); } catch (e) {} }
   function isToday(item) { if (!item) return false; for (var i = 0; i < today.length; i++) if (today[i].title === item.title) return true; return false; }
@@ -907,19 +951,30 @@
   // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
   function todayStripHTML() {
     if (!today.length) return "";
-    var h = '<h3 class="sec">Tus marcadas para hoy</h3><div class="todayrow">';
+    var h = '<h3 class="sec">' + MYLIST_SECTION + '</h3><div class="rowwrap"><div class="todayrow" id="todayrow">';
     for (var i = 0; i < today.length; i++) {
       var it = today[i];
       var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
       h += '<div class="ttile' + (i === todayFocus ? " foc" : "") + '" id="today-' + i + '">' + p + "</div>";
     }
-    return h + "</div>";
+    return h + '</div><span class="rowmore hidden" id="rowmore">›</span></div>';
+  }
+
+  // Affordance de la tira "Mi lista": si hay tiles fuera de vista a la derecha,
+  // fade en el borde + flecha ›. Se recalcula al renderizar y al mover el foco.
+  function updateRowAffordance() {
+    var row = document.getElementById("todayrow");
+    var arr = document.getElementById("rowmore");
+    if (!row || !arr) return;
+    var more = row.scrollWidth > Math.ceil(row.clientWidth + row.scrollLeft) + 4;
+    arr.className = "rowmore" + (more ? "" : " hidden");
+    row.className = "todayrow" + (more ? " fade" : "");
   }
 
   // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
   // Ítems entre los que se navega con ←/→ DENTRO de la ficha: los del mismo
   // contexto del que la abriste (candidatas si zoomeaste una candidata, la
-  // grilla general si venías de ahí, el carrito si venías de "Para ver hoy").
+  // grilla general si venías de ahí, la tira "Mi lista" si venías de ahí).
   function detailSiblings() {
     if (detailScope === "today") return today;
     if (mode !== "home" && mode !== "search") return items; // "Mi lista" / listas
@@ -954,12 +1009,16 @@
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
-    if (it.reason) h += '<p class="dreason"><b>✦</b> ' + esc(it.reason) + "</p>";
-    if (it.synopsis) h += '<p class="dsyn">' + esc(it.synopsis) + "</p>";
+    if (it.synopsis || it.reason) {
+      h += '<div class="dtext">';
+      if (it.synopsis) h += '<h4 class="dsec">Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
+      if (it.reason) h += '<h4 class="dsec">Por qué verla</h4><p class="dreason"><b>✦</b> ' + esc(it.reason) + "</p>";
+      h += "</div>";
+    }
     var td = isToday(it);
     h += '<div class="hactions">';
-    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Para hoy">' +
-         (td ? "✓" : "+") + '<span class="blab">Para hoy</span></button>';
+    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
+         (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
     h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     // 3er botón SOLO en modo RC: marca "Ya la vi" (en modo vinculado ese flujo
     // vive en el control del teléfono, con su hoja de rating).
@@ -1133,7 +1192,7 @@
     }
     // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
     // principales resultados merecen la misma jerarquía que el home. Solo las
-    // listas ("Mi lista" / "Tus marcadas para hoy") quedan como grilla plana.
+    // listas ("Mi lista" / "Ya vistas") quedan como grilla plana.
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       // Fila de accesos del modo RC (Buscar / Mi lista / Ya vistas / Plataformas):
@@ -1142,12 +1201,13 @@
       // Banner + dots en un contenedor estable: al mover el foco solo se
       // regenera #herobox (ver updateFocusClasses), no la grilla entera.
       html += '<div id="herobox">' + heroBoxHTML() + "</div>";
-      // Tira "Para ver hoy" (carrito), debajo del carrusel.
+      // Tira "Mi lista" (guardadas), debajo del carrusel.
       html += todayStripHTML();
       // El resto, desde el ítem 5.
       var secTitle = mode === "search" ? "Más resultados" : "Más opciones para vos";
       if (items.length > top) html += '<h3 class="sec">' + secTitle + "</h3>" + cardsGridHTML(top);
       elContent.innerHTML = html;
+      updateRowAffordance();
     } else {
       elContent.innerHTML = gridHTML(0);
     }
@@ -1157,9 +1217,9 @@
   function heroBoxHTML() {
     var top = Math.min(TOP, items.length);
     var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
-    var html = heroHTML(items[hi], tabFocus < 0 && todayFocus < 0 && focusedIndex < top && focusedIndex === hi);
+    var html = heroHTML(items[hi], tabFocus < 0 && todayFocus < 0 && focusedIndex < top && focusedIndex === hi, hi > 0, hi < top - 1);
     // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
-    // ocupaba una línea entera propia y le robaba alto al "Para ver hoy", que
+    // ocupaba una línea entera propia y le robaba alto a la tira "Mi lista", que
     // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
     var onCands = (tabFocus < 0 && todayFocus < 0 && actionFocus < 0 && focusedIndex < top);
     html += '<div class="hdots' + (onCands ? " act" : "") + '">';
@@ -1168,7 +1228,7 @@
       html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
               (onCands ? " · ← → para cambiar" : "") + "</span>";
     }
-    html += '<span class="okhint">OK = guardar para hoy · OK doble = abrir ficha · Volver = elegir modo</span>';
+    html += '<span class="okhint">OK = guardar en Mi lista · OK doble = abrir ficha · Volver = elegir modo</span>';
     html += "</div>";
     return html;
   }
@@ -1234,9 +1294,7 @@
       var listSec = (items[0] && items[0].section) || "Mi lista";
       var listMsg = listSec === "Ya vistas"
         ? " — películas y series que ya viste."
-        : listSec === "Tus marcadas para hoy"
-          ? " — tus elegidas para esta noche."
-          : " — tus películas y series guardadas.";
+        : " — tus películas y series guardadas.";
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
       // Home: sin línea extra — el tagline de la barra y el okhint ya cumplen esa función.
@@ -1288,6 +1346,7 @@
         var row = elContent.querySelector(".todayrow");
         if (row) row.scrollLeft = Math.max(0, tiles[todayFocus].offsetLeft - 60);
       }
+      updateRowAffordance();
       return;
     }
     var cards = elContent.getElementsByClassName("card");
@@ -1306,7 +1365,7 @@
     // emitir nada fuera del modo vinculado.
     if (uiMode !== "linked") return;
     var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
-    // todayTitles: qué está en "Para hoy" (por título, estable) para que el control
+    // todayTitles: qué está en "Mi lista" (por título, estable; nombre wire-legacy) para que el control
     // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
     var todayTitles = [];
     for (var i = 0; i < today.length; i++) todayTitles.push(today[i].title);
@@ -1588,7 +1647,7 @@
 
   function moveFocus(dir) {
     // En la ficha: ←/→ SE MUEVE ENTRE ÍTEMS (dentro de la lista de la que salió,
-    // igual que en la app); ↑/↓ elige el botón "Para hoy" (0) / "Ver en X" (1).
+    // igual que en la app); ↑/↓ elige el botón "Mi lista" (0) / "Ver en X" (1).
     if (detailItem) {
       if (dir === "up" || dir === "down") {
         // ALTERNA entre los 2 botones en vez de mapear ↑=0 / ↓=1. Clave: el
@@ -1617,7 +1676,7 @@
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       if (todayFocus >= 0) {
-        // En la tira "Para ver hoy" (carrito): ←/→ entre tiles; ↑ a los botones
+        // En la tira "Mi lista": ←/→ entre tiles; ↑ a los botones
         // del banner; ↓ a la grilla (o de vuelta a los botones si no hay grilla).
         if (dir === "right") { var tr = Math.min(todayFocus + 1, today.length - 1); if (tr !== todayFocus) { todayFocus = tr; changed = true; } }
         else if (dir === "left") { var tl = Math.max(todayFocus - 1, 0); if (tl !== todayFocus) { todayFocus = tl; changed = true; } }
@@ -1716,7 +1775,7 @@
     var li = [];
     for (var i = 0; i < today.length; i++) {
       var t = today[i];
-      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, section: "Tus marcadas para hoy" });
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: MYLIST_SECTION });
     }
     showList(li);
   }
@@ -1783,7 +1842,7 @@
     else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
     // SELECT con mediaId = enfocá ese ítem. SIN mediaId = "apretaron OK": lo
     // resuelve okPress(), que respeta el botón enfocado (actionFocus). Antes el
-    // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Para hoy" te
+    // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Mi lista" te
     // lanzaba la app de streaming porque el comando ya venía como "reproducí".
     else if (cmd.type === "SELECT") { if (cmd.mediaId) focusById(cmd.mediaId); else okPress(); }
     else if (cmd.type === "PLAY") play(cmd.mediaId);
@@ -1821,7 +1880,7 @@
 
   // OK contextual (mismo modelo que el móvil), válido para el remoto nativo y el
   // control móvil (que manda "SELECT"). Ficha abierta: OK = ver ahora. En el carrito:
-  // 1 OK = ficha. Fuera del carrito: doble OK (<400ms) = ficha; 1 OK = agregar a "Para hoy".
+  // 1 OK = ficha. Fuera de la tira: doble OK (<400ms) = ficha; 1 OK = guardar en "Mi lista".
   var okTimer = null, okTitle = "";
   function okPress() {
     if (detailItem) {
@@ -1841,7 +1900,7 @@
       else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
       return;
     }
-    // Foco en la tira "Para ver hoy" (y NO en un botón): OK abre la ficha.
+    // Foco en la tira "Mi lista" (y NO en un botón): OK abre la ficha.
     if ((mode === "home" || mode === "search") && todayFocus >= 0 && actionFocus < 0) {
       var tit = today[todayFocus];
       if (tit) { detailScope = "today"; openDetail(tit); }
@@ -1851,7 +1910,7 @@
     // Antes había un atajo acá: si el ítem YA estaba guardado, un tap abría la
     // ficha directo — y entonces desde la grilla no había forma de desmarcarlo.
     // Ahora el gesto es simétrico y vale igual esté guardado o no:
-    //   1 tap  → toggle "Para hoy" (marca / DESMARCA, y se va el fade + el tilde)
+    //   1 tap  → toggle "Mi lista" (marca / DESMARCA, y se va el fade + el tilde)
     //   2 taps → abrir la ficha
     if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → ficha
       clearTimeout(okTimer); okTimer = null; okTitle = "";
