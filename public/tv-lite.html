@@ -340,7 +340,7 @@
     <div class="ribbons" id="pairribbons"></div>
   </div>
 
-  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — podés seguir con el control de la TV · Volver = elegir modo / re-vincular</div>
+  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — tocá una flecha para usar el control de la TV · Volver = elegir modo</div>
   <div id="toast" class="toast"></div>
 
   <div id="results" class="wrap hidden">
@@ -2069,6 +2069,20 @@
       else return;
       e.preventDefault();
       return;
+    }
+
+    // Vinculado SIN control presente (se llevaron el teléfono / se cerró la
+    // pestaña): la primera flecha u OK del remoto físico es señal inequívoca de
+    // que ahora maneja el RC → pasar al modo RC (tabs + botones en pantalla)
+    // conservando contenido y foco. Si el teléfono vuelve, updatePaired ya
+    // devuelve la UI al modo vinculado. BACK conserva su rol (elegir modo).
+    if (uiMode === "linked" && !paired && !isBack) {
+      uiMode = "rc";
+      showToast("Modo control de TV — botones en pantalla activados");
+      render();
+      // Una flecha sigue navegando sobre la UI nueva; un OK solo activa el
+      // modo (accionar a ciegas podría guardar algo sin querer).
+      if (isOk) { e.preventDefault(); return; }
     }
 
     // uiMode === "rc" | "linked": flujo de contenido.
