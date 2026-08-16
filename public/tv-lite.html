@@ -283,6 +283,11 @@
   .swheel .sc { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
   .swheel .sc .slbl { font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#8A8A93; }
   .swheel .sc .spl { font-size:28px; font-weight:700; color:#8852E0; max-width:195px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Overlay "Abriendo <app>…" al lanzar la app de streaming (antes el PLAY no
+     daba NINGÚN feedback y la TV quedaba congelada hasta que Android levantaba
+     la app). Reusa la estética de la rueda de búsqueda, con la plataforma fija. */
+  .opening { position:fixed; left:0; top:0; right:0; bottom:0; z-index:80; background:#0E0E10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:36px; text-align:center; padding:0 24px; }
   .sdots { display:flex; align-items:center; justify-content:center; gap:10px; }
   .sdots span { display:inline-block; height:9px; width:9px; border-radius:999px; background:rgba(255,255,255,.18); transition:all .25s; }
   .sdots span.on { width:34px; }
@@ -1367,9 +1372,22 @@
     var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
     // todayTitles: qué está en "Mi lista" (por título, estable; nombre wire-legacy) para que el control
     // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
+    // myList: los ítems COMPLETOS (aditivo) para que el control muestre la
+    // lista con carátulas — los controles viejos lo ignoran.
     var todayTitles = [];
-    for (var i = 0; i < today.length; i++) todayTitles.push(today[i].title);
-    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles });
+    var myList = [];
+    for (var i = 0; i < today.length; i++) {
+      var t = today[i];
+      todayTitles.push(t.title);
+      var m = { id: t.id || ("t" + i), title: t.title, section: MYLIST_SECTION };
+      if (t.platform) m.platform = t.platform;
+      if (t.posterUrl) m.posterUrl = t.posterUrl;
+      if (typeof t.year === "number") m.year = t.year;
+      if (t.synopsis) m.synopsis = t.synopsis;
+      if (t.reason) m.reason = t.reason;
+      myList.push(m);
+    }
+    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles, myList: myList });
   }
   // El SCREEN viaja con items completo (hasta 60 ítems con reason larga) para
   // ser compatible con los controles ya desplegados. En ráfagas de navegación
@@ -1809,6 +1827,31 @@
     emitScreen(true);
   }
 
+  // Overlay de apertura de la app de streaming. Se auto-oculta a los 6s, al
+  // volver del background (pagehide/visibilitychange: la app de streaming tomó
+  // el frente y al volver la TV no debe quedar tapada) o con BACK.
+  var openingTimer = null;
+  function hideOpening() {
+    if (openingTimer) { clearTimeout(openingTimer); openingTimer = null; }
+    var d = document.getElementById("opening");
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
+  function showOpening(it) {
+    hideOpening();
+    var col = colorFor(it.platform);
+    var d = document.createElement("div");
+    d.id = "opening";
+    d.className = "opening";
+    d.innerHTML =
+      '<div class="sline">Abriendo <b>' + esc(platLabel(it.platform)) + "</b>…</div>" +
+      '<div class="swheel"><div class="sring"></div><div class="sarc" style="border-top-color:' + col + '"></div>' +
+      '<div class="sc"><span class="slbl">Reproduciendo</span><span class="spl" style="color:' + col + '">' + esc(it.title) + "</span></div></div>";
+    document.body.appendChild(d);
+    openingTimer = setTimeout(hideOpening, 6000);
+  }
+  document.addEventListener("visibilitychange", function () { if (document.hidden) hideOpening(); });
+  window.addEventListener("pagehide", hideOpening);
+
   function play(mediaId) {
     // La ficha puede ser un ítem de la lista guardada que ya no está en la
     // lista actual: findItem resuelve contra ficha + lista + guardados.
@@ -1817,6 +1860,7 @@
     if (!it) return;
     sendState({ type: "NOW_PLAYING", media: it });
     if (it.platform) {
+      showOpening(it);
       var key = it.title + "|" + it.platform;
       var jw = Object.prototype.hasOwnProperty.call(jwCache, key) ? jwCache[key] : undefined;
       if (jw && (jw.deeplinkAndroid || jw.standardWebURL)) {
@@ -1951,6 +1995,13 @@
         e.preventDefault();
       }
       return; // flechas/OK no operan sobre el DOM oculto
+    }
+
+    // Overlay "Abriendo…" visible: BACK lo cierra y nada más.
+    if (isBack && document.getElementById("opening")) {
+      hideOpening();
+      e.preventDefault();
+      return;
     }
 
     // Pantallas propias del modo RC — se evalúan ANTES del flujo de contenido

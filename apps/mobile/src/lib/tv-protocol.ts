@@ -74,6 +74,8 @@ export const TvState = z.discriminatedUnion("type", [
     focusedId: z.string().nullable(),
     items: z.array(mediaItemSchema),
     todayTitles: z.array(z.string()).optional(),
+    // Ítems completos de "Mi lista" (aditivo; los clientes viejos lo ignoran).
+    myList: z.array(mediaItemSchema).optional(),
   }),
   z.object({ type: z.literal("NOW_PLAYING"), media: mediaItemSchema }),
 ]);

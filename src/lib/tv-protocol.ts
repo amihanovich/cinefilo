@@ -69,9 +69,14 @@ export const TvState = z.discriminatedUnion("type", [
     screen: z.enum(["home", "search", "detail", "player"]),
     focusedId: z.string().nullable(),
     items: z.array(mediaItemSchema),
-    // Títulos que están en "Para hoy" (carrito de la TV), para que el control
-    // conozca el contexto del OK (fuera del carrito = agregar; dentro = ficha).
+    // Títulos que están en "Mi lista" (lista guardada de la TV; nombre
+    // wire-legacy "today"), para que el control conozca el contexto del OK
+    // (fuera de la lista = agregar; dentro = ficha).
     todayTitles: z.array(z.string()).optional(),
+    // Los ítems COMPLETOS de "Mi lista" (con póster/año/sinopsis): permite que
+    // el control muestre la lista con carátulas. Campo aditivo: una TV vieja no
+    // lo manda y un control viejo lo ignora (Zod no-strict).
+    myList: z.array(mediaItemSchema).optional(),
   }),
   z.object({ type: z.literal("NOW_PLAYING"), media: mediaItemSchema }),
 ]);
