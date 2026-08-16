@@ -60,7 +60,7 @@ const itemRules = (plats) =>
   '- "platform" EXACTAMENTE una de: ' +
   plats.join(", ") +
   '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
-  '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
+  '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
   '- "hook": el porqué de la recomendación en UNA frase ultra concreta y visual, ' +
   'empezando con "Porque", máximo 8 palabras, sin punto final. Ejemplos: ' +
   '"Porque hay persecuciones y acción en Latinoamérica", "Porque hay espadas ' +
@@ -112,7 +112,7 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
     '\n- Si un título se aleja del pedido, aclaralo en "reason" (ej "Se aleja un poco, pero...").';
   // Se piden 18 y se devuelven hasta 15: el margen absorbe los que la
   // validación de disponibilidad (TMDB, por país) descarta o no confirma.
-  const parsed = await callAnthropic(prompt, 5500);
+  const parsed = await callAnthropic(prompt, 7000);
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
   await validateItems(items, platforms && platforms.length ? platforms : null, country);
   // minFill 8: con 8+ verificados no se rellena con títulos no resueltos
@@ -242,13 +242,13 @@ async function writeReasons(items) {
     "Devolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[{"title":"","synopsis":"","hook":"","reason":""}]}\n\nReglas:\n' +
     '- "title" EXACTAMENTE como te lo di (mismo texto), sin agregar ni sacar títulos.\n' +
-    '- "synopsis": una frase (máx 18 palabras) de qué trata, sin spoilers.\n' +
+    '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
     '- "hook": el porqué en UNA frase ultra concreta y visual, empezando con "Porque", ' +
     "máximo 8 palabras, sin punto final. Es lo único que se lee en la tarjeta chica.\n" +
     '- "reason": 2 o 3 frases (40 a 60 palabras) que den ganas de darle play: el porqué ' +
     "central, el tono/clima, qué la vuelve memorable; si suma, un dato de cinéfilo breve. " +
     "Cálido y conversacional, sin spoilers ni frases hechas repetidas entre ítems.";
-  const parsed = await callAnthropic(prompt, 6000);
+  const parsed = await callAnthropic(prompt, 7500);
   const byTitle = new Map();
   for (const r of (parsed && parsed.items) || []) {
     byTitle.set(String(r.title || "").toLowerCase().trim(), r);
@@ -301,7 +301,7 @@ export async function tvHome() {
     '- "latest": EXACTAMENTE 10 estrenos recientes (2024-2025) populares, variados, repartidos entre las distintas plataformas.\n' +
     "- Sin repetir títulos entre las dos listas.\n" +
     itemRules(PLATFORMS);
-  const parsed = await callAnthropic(prompt, 6000);
+  const parsed = await callAnthropic(prompt, 7500);
   const rec = ((parsed && parsed.recommended) || []).map((r) =>
     normalizeItem(r, "Recomendadas para vos"),
   );
@@ -334,7 +334,7 @@ export async function tvHomeMore(exclude, platforms, country) {
     ITEM_SHAPE +
     "]}\n\nReglas:\n- EXACTAMENTE 10 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
     itemRules(plats);
-  const parsed = await callAnthropic(prompt, 4500);
+  const parsed = await callAnthropic(prompt, 5500);
   const items = ((parsed && parsed.items) || []).map((r) =>
     normalizeItem(r, "Más recomendadas para vos"),
   );
