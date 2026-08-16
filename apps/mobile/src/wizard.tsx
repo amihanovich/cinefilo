@@ -969,26 +969,28 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
             <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
 
-            {/* Flechas ←/→ (deslizar entre las 5) — plantadas abajo, en el hueco entre
-                "Ver ahora" y los botones, para NO tapar la razón de la recomendación. */}
+            {/* Flechas ←/→ (deslizar entre las 5) — a MEDIA ALTURA del póster, que
+                es donde el ojo las busca: abajo y chiquitas pasaban desapercibidas
+                y no quedaba claro que la tarjeta grande se desplaza. Quedan sobre
+                la zona de imagen, así que no tapan la razón (que va abajo). */}
             {heroItems.length > 1 && (
               <>
                 {heroIndex > 0 && (
                   <button
                     onClick={() => navigate(heroIndex - 1)}
                     aria-label="Anterior"
-                    className="absolute bottom-[70px] left-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm active:scale-90"
+                    className="absolute top-[30%] left-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-sm active:scale-90"
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-6 w-6" />
                   </button>
                 )}
                 {heroIndex < heroItems.length - 1 && (
                   <button
                     onClick={() => navigate(heroIndex + 1)}
                     aria-label="Siguiente"
-                    className="absolute bottom-[70px] right-1 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm active:scale-90"
+                    className="absolute top-[30%] right-2 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-sm active:scale-90"
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-6 w-6" />
                   </button>
                 )}
               </>
@@ -1201,18 +1203,18 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                       <button
                         onClick={(e) => { e.stopPropagation(); detailGo(-1); }}
                         disabled={dIdx === 0}
-                        className="absolute left-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
+                        className="absolute left-2 top-28 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-sm active:scale-90 disabled:opacity-25"
                         aria-label="Anterior"
                       >
-                        <ChevronLeft className="h-5 w-5" />
+                        <ChevronLeft className="h-6 w-6" />
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); detailGo(1); }}
                         disabled={dIdx === dTotal - 1}
-                        className="absolute right-2 top-28 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm active:scale-90 disabled:opacity-25"
+                        className="absolute right-2 top-28 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-full border border-white/25 bg-black/55 text-white shadow-lg backdrop-blur-sm active:scale-90 disabled:opacity-25"
                         aria-label="Siguiente"
                       >
-                        <ChevronRight className="h-5 w-5" />
+                        <ChevronRight className="h-6 w-6" />
                       </button>
                     </>
                   )}
