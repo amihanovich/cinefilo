@@ -206,7 +206,9 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
 
   // ── Mic vivo integrado (sin pantalla intermedia): tocás el orbe → grabás,
   // tocás de nuevo → transcribe y dispara la búsqueda con la rueda. ──────────
-  type VoiceState = "idle" | "listening" | "thinking";
+  // "requesting": el navegador está pidiendo el permiso del micrófono. Sin este
+  // estado el tap quedaba mudo todo ese rato (parecía que no hacía nada).
+  type VoiceState = "idle" | "requesting" | "listening" | "thinking";
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [volume, setVolume] = useState(0);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
@@ -220,18 +222,19 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       recorderRef.current = null;
     };
   }, []);
-  const orbPhase: OrbPhase = voiceState === "listening" ? "listening" : voiceState === "thinking" ? "thinking" : "idle";
+  const orbPhase: OrbPhase = voiceState === "listening" ? "listening" : voiceState === "idle" ? "idle" : "thinking";
   const startListening = async () => {
     setVoiceHint(null);
-    setVoiceState("listening");
+    setVoiceState("requesting"); // feedback inmediato mientras se pide el permiso
     const recorder = new VoiceRecorder();
     recorderRef.current = recorder;
     try {
       await recorder.start({ autoStop: false, onVolume: (v) => { if (mountedRef.current) setVolume(v); } });
+      if (mountedRef.current) setVoiceState("listening");
     } catch {
       recorderRef.current = null;
       if (mountedRef.current) {
-        setVoiceHint("No pude acceder al micrófono. Dale permiso a Miru y probá de nuevo.");
+        setVoiceHint("Micrófono bloqueado: habilitá el permiso y probá de nuevo, o escribí abajo.");
         setVoiceState("idle");
       }
     }
@@ -257,7 +260,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
     }
   };
   const micTap = () => {
-    if (!paired || voiceState === "thinking") return;
+    if (!paired || voiceState === "thinking" || voiceState === "requesting") return;
     if (voiceState === "listening") void stopListening();
     else void startListening();
   };
@@ -366,9 +369,11 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           {voiceHint ??
             (voiceState === "listening"
               ? "Te escucho · tocá para buscar"
-              : voiceState === "thinking"
-                ? "Procesando lo que dijiste…"
-                : "Hablame y decime qué te gustaría ver")}
+              : voiceState === "requesting"
+                ? "Permití el micrófono…"
+                : voiceState === "thinking"
+                  ? "Procesando lo que dijiste…"
+                  : "Hablame y decime qué te gustaría ver")}
         </p>
       </div>
 

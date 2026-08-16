@@ -35,11 +35,13 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
 
   const [phase, setPhase] = useState<"splash" | "agent">("splash");
   const [text, setText] = useState("");
-  const [micState, setMicState] = useState<"idle" | "rec" | "processing">("idle");
+  const [micState, setMicState] = useState<"idle" | "requesting" | "rec" | "processing">("idle");
   const [speaking, setSpeaking] = useState(false); // Miru saludando por TTS
-  const [notice, setNotice] = useState<string | null>(null); // mic denegado / no te escuché
+  const [notice, setNotice] = useState<string | null>(null); // "no te escuché"
+  const [micBlocked, setMicBlocked] = useState(false); // permiso de micrófono denegado
   const [volume, setVolume] = useState(0);
   const micRef = useRef<VoiceRecorder | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const greetedRef = useRef(false);
 
   // (a) Al aparecer el agente, Miru te recibe por voz (TTS). Best-effort:
@@ -95,6 +97,10 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       stopSpeaking(); // corta el saludo si todavía suena
       setSpeaking(false);
       setNotice(null);
+      // Feedback INMEDIATO: getUserMedia queda pendiente mientras el navegador
+      // muestra el prompt de permiso, y sin este estado el tap parecía no hacer
+      // nada durante todo ese rato.
+      setMicState("requesting");
       const rec = new VoiceRecorder();
       micRef.current = rec;
       try {
@@ -104,10 +110,9 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
         });
         setMicState("rec");
       } catch {
-        // Antes fallaba EN SILENCIO: tocabas y no pasaba nada.
         micRef.current = null;
         setMicState("idle");
-        setNotice("No pude acceder al micrófono. Dale permiso a Miru y probá de nuevo.");
+        setMicBlocked(true);
       }
     }
   };
@@ -132,8 +137,10 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   const orbPhase =
     micState === "rec" ? "listening"
     : micState === "processing" ? "thinking"
+    : micState === "requesting" ? "thinking"
     : speaking ? "speaking"
     : "idle";
+  const pillState = micState === "requesting" ? "requesting" : orbPhase;
 
   const connectTv = () => {
     stopSpeaking(); // corta el saludo si todavía suena
@@ -174,7 +181,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
         </button>
         {/* La mecánica pegada al orbe: el orbe ES el agente, la píldora te dice
             qué hacer y en qué estado está (mismo componente en toda la app). */}
-        <VoicePill state={orbPhase} onClick={() => void toggleMic()} />
+        <VoicePill state={pillState} onClick={() => void toggleMic()} />
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Hola, soy Miru</h1>
           <p className="text-base text-muted-foreground leading-snug">
@@ -186,10 +193,29 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
 
       {error && <p className="text-xs font-semibold text-red-400">{error}</p>}
       {notice && <p className="text-xs font-semibold text-amber-400">{notice}</p>}
+      {/* El micrófono está bloqueado por el navegador/sistema: un textito no
+          alcanzaba (parecía que el botón no hacía nada). Cartel claro + salida
+          por texto, que siempre funciona. */}
+      {micBlocked && (
+        <div className="w-full max-w-sm rounded-2xl border border-amber-400/40 bg-amber-400/10 p-3 text-left">
+          <p className="text-sm font-bold text-amber-300">El micrófono está bloqueado</p>
+          <p className="mt-1 text-xs leading-snug text-amber-100/80">
+            Habilitá el permiso desde el candado de la barra de direcciones (o en Ajustes → Apps → Miru →
+            Permisos) y volvé a tocar el orbe. Mientras tanto, escribinos abajo lo que buscás.
+          </p>
+          <button
+            onClick={() => { setMicBlocked(false); inputRef.current?.focus(); }}
+            className="mt-2 rounded-full bg-amber-400/20 px-3 py-1.5 text-xs font-bold text-amber-200 active:scale-95"
+          >
+            Escribir en su lugar
+          </button>
+        </div>
+      )}
 
       <div className="flex w-full max-w-sm flex-col items-center gap-3">
         <div className="flex w-full items-center gap-2 rounded-2xl bg-muted px-3">
           <input
+            ref={inputRef}
             type="text"
             value={text}
             onChange={(e) => setText(e.target.value)}
