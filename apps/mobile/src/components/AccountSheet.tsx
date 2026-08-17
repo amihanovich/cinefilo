@@ -2,13 +2,15 @@
 // Modo guest: todo en localStorage. Sin Supabase auth por ahora.
 
 import { useEffect, useState } from "react";
-import { X, ChevronLeft, ChevronDown, ExternalLink, Tv } from "lucide-react";
+import { X, ChevronLeft, ChevronDown, ExternalLink, Tv, Download } from "lucide-react";
 import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { openInApp } from "../lib/justwatch";
 import { fetchPostersClient } from "../lib/posters";
 
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+// Landing de descargas (muestra cómo instalar la app en el Android TV).
+const LANDING_URL = "https://landing-page-cinefilo-production.up.railway.app/";
 const PLATFORMS_KEY = "miru:platforms";
 const WATCHLIST_KEY = "miru:watchlist";
 const LIKED_KEY = "miru:liked";
@@ -269,6 +271,26 @@ function MainSection({
               Escaneá el QR de tu TV y usá el teléfono como control.
             </p>
           </div>
+        </button>
+
+        {/* Descargar la app de TV: abre la landing en el navegador (window.open
+            "_system", igual que el resto de los links externos del WebView).
+            La app de TV NO se baja al teléfono: se instala en el Android TV, y
+            la landing muestra el código de Downloader para hacerlo. */}
+        <button
+          onClick={() => window.open(LANDING_URL, "_system")}
+          className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3 text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+            <Download className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Instalar Miru en tu TV</p>
+            <p className="mt-0.5 text-xs text-muted-foreground/70">
+              Abrí la página de descarga para tu Android TV.
+            </p>
+          </div>
+          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground/50" />
         </button>
       </section>
     </div>

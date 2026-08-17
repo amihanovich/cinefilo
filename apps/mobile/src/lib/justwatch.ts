@@ -94,11 +94,18 @@ function isAndroid(): boolean {
 // `probe`: URL mínima para preguntar si la app está instalada (canOpenUrl).
 // `open`: a dónde llevar dentro de la app (búsqueda del título si se puede).
 // Para los packages sin scheme público confiable caemos a la URL web (App Link).
+// OJO (verificado con adb en Android TV): el esquema NECESITA EL HOST —
+// "disneyplus://search?q=X" NO resuelve, "disneyplus://www.disneyplus.com/search?q=X" sí.
+// Antes Disney+/Star+ abrían la app en el home (open: () => "disneyplus://"), sin
+// el título; ahora van directo a la búsqueda con el nombre puesto, igual que la TV.
 type Scheme = { probe: string; open: (title: string) => string };
 const SCHEMES: Record<string, Scheme> = {
   Netflix: { probe: "nflx://", open: (t) => `nflx://www.netflix.com/search?q=${encodeURIComponent(t)}` },
-  "Disney+": { probe: "disneyplus://", open: () => "disneyplus://" },
-  "Star+": { probe: "disneyplus://", open: () => "disneyplus://" },
+  "Disney+": { probe: "disneyplus://", open: (t) => `disneyplus://www.disneyplus.com/search?q=${encodeURIComponent(t)}` },
+  // Star+ se fusionó con Disney+ (LatAm 2024): su contenido abre en Disney+.
+  "Star+": { probe: "disneyplus://", open: (t) => `disneyplus://www.disneyplus.com/search?q=${encodeURIComponent(t)}` },
+  Max: { probe: "hbomax://", open: (t) => `hbomax://play.max.com/search?q=${encodeURIComponent(t)}` },
+  "Apple TV+": { probe: "videos://", open: (t) => `videos://tv.apple.com/search?term=${encodeURIComponent(t)}` },
 };
 
 async function launch(url: string): Promise<boolean> {
