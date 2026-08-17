@@ -278,7 +278,7 @@ export function App() {
     <div className="safe-top safe-bottom mx-auto flex min-h-full w-full max-w-xl flex-col gap-6 px-5 py-10">
       <header className="flex flex-col gap-2 text-center">
         <h1 className="text-3xl font-bold tracking-tight">
-          Ciné<span className="text-primary">filo</span>
+          Mi<span className="text-primary">ru</span>
         </h1>
         <p className="text-muted-foreground">Qué ver esta noche, resuelto.</p>
       </header>
