@@ -10,7 +10,7 @@ import { fetchPostersClient } from "../lib/posters";
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 // Landing de descargas (muestra cómo instalar la app en el Android TV).
-const LANDING_URL = "https://landing-page-cinefilo-production.up.railway.app/";
+const LANDING_URL = "https://landing-page-miru.up.railway.app/";
 const PLATFORMS_KEY = "miru:platforms";
 const WATCHLIST_KEY = "miru:watchlist";
 const LIKED_KEY = "miru:liked";
