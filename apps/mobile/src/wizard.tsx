@@ -18,6 +18,7 @@ import { SearchLoading } from "./components/SearchLoading";
 import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
+import { useBackLayer } from "./lib/back";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
 
@@ -655,6 +656,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     void getReco(`lo mejor para ${contextToPromptHint(ctx) || "esta noche"}`, "auto");
   };
 
+  // ── Botón "atrás" del sistema ───────────────────────────────────────────────
+  // Cada capa abierta se cierra con el back nativo en vez de salir de la app.
+  // El orden lo da el historial: se cierra siempre la última que abriste.
+  useBackLayer(!!detailItem, () => setDetailItem(null));
+  useBackLayer(voiceMode, () => setVoiceMode(false));
+  useBackLayer(accountOpen, () => setAccountOpen(false));
+  useBackLayer(!!controlSession, () => setControlSession(null));
+  useBackLayer(screen === "gallery", () => setScreen("magic"));
+
   // Control remoto de la TV (full-screen sobre cualquier pantalla).
   if (controlSession) {
     return <ControlScreen session={controlSession} onClose={() => setControlSession(null)} />;
@@ -1192,10 +1202,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
           const canNav = dTotal > 1 && dIdx >= 0;
           return (
             <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
+              {/* El "Volver" NO va acá arriba: en un teléfono grande queda fuera
+                  del alcance del pulgar. Vive en la barra de abajo (ver el pie). */}
               <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-4">
-                <button onClick={() => setDetailItem(null)} className="flex h-9 items-center gap-1 rounded-full bg-muted px-3 text-muted-foreground active:scale-90" aria-label="Volver">
-                  <ChevronLeft className="h-5 w-5" /> <span className="text-sm font-semibold">Volver</span>
-                </button>
                 <p className="text-base font-bold text-foreground">Ficha</p>
                 {canNav && <span className="ml-auto text-xs font-semibold text-muted-foreground">{dIdx + 1} / {dTotal}</span>}
               </div>
@@ -1264,8 +1273,18 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                   </div>
                 </div>
                 <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
-                  {canNav ? `Deslizá ←/→ para ver las ${dTotal} · ` : ""}Tocá dos veces el póster o "Volver" para salir
+                  {canNav ? `Deslizá ←/→ para ver las ${dTotal} · ` : ""}Tocá dos veces el póster, "Volver" o el botón atrás del teléfono
                 </p>
+              </div>
+              {/* Barra inferior: el Volver al alcance del pulgar. */}
+              <div className="shrink-0 border-t border-border bg-background px-5 py-3">
+                <button
+                  onClick={() => setDetailItem(null)}
+                  className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl bg-muted text-sm font-semibold text-foreground active:scale-[0.98]"
+                  aria-label="Volver"
+                >
+                  <ChevronLeft className="h-5 w-5" /> Volver
+                </button>
               </div>
             </div>
           );

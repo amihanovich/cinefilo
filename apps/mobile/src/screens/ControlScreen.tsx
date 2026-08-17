@@ -16,6 +16,7 @@ import { colorForPlatform, PLATFORM_COLORS } from "../lib/deeplink";
 import { Orb, type OrbPhase } from "../components/Orb";
 import { ControlSearchOverlay } from "../components/ControlSearchOverlay";
 import { VoiceRecorder, transcribe } from "../lib/stt";
+import { useBackLayer } from "../lib/back";
 
 const LIKED_KEY = "miru:liked";
 const DISLIKED_KEY = "miru:disliked";
@@ -104,6 +105,11 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       }
     },
   });
+
+  // Back del sistema: cierra la hoja abierta (antes salía de la app).
+  useBackLayer(filtersOpen, () => setFiltersOpen(false));
+  useBackLayer(listOpen, () => setListOpen(false));
+  useBackLayer(!!pendingSeen, () => setPendingSeen(null));
 
   const send = useCallback((cmd: ControlCommandMessage) => sendCommand(cmd), [sendCommand]);
   const centered = items.find((i) => i.id === centeredId) ?? null;
