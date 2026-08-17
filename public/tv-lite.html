@@ -158,6 +158,7 @@
      flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
      ni max-width gana ancho y entra en 3 líneas cómodas. */
   /* (a) Sinopsis y (b) Por qué, en ese orden — igual que la ficha. */
+  .hero .hsyn .hemo { opacity:.85; }
   .hero .hsyn { margin:1px 0 0; font-size:13px; line-height:1.38; color:#D5D5DC; flex-shrink:0;
     text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -224,6 +225,7 @@
   .detail .hmeta .pill { flex:0 0 auto; }
   .detail .hsub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* Secciones tituladas de la ficha: a) Sinopsis, b) Por qué verla. */
+  .detail .dsec.dwhy { color:#A878FF; }
   .detail .dsec { font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:#8A8A93; margin:5px 0 0; }
   /* Red de seguridad de largo: el límite real vive en los prompts del backend
      (sinopsis 30-40 palabras, reason 40-60), pero si el modelo se pasa, el
@@ -269,9 +271,14 @@
   .card .det { display:none; position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,10,12,.94); padding:9px 10px; border-top:1px solid rgba(136,82,224,.35); }
   .card.foc .det { display:block; }
   .card.foc .cinfo { display:none; }
-  .card .det .why { font-size:11px; color:#EDEDF0; line-height:1.35; margin:0;
-    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-  .card .det .why b { color:#8852E0; }
+  /* Tarjeta chica: de qué va (gris) arriba y por qué (claro) abajo, cada uno con
+     su propio recorte por línea — un clamp en el contenedor pegaba las mitades
+     (dentro de un -webkit-box los hijos display:block no cortan línea). */
+  .card .det .wsyn { font-size:11px; color:#B4B4BC; line-height:1.32; margin:0 0 3px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .wwhy { font-size:11px; color:#EDEDF0; line-height:1.32; margin:0;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .wwhy b { color:#8852E0; margin-right:3px; }
   /* Guardada en "Mi lista": degradé violeta + check centrado (como la móvil). */
   .card .csaved { position:absolute; top:0; left:0; right:0; bottom:0; z-index:3;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
@@ -828,7 +835,15 @@
   function detHTML(it) {
     var why = it.hook || shortReason(it.reason);
     if (!why) return "";
-    return '<div class="det"><p class="why"><b>✦</b> ' + esc(why) + "</p></div>";
+    // El hook viene como "<de qué va> · <por qué te la propongo>": partimos en el
+    // separador para diferenciar las dos mitades. Si el modelo no lo mandó (o es
+    // un ítem viejo), se muestra entero como porqué.
+    var ix = why.indexOf(" · ");
+    if (ix > 0) {
+      return '<div class="det"><p class="wsyn">🎬 ' + esc(why.slice(0, ix)) + "</p>" +
+             '<p class="wwhy"><b>✦</b> ' + esc(why.slice(ix + 3)) + "</p></div>";
+    }
+    return '<div class="det"><p class="wwhy"><b>✦</b> ' + esc(why) + "</p></div>";
   }
 
   // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
@@ -879,7 +894,7 @@
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
     // Orden pedido: (a) Sinopsis y (b) por qué te la propongo.
-    if (it.synopsis) h += '<p class="hsyn">' + esc(it.synopsis) + "</p>";
+    if (it.synopsis) h += '<p class="hsyn"><span class="hemo">🎬</span> ' + esc(it.synopsis) + "</p>";
     if (it.reason) h += '<p class="hreason"><b>✦ Por qué te la propongo:</b> ' + esc(it.reason) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
     // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
@@ -1049,8 +1064,8 @@
     h += "</div>";
     if (it.synopsis || it.reason) {
       h += '<div class="dtext">';
-      if (it.synopsis) h += '<h4 class="dsec">Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
-      if (it.reason) h += '<h4 class="dsec">Por qué verla</h4><p class="dreason"><b>✦</b> ' + esc(it.reason) + "</p>";
+      if (it.synopsis) h += '<h4 class="dsec">🎬 Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
+      if (it.reason) h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
       h += "</div>";
     }
     var td = isToday(it);

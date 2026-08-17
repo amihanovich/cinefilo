@@ -11,6 +11,11 @@ export type Recommendation = {
   type: string;
   year?: string;
   ageRating?: string;
+  /** De qué va (20-30 palabras) — se muestra en el hero y en la ficha. */
+  synopsis?: string;
+  /** Qué es + por qué, en UNA línea — para las tarjetas chicas. */
+  hook?: string;
+  /** El porqué de la recomendación (12-18 palabras). */
   reason: string;
 };
 

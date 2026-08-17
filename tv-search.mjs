@@ -61,12 +61,13 @@ const itemRules = (plats) =>
   plats.join(", ") +
   '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
   '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
-  '- "hook": el porqué de la recomendación en UNA frase ultra concreta y visual, ' +
-  'empezando con "Porque", máximo 8 palabras, sin punto final. Ejemplos: ' +
-  '"Porque hay persecuciones y acción en Latinoamérica", "Porque hay espadas ' +
-  'medievales y honor en juego", "Porque hay identidades duplicadas y paranoia". ' +
-  "Es lo único que se lee en la tarjeta chica: concreto, nada de frases genéricas.\n" +
-  '- "reason": 2 o 3 frases (40 a 60 palabras) que enganchen y den ganas de darle play. ' +
+  '- "hook": lo ÚNICO que se lee en la tarjeta chica, así que tiene que contar las DOS cosas ' +
+  'en una sola frase de 16 a 22 palabras: primero DE QUÉ VA (5 a 8 palabras, concreto y visual) ' +
+  'y después POR QUÉ se la recomendás, separados por " · ". Sin punto final. Ejemplos: ' +
+  '"Dos estafadores y una estafa que se les va de las manos · te la propongo por el guion que no falla nunca", ' +
+  '"Un juicio imposible contra las juntas militares · va porque pediste algo real que emocione". ' +
+  "Nada de frases genéricas ni elogios vacíos.\n" +
+  '- "reason": 1 o 2 frases (25 a 35 palabras) que enganchen y den ganas de darle play. ' +
   "Lo primero y central es EL PORQUÉ: conectá explícitamente con lo que se pidió o con el momento " +
   "(nada de elogios genéricos tipo 'gran película'). Después el tono/clima (tenso, luminoso, " +
   "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional); " +

@@ -1019,7 +1019,17 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                 )}
               </div>
 
-              <p className="text-[13px] leading-relaxed text-white/85 line-clamp-3">{current.reason}</p>
+              {/* Siempre las DOS cosas: de qué va (🎬) y por qué te la propone la
+                  IA (✦). En el hero van compactas, 2 líneas cada una. */}
+              {current.synopsis && (
+                <p className="text-[12.5px] leading-snug text-white/70 line-clamp-2">
+                  <span className="mr-1">🎬</span>{current.synopsis}
+                </p>
+              )}
+              <p className="text-[13px] leading-snug text-white/90 line-clamp-2">
+                <span className="mr-1 font-bold text-primary">✦ Te la propongo</span>{" "}
+                {current.reason}
+              </p>
 
               <button
                 onClick={() => openStreaming(current, avail)}
@@ -1223,7 +1233,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
                       <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: colorForPlatform(detailItem.platform) }}>{platformLabel(detailItem.platform)}</span>
                       <span className="text-[11px] text-muted-foreground">{detailItem.type} · {detailItem.duration}{detailItem.year && ` · ${detailItem.year}`}</span>
                     </div>
-                    <p className="mt-3 text-sm leading-relaxed text-foreground/75">{detailItem.reason}</p>
+                    {detailItem.synopsis && (
+                      <>
+                        <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">🎬 Sinopsis</p>
+                        <p className="mt-0.5 text-sm leading-relaxed text-foreground/75">{detailItem.synopsis}</p>
+                      </>
+                    )}
+                    <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-primary">✦ Por qué te la propongo</p>
+                    <p className="mt-0.5 text-sm leading-relaxed text-foreground/85">{detailItem.reason}</p>
                     <button
                       onClick={(e) => { e.stopPropagation(); void openStreaming(detailItem, availability[detailItem.title]); }}
                       className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"

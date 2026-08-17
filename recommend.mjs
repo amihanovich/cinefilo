@@ -21,7 +21,9 @@ Reglas estrictas:
 - Si el tipo es "Capítulo de serie", recomienda solo series.
 - Sé específico — evitá blockbusters genéricos si hay algo más a medida.
 - "type" debe ser "Película" o "Serie".
+- "synopsis" entre 20 y 30 palabras, en español, sin emojis: DE QUÉ VA (planteo y qué está en juego), sin spoilers. Es lo que el usuario lee para saber si le interesa la historia.
 - "reason" entre 12 y 18 palabras, en español, sin emojis. Es EL PORQUÉ y es sagrado: conectala explícitamente con lo que el usuario pidió o con su gusto conocido — idealmente arrancando con "Porque..." (ej: "Porque pediste tensión y acá cada plano la respira"). Concreta y visual. Prohibido lo genérico ("gran película", "muy recomendable", "imperdible").
+- "hook": la versión corta para las tarjetas chicas, donde entra UNA sola línea. Frase de 16 a 22 palabras que junta las dos cosas: primero DE QUÉ VA (5 a 8 palabras) y después POR QUÉ se la recomendás, separados por " · ", sin punto final. Ejemplo: "Dos estafadores y un negocio que se les escapa · te la propongo por el guion que no falla nunca".
 - Devolvé 1 recomendación principal + el número exacto de alternativas indicado en el pedido (de plataformas distintas si es posible). Cada alternativa justifica brevemente por qué encaja.
 - Tomá en cuenta la estación del año y el clima si están en el contexto — un domingo lluvioso de otoño pide algo distinto a un sábado soleado.
 - Si "atención" es "De fondo", priorizá contenido episódico, ligero, fácil de pausar; si es "Inmersivo", priorizá calidad cinematográfica; si es "Comfort watch", algo conocido o reconfortante.
@@ -38,18 +40,19 @@ Reglas estrictas:
 FORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido (sin markdown, sin texto extra). El array "alternatives" debe tener exactamente el número de elementos solicitado en el pedido.`;
 
 function buildSystem(alternativesCount = 4) {
-  const altItem = `{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""}`;
+  const altItem = `{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","hook":"","reason":""}`;
   const altsArray = Array.from({ length: alternativesCount }, () => altItem).join(",");
-  const format = `\n\nFORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:\n{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},"alternatives":[${altsArray}],"clarification_needed":null,"cinephile_note":""}`;
+  const format = `\n\nFORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:\n{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","hook":"","reason":""},"alternatives":[${altsArray}],"clarification_needed":null,"cinephile_note":""}`;
   return SYSTEM_BASE + format;
 }
 
 async function callAnthropic(messages, alternativesCount = 4) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
-  // Galería necesita más tokens de salida. El caso normal ahora pide 2
-  // alternativas extra (margen de la validación de disponibilidad): 1600.
-  const maxTokens = alternativesCount > 6 ? 3500 : 1600;
+  // Galería necesita más tokens de salida. Cada ítem ahora trae también
+  // synopsis + hook (~45 palabras extra c/u), así que el techo sube: si el JSON
+  // se trunca, la respuesta entera se pierde.
+  const maxTokens = alternativesCount > 6 ? 5500 : 2600;
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -126,6 +129,8 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
     type: String(r.type || ""),
     year: r.year ? String(r.year) : undefined,
     ageRating: r.ageRating ? String(r.ageRating) : undefined,
+    synopsis: r.synopsis ? String(r.synopsis) : undefined,
+    hook: r.hook ? String(r.hook) : undefined,
     reason: String(r.reason || ""),
   });
 
