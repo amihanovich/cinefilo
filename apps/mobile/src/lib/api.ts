@@ -108,6 +108,27 @@ export async function fetchIntent(text: string): Promise<string | null> {
   }
 }
 
+// Tiras "Top 5 en X" del home (catálogo por plataforma, popularidad TMDB por
+// región). Mismo caché de 6h que el home de la TV; el server lo tiene listo.
+export type TopItem = {
+  title: string;
+  platform: string;
+  type?: string;
+  year?: number;
+  posterUrl?: string;
+  synopsis?: string;
+  hook?: string;
+  reason?: string;
+};
+export type TopPlatformRow = { platform: string; items: TopItem[] };
+
+export async function fetchTopPlatforms(): Promise<TopPlatformRow[]> {
+  const res = await fetch(`${API_BASE}/api/top-platforms`, { signal: AbortSignal.timeout(15000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as { rows?: TopPlatformRow[] };
+  return Array.isArray(data.rows) ? data.rows : [];
+}
+
 // Warmup: despierta el server de Railway (cold start) sin bloquear nada.
 export function warmupBackend(): void {
   void fetch(`${API_BASE}/api/ping`, { signal: AbortSignal.timeout(10000) }).catch(() => { /* silencioso */ });

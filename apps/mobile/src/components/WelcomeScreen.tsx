@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, Loader2, Shuffle, QrCode } from "lucide-react";
 import { Orb } from "./Orb";
 import { VoicePill } from "./VoicePill";
+import { TopPlatformRows } from "./TopPlatformRows";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
@@ -152,8 +153,12 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
     onConnectTv?.();
   };
 
+  // La bienvenida ya no es una pantalla fija: el bloque del mic ocupa casi todo
+  // el alto y debajo asoman las tiras "Top 5 en X" (catálogo sin buscar) — el
+  // borde visible de la primera tira ES la affordance de scroll.
   return (
-    <div className="relative flex h-[100dvh] flex-col items-center justify-center gap-7 bg-background px-8 text-center safe-top safe-bottom">
+    <div className="relative h-[100dvh] overflow-y-auto bg-background safe-top safe-bottom">
+      <div className="relative flex min-h-[92dvh] flex-col items-center justify-center gap-7 px-8 text-center">
       {onConnectTv && (
         <button
           onClick={connectTv}
@@ -252,6 +257,12 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
         >
           <Shuffle className="h-4 w-4" /> Sorprendeme
         </button>
+      </div>
+      </div>
+
+      {/* Catálogo por defecto sin búsqueda: el Top 5 de cada plataforma. */}
+      <div className="flex flex-col items-center px-8">
+        <TopPlatformRows />
       </div>
     </div>
   );

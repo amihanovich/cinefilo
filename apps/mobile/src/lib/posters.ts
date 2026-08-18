@@ -168,8 +168,17 @@ export async function fetchPosterClient(title: string, type: string, year?: stri
 export async function fetchPostersClient(
   items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
-  const entries = await Promise.all(
-    items.map(async (it) => [it.title, await fetchPosterClient(it.title, it.type, it.year)] as const),
-  );
-  return Object.fromEntries(entries);
+  // Máximo 5 búsquedas en vuelo (mismo CONC que la TV): con listas largas,
+  // dispararlas todas juntas saturaba la red del teléfono.
+  const out: Record<string, string | null> = {};
+  const CONC = 5;
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const it = items[next++];
+      out[it.title] = await fetchPosterClient(it.title, it.type, it.year);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONC, items.length) }, worker));
+  return out;
 }
