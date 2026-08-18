@@ -14,7 +14,7 @@ import { speak, stopSpeaking } from "../lib/tts";
 
 const GREETING = "Hola, soy Miru. ¿Listo para que encontremos algo para que veas hoy?";
 // Ejemplos tocables para arrancar (anti-parálisis): muestran QUÉ se puede pedir.
-const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto", "Documental"];
+const EXAMPLES = ["Algo de terror", "Comedia para reír", "Algo corto"];
 
 interface WelcomeScreenProps {
   firstTime: boolean;
@@ -154,11 +154,11 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   };
 
   // La bienvenida ya no es una pantalla fija: el bloque del mic ocupa casi todo
-  // el alto y debajo asoman las tiras "Top 5 en X" (catálogo sin buscar) — el
+  // el alto y debajo asoman las tiras "Top 10 en X" (catálogo sin buscar) — el
   // borde visible de la primera tira ES la affordance de scroll.
   return (
     <div className="relative h-[100dvh] overflow-y-auto bg-background safe-top safe-bottom">
-      <div className="relative flex min-h-[92dvh] flex-col items-center justify-center gap-7 px-8 text-center">
+      <div className="relative flex min-h-[80dvh] flex-col items-center justify-center gap-7 px-8 pb-2 text-center">
       {onConnectTv && (
         <button
           onClick={connectTv}
@@ -260,7 +260,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       </div>
       </div>
 
-      {/* Catálogo por defecto sin búsqueda: el Top 5 de cada plataforma. */}
+      {/* Catálogo por defecto sin búsqueda: el Top 10 de cada plataforma. */}
       <div className="flex flex-col items-center px-8">
         <TopPlatformRows />
       </div>

@@ -1,4 +1,4 @@
-// Tiras "Top 5 en X": el catálogo por plataforma que ves al abrir la app SIN
+// Tiras "Top 10 en X": el catálogo por plataforma que ves al abrir la app SIN
 // buscar nada (debajo del mic de la bienvenida). Los pósters vienen del
 // backend (TMDB) — acá no se llama a fetchPostersClient. Si el fetch falla,
 // la sección no se renderiza y la bienvenida queda exactamente como antes.
@@ -60,7 +60,7 @@ function Row({ row, dim, onOpen }: { row: TopPlatformRow; dim: boolean; onOpen: 
     <div className={dim ? "opacity-50" : undefined}>
       <h3 className="mb-2 flex items-center gap-2 text-left text-sm font-bold text-foreground">
         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-        Top 5 en {platformLabel(row.platform)}
+        Top 10 en {platformLabel(row.platform)}
       </h3>
       <div className="relative">
         <div

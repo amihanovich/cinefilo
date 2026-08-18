@@ -248,8 +248,11 @@ async function writeReasons(items, maxTokens) {
     '{"items":[{"title":"","synopsis":"","hook":"","reason":""}]}\n\nReglas:\n' +
     '- "title" EXACTAMENTE como te lo di (mismo texto), sin agregar ni sacar títulos.\n' +
     '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
-    '- "hook": el porqué en UNA frase ultra concreta y visual, empezando con "Porque", ' +
-    "máximo 8 palabras, sin punto final. Es lo único que se lee en la tarjeta chica.\n" +
+    '- "hook": lo ÚNICO que se lee en la tarjeta chica, así que tiene que contar las DOS cosas ' +
+    'en una sola frase de 16 a 22 palabras: primero DE QUÉ VA (5 a 8 palabras, concreto y visual) ' +
+    'y después POR QUÉ verla, separados por " · ". Sin punto final. Ejemplo: ' +
+    '"Dos estafadores y una estafa que se les va de las manos · va porque el guion no falla nunca". ' +
+    "Nada de frases genéricas ni elogios vacíos.\n" +
     '- "reason": 2 o 3 frases (40 a 60 palabras) que den ganas de darle play: el porqué ' +
     "central, el tono/clima, qué la vuelve memorable; si suma, un dato de cinéfilo breve. " +
     "Cálido y conversacional, sin spoilers ni frases hechas repetidas entre ítems.";
@@ -281,7 +284,7 @@ export async function tvHome() {
       const latest = pickVaried(pool.recent, 8);
       const all = rec.concat(latest);
 
-      // Tiras "Top 5 en X": el ranking POR plataforma del mismo pool. Copias
+      // Tiras "Top 10 en X": el ranking POR plataforma del mismo pool. Copias
       // propias (un título puede estar en dos tiras con section distinta).
       const tkey = (t) => String(t || "").toLowerCase().trim();
       const inAll = new Set(all.map((it) => tkey(it.title)));
@@ -289,7 +292,7 @@ export async function tvHome() {
       const extras = []; // títulos de tiras que NO están en `all`: van a su propia pasada de Haiku
       const extraSeen = new Set();
       for (const p of (pool.byPlatform || [])) {
-        const rowItems = p.items.slice(0, 5).map((it) => ({ ...it, section: "Top 5 en " + p.platform }));
+        const rowItems = p.items.slice(0, 10).map((it) => ({ ...it, section: "Top 10 en " + p.platform }));
         rows.push({ platform: p.platform, items: rowItems });
         for (const it of rowItems) {
           const k = tkey(it.title);
@@ -297,11 +300,14 @@ export async function tvHome() {
         }
       }
 
-      // Dos llamadas a Haiku EN PARALELO (una vez cada 6h): la de siempre para
-      // `items` y una para los ~20-25 títulos que solo aparecen en las tiras.
+      // Llamadas a Haiku EN PARALELO (una vez cada 6h): la de siempre para
+      // `items` + los ~50 títulos que solo están en las tiras, en lotes de 20
+      // (un solo JSON de 50 se trunca/degrada; lotes chicos son fiables).
+      const extraBatches = [];
+      for (let i = 0; i < extras.length; i += 20) extraBatches.push(extras.slice(i, i + 20));
       await Promise.all([
         writeReasons(all),
-        extras.length ? writeReasons(extras, 10000) : Promise.resolve(),
+        ...extraBatches.map((batch) => writeReasons(batch, 10000)),
       ]);
 
       // Propagar synopsis/hook/reason a las repeticiones (mismo título en

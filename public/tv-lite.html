@@ -208,13 +208,15 @@
   .rowmore { position:absolute; right:2px; top:50%; margin-top:-16px; font-size:26px; line-height:1;
     color:rgba(255,255,255,.7); text-shadow:0 2px 8px rgba(0,0,0,.85); pointer-events:none; }
   .ttile { width:76px; height:114px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
-  /* Tiras "Top 5 en X": reusan .todayrow/.ttile. Punto de color de la
-     plataforma en el título; las tiras de plataformas fuera del filtro del
-     usuario quedan atenuadas (presentes: descubren catálogo). */
+  /* Tiras "Top 10 en X": misma tarjeta que la grilla "Más opciones" (.card),
+     en fila horizontal scrolleable. Punto de color de la plataforma en el
+     título; las tiras de plataformas fuera del filtro del usuario quedan
+     atenuadas (presentes: descubren catálogo). */
   .sec .pdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:1px; }
   .sec.dim { opacity:.5; }
-  .todayrow.dim .ttile { opacity:.5; }
-  .todayrow.dim .ttile.foc { opacity:1; }
+  .todayrow .card { flex:0 0 auto; margin:0; }
+  .todayrow.dim .card { opacity:.45; }
+  .todayrow.dim .card.foc { opacity:1; }
   .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
   .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
   .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:4px; font-size:10px; color:#9A9AA2; }
@@ -748,7 +750,7 @@
   var today = loadToday(); // ítems en "Mi lista" (lista guardada de la TV; wire-legacy: "today")
   var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Mi lista", 1 = "Ver en X", 2 = "Ya la vi" (RC)
   var todayFocus = -1;     // -1 = fuera de la tira "Mi lista"; 0.. = tile enfocado de la tira
-  // Tiras "Top 5 en X" del home (catálogo por plataforma, /api/tv-home rows).
+  // Tiras "Top 10 en X" del home (catálogo por plataforma, /api/tv-home rows).
   // Mismo patrón que la tira "Mi lista": estado propio, NO entra en `items`,
   // así la grilla, el hero y el scroll infinito quedan idénticos.
   var topRows = [];   // [{platform, items[≤5], dim}] ya ordenadas por orderTopRows
@@ -1022,7 +1024,7 @@
 
   // Affordance de una tira horizontal: si hay tiles fuera de vista a la
   // derecha, fade en el borde + flecha ›. Se recalcula al renderizar y al
-  // mover el foco. Solo togglea "fade" (las tiras Top 5 llevan más clases).
+  // mover el foco. Solo togglea "fade" (las tiras Top 10 llevan más clases).
   function rowAffordance(rowId, arrId) {
     var row = document.getElementById(rowId);
     var arr = document.getElementById(arrId);
@@ -1037,7 +1039,7 @@
     for (var i = 0; i < topRows.length; i++) rowAffordance("toprow-" + i, "toprowmore-" + i);
   }
 
-  // --- Tiras "Top 5 en X" (catálogo por plataforma del home) ---
+  // --- Tiras "Top 10 en X" (catálogo por plataforma del home) ---
   // El usuario ve primero SUS plataformas (Filtros del modo RC); las demás
   // quedan abajo, atenuadas pero presentes. Sin filtro: orden del backend.
   function orderTopRows(rows) {
@@ -1064,12 +1066,14 @@
     var h = "";
     for (var i = 0; i < topRows.length; i++) {
       var row = topRows[i];
-      h += '<h3 class="sec' + (row.dim ? " dim" : "") + '"><span class="pdot" style="background:' + colorFor(row.platform) + '"></span>Top 5 en ' + esc(platLabel(row.platform)) + "</h3>";
+      h += '<h3 class="sec' + (row.dim ? " dim" : "") + '"><span class="pdot" style="background:' + colorFor(row.platform) + '"></span>Top 10 en ' + esc(platLabel(row.platform)) + "</h3>";
       h += '<div class="rowwrap"><div class="todayrow' + (row.dim ? " dim" : "") + '" id="toprow-' + i + '">';
+      // Tarjetas IGUALES a las de "Más opciones" (cardPh completo: carátula,
+      // info superpuesta y sinopsis+porqué al enfocar) — solo que en una fila
+      // horizontal scrolleable en vez de la grilla.
       for (var j = 0; j < row.items.length; j++) {
         var it = row.items[j];
-        var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
-        h += '<div class="ttile' + (i === rowFocus && j === rowCol ? " foc" : "") + '" id="toptile-' + i + "-" + j + '">' + p + "</div>";
+        h += '<div class="card' + (i === rowFocus && j === rowCol ? " foc" : "") + '" id="toptile-' + i + "-" + j + '"><div class="ph">' + cardPh(it) + "</div></div>";
       }
       h += '</div><span class="rowmore hidden" id="toprowmore-' + i + '">›</span></div>';
     }
@@ -1326,7 +1330,7 @@
       html += '<div id="herobox">' + heroBoxHTML() + "</div>";
       // Tira "Mi lista" (guardadas), debajo del carrusel.
       html += todayStripHTML();
-      // Tiras "Top 5 en X" (solo home; en búsqueda serían ruido).
+      // Tiras "Top 10 en X" (solo home; en búsqueda serían ruido).
       if (mode === "home") html += topRowsHTML();
       // El resto, desde el ítem 5.
       var secTitle = mode === "search" ? "Más resultados" : "Más opciones para vos";
@@ -1439,7 +1443,7 @@
 
   function scrollFocusIntoView() {
     var el = null;
-    // Foco en una tira "Top 5 en X": centrar el tile (queda lejos del hero).
+    // Foco en una tira "Top 10 en X": centrar el tile (queda lejos del hero).
     if (rowFocus >= 0) el = document.getElementById("toptile-" + rowFocus + "-" + rowCol);
     if (!el) {
       var it = items[focusedIndex];
@@ -1448,7 +1452,7 @@
     }
     if (!el) {
       // Sin tarjeta = el foco volvió al hero o a la tira "Mi lista", que viven
-      // arriba de todo (con las tiras Top 5 la página es alta y se notaba).
+      // arriba de todo (con las tiras Top 10 la página es alta y se notaba).
       if (mode === "home" || mode === "search") { try { window.scrollTo(0, 0); } catch (e) {} }
       return;
     }
@@ -1474,12 +1478,14 @@
         for (var tb = 0; tb < tEls.length; tb++) tEls[tb].className = "tab" + (tb === tabFocus ? " foc" : "");
       }
       var top = Math.min(TOP, items.length);
-      var hcards = elContent.getElementsByClassName("card");
+      // SOLO las tarjetas de la grilla (.grid .card): las tiras Top 10 también
+      // usan .card y se togglean aparte (abajo) — mezclarlas corría los índices.
+      var hcards = elContent.querySelectorAll(".grid .card");
       for (var j = 0; j < hcards.length; j++) {
         // Con el foco en el carrito, ninguna tarjeta de la grilla queda enfocada.
         hcards[j].className = "card" + (todayFocus < 0 && top + j === focusedIndex ? " foc" : "");
       }
-      // Tiles de la tira "Mi lista": SOLO los de #todayrow (las tiras Top 5
+      // Tiles de la tira "Mi lista": SOLO los de #todayrow (las tiras Top 10
       // también usan .ttile y no deben togglearse con todayFocus).
       var todayEl = document.getElementById("todayrow");
       var tiles = todayEl ? todayEl.getElementsByClassName("ttile") : [];
@@ -1490,13 +1496,13 @@
       if (todayFocus >= 0 && tiles[todayFocus] && todayEl) {
         todayEl.scrollLeft = Math.max(0, tiles[todayFocus].offsetLeft - 60);
       }
-      // Tiras "Top 5 en X": toggle del tile enfocado + scroll horizontal.
+      // Tiras "Top 10 en X": toggle de la tarjeta enfocada + scroll horizontal.
       for (var tr = 0; tr < topRows.length; tr++) {
         var rowEl = document.getElementById("toprow-" + tr);
         if (!rowEl) continue;
-        var rTiles = rowEl.getElementsByClassName("ttile");
+        var rTiles = rowEl.getElementsByClassName("card");
         for (var tc = 0; tc < rTiles.length; tc++) {
-          rTiles[tc].className = "ttile" + (tr === rowFocus && tc === rowCol ? " foc" : "");
+          rTiles[tc].className = "card" + (tr === rowFocus && tc === rowCol ? " foc" : "");
         }
         if (tr === rowFocus && rTiles[rowCol]) {
           rowEl.scrollLeft = Math.max(0, rTiles[rowCol].offsetLeft - 60);
@@ -1672,7 +1678,7 @@
         if (query) return; // si el usuario ya buscó, no piso sus resultados
         homeRetryDelay = 4000;
         if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1; }
-        // Tiras "Top 5 en X": si el backend no las manda (fallback sin TMDB),
+        // Tiras "Top 10 en X": si el backend no las manda (fallback sin TMDB),
         // el home queda exactamente como antes.
         topRows = orderTopRows((data && data.rows) || []);
         rowFocus = -1; rowCol = 0;
@@ -1855,7 +1861,7 @@
     if (mode === "home" || mode === "search") {
       var top = Math.min(TOP, items.length);
       if (mode === "home" && rowFocus >= 0) {
-        // En una tira "Top 5 en X": ←/→ entre tiles; ↑/↓ tira anterior/
+        // En una tira "Top 10 en X": ←/→ entre tiles; ↑/↓ tira anterior/
         // siguiente. ↑ desde la primera vuelve a "Mi lista" (o al banner);
         // ↓ desde la última baja a la grilla "Más opciones para vos".
         var rlen = topRows[rowFocus] ? topRows[rowFocus].items.length : 0;
@@ -1933,7 +1939,7 @@
           n = focusedIndex - 6;
           if (n < top) {
             n = heroIndex;
-            // Subiendo desde la grilla, primero las tiras "Top 5 en X" (la
+            // Subiendo desde la grilla, primero las tiras "Top 10 en X" (la
             // última), después "Mi lista", después el banner — orden visual.
             if (mode === "home" && topRows.length) {
               rowFocus = topRows.length - 1;
@@ -2159,7 +2165,7 @@
       else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
       return;
     }
-    // Foco en una tira "Top 5 en X": OK abre la ficha (mismo gesto que "Mi lista").
+    // Foco en una tira "Top 10 en X": OK abre la ficha (mismo gesto que "Mi lista").
     if (mode === "home" && rowFocus >= 0 && actionFocus < 0) {
       var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
       if (rit) { detailScope = "toprow"; openDetail(rit); }
