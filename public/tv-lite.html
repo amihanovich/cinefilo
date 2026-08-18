@@ -817,6 +817,13 @@
     elBadge.textContent = text;
     elDot.className = "dot" + (cls ? " " + cls : "");
   }
+  // Badge según estado real: vinculado > modo RC (elegiste el control de la
+  // TV: nadie "espera" nada) > esperando teléfono.
+  function pairBadge() {
+    if (paired) setBadge("Teléfono vinculado", "on");
+    else if (uiMode === "rc") setBadge("Control de la TV", "on");
+    else setBadge("Esperando teléfono", "wait");
+  }
 
   // --- Render ---
   function posterHTML(it) {
@@ -1373,6 +1380,7 @@
   function chooseSelect() {
     pairReturn = "choose";
     uiMode = chooseFocus === 0 ? "pair" : "rc";
+    pairBadge();
     render();
   }
   var toastTimer = null;
@@ -1385,6 +1393,10 @@
   }
 
   function render() {
+    // Fuera del inicio siempre hay una entrada guard en el historial del
+    // navegador: así el Volver físico del APK Android (que llega como
+    // history.back(), no como keydown) dispara popstate → backAction().
+    if (uiMode !== "choose") armBackGuard();
     if (uiMode === "choose") {
       elChoose.className = "choose";
       elPair.className = "pair hidden";
@@ -2198,6 +2210,58 @@
     })(it), 380);
   }
 
+  // TODA la lógica de "Volver" en un solo lugar: la usan el keydown (Tizen /
+  // navegadores, tecla Return/Esc) Y el popstate (APK Android, donde el botón
+  // físico NO llega como keydown — Capacitor hace history.back() del WebView).
+  // Devuelve true si lo consumió; false = pantalla de inicio (dejar que el
+  // sistema cierre la app).
+  function backAction() {
+    if (uiMode === "choose") return false;
+    if (uiMode === "pair") {
+      // Con control vivo, BACK vuelve al contenido; si no, al lugar desde el
+      // que se abrió el QR (el modo RC si entraste por el tab, o el inicio).
+      if (paired) uiMode = "linked";
+      else uiMode = (pairReturn === "rc" && items.length) ? "rc" : "choose";
+      pairReturn = "choose";
+      render();
+      return true;
+    }
+    if (document.getElementById("opening")) { hideOpening(); return true; }
+    if (uiMode === "rc" && kbOpen) { closeKb(); return true; }
+    if (uiMode === "rc" && filtersOpen) { filtersOpen = false; tabFocus = -1; render(); return true; }
+    if (uiMode === "rc" && tabFocus >= 0 && !detailItem) { tabFocus = -1; updateFocusClasses(); return true; }
+    if (detailItem) { closeDetail(); return true; }
+    if (history.length) { goBack(); return true; }
+    if (mode !== "home") {
+      // En una lista o búsqueda sin historial (p. ej. la TV se recargó ahí):
+      // BACK vuelve al home — nunca puede quedar sin salida.
+      goHome();
+      return true;
+    }
+    // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
+    // QR, una sorpresa para el que solo quería "salir" de donde estaba).
+    uiMode = "choose";
+    render();
+    return true;
+  }
+
+  // Botón Volver físico en el APK Android (Philips/Android TV): Capacitor no
+  // reenvía KEYCODE_BACK como keydown — hace history.back() del WebView, y en
+  // una página única sin historial eso no hace NADA (quedabas preso de la
+  // ficha). Sembramos una entrada "guard" en el historial del navegador
+  // (window.history — `history` a secas es nuestra pila de pantallas) y
+  // tratamos cada popstate como un BACK. En la pantalla de inicio no se
+  // re-arma: el próximo Volver cierra la app, como corresponde.
+  var backGuardArmed = false;
+  function armBackGuard() {
+    if (backGuardArmed || uiMode === "choose") return;
+    try { window.history.pushState({ miru: 1 }, ""); backGuardArmed = true; } catch (e) {}
+  }
+  window.addEventListener("popstate", function () {
+    backGuardArmed = false;
+    if (backAction()) armBackGuard();
+  });
+
   // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
   // 415=Play, 10252=Play/Pause, 10009=Return).
   document.addEventListener("keydown", function (e) {
@@ -2215,25 +2279,14 @@
       e.preventDefault();
       return;
     }
-    if (uiMode === "pair") {
-      if (isBack) {
-        // Con control vivo, BACK vuelve al contenido; si no, al lugar desde el
-        // que se abrió el QR (el modo RC si entraste por el tab, o el inicio).
-        if (paired) uiMode = "linked";
-        else uiMode = (pairReturn === "rc" && items.length) ? "rc" : "choose";
-        pairReturn = "choose";
-        render();
-        e.preventDefault();
-      }
-      return; // flechas/OK no operan sobre el DOM oculto
-    }
-
-    // Overlay "Abriendo…" visible: BACK lo cierra y nada más.
-    if (isBack && document.getElementById("opening")) {
-      hideOpening();
-      e.preventDefault();
+    // Volver, en cualquier estado: UNA sola lógica (backAction — la misma que
+    // dispara el popstate en el APK Android). false = inicio: no interceptar,
+    // que el sistema cierre la app.
+    if (isBack) {
+      if (backAction()) e.preventDefault();
       return;
     }
+    if (uiMode === "pair") return; // flechas/OK no operan sobre el DOM oculto
 
     // Pantallas propias del modo RC — se evalúan ANTES del flujo de contenido
     // para que OK sobre un tab/tecla no caiga en okPress() (orden de guardas:
@@ -2244,7 +2297,6 @@
       else if (k === 38) kbMove("up");
       else if (k === 40) kbMove("down");
       else if (isOk) kbPress();
-      else if (isBack) closeKb();
       else return;
       e.preventDefault();
       return;
@@ -2255,7 +2307,6 @@
       else if (k === 38) filterMove("up");
       else if (k === 40) filterMove("down");
       else if (isOk) filterPress();
-      else if (isBack) { filtersOpen = false; tabFocus = -1; render(); }
       else return;
       e.preventDefault();
       return;
@@ -2265,7 +2316,6 @@
       else if (k === 39) { tabFocus = Math.min(tabList().length - 1, tabFocus + 1); updateFocusClasses(); }
       else if (k === 40) { tabFocus = -1; updateFocusClasses(); }
       else if (isOk) tabAction(tabFocus);
-      else if (isBack) { tabFocus = -1; updateFocusClasses(); }
       else return;
       e.preventDefault();
       return;
@@ -2278,6 +2328,7 @@
     // devuelve la UI al modo vinculado. BACK conserva su rol (elegir modo).
     if (uiMode === "linked" && !paired && !isBack) {
       uiMode = "rc";
+      pairBadge();
       showToast("Modo control de TV — botones en pantalla activados");
       render();
       // Una flecha sigue navegando sobre la UI nueva; un OK solo activa el
@@ -2292,19 +2343,6 @@
     else if (k === 40) moveFocus("down");
     else if (isOk) {
       okPress();
-    } else if (isBack) {
-      if (detailItem) { closeDetail(); }
-      else if (history.length) { goBack(); }
-      else if (mode !== "home") {
-        // En una lista o búsqueda sin historial (p. ej. la TV se recargó ahí):
-        // BACK vuelve al home — nunca puede quedar sin salida.
-        goHome();
-      } else {
-        // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
-        // QR, una sorpresa para el que solo quería "salir" de donde estaba).
-        uiMode = "choose";
-        render();
-      }
     } else return;
     e.preventDefault();
   });
@@ -2328,7 +2366,7 @@
       loadHome(); // no-op si ya cargó (guard homeLoaded): no pisa la vista actual
     } else if (!present && paired) {
       paired = false;
-      setBadge("Esperando teléfono", "wait");
+      pairBadge();
       // Ya NO se expulsa al QR: render() muestra el banner discreto de
       // desconexión (si uiMode === "linked") y el contenido sigue en pantalla.
       render();
@@ -2388,7 +2426,7 @@
       if (ch !== channel) return; // callback de un canal viejo ya reemplazado
       if (status === "SUBSCRIBED") {
         clearWatchdog();
-        setBadge(paired ? "Teléfono vinculado" : "Esperando teléfono", paired ? "on" : "wait");
+        pairBadge();
         ch.track({ role: "tv" });
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
         scheduleWatchdog();
