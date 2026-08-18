@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
-import { tvSearch, tvHome, tvHomeMore, tvRibbons, warmHome } from "./tv-search.mjs";
+import { tvSearch, tvHome, tvHomeMore, tvRibbons, tvTop, warmHome } from "./tv-search.mjs";
 import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
 import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
@@ -188,6 +188,12 @@ http
       // El home es idéntico para todos y se regenera cada 6h: dejar que el
       // browser/CDN lo cachee 5 min evita regolpear el server en cada visita.
       sendJson(tvHome(), "public, max-age=300");
+      return;
+    }
+    // Solo las tiras "Top 5 en X" del home (las consume el móvil): mismo
+    // caché de 6h que /api/tv-home, mismo cacheo de borde.
+    if (urlPath === "/api/top-platforms") {
+      sendJson(tvTop(), "public, max-age=300");
       return;
     }
     if (urlPath === "/api/tv-home-more") {

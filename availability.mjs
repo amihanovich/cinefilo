@@ -108,12 +108,17 @@ function discoverItem(c, kind, platform) {
 
 /**
  * Títulos disponibles de verdad en `country`, por plataforma.
- * @returns {Promise<{popular: object[], recent: object[]}>} listas deduplicadas
- *   ordenadas por popularidad, con `platform` garantizada. Vacías si está
- *   deshabilitado o TMDB falla (el caller debe tener fallback).
+ * @returns {Promise<{popular: object[], recent: object[], byPlatform: object[]}>}
+ *   `popular`/`recent`: listas deduplicadas ordenadas por popularidad, con
+ *   `platform` garantizada. `byPlatform`: el ranking POR plataforma que el
+ *   aplanado de `popular` destruye — `[{platform, items[≤8]}]` en el orden de
+ *   PROVIDER_MAP, dedupe solo DENTRO de cada plataforma (un título de verdad
+ *   disponible en dos plataformas aparece en ambas). Todo sale del mismo batch
+ *   de requests: cero costo extra. Vacías si está deshabilitado o TMDB falla
+ *   (el caller debe tener fallback).
  */
 export async function discoverPopular(country) {
-  if (!availabilityEnabled()) return { popular: [], recent: [] };
+  if (!availabilityEnabled()) return { popular: [], recent: [], byPlatform: [] };
   const region = String(country || DEFAULT_REGION).toUpperCase().slice(0, 2) || DEFAULT_REGION;
   const cutoff = new Date(Date.now() - 548 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const base =
@@ -156,6 +161,31 @@ export async function discoverPopular(country) {
   out.popular = out.popular.filter((i) => !recentKeys.has(norm(i.title)));
   out.popular.sort((a, b) => b.popularity - a.popularity);
   out.recent.sort((a, b) => b.popularity - a.popularity);
+
+  // Ranking POR plataforma (para las tiras "Top 5 en X"): mismas páginas del
+  // bucket "popular", pero agrupadas por plataforma ANTES del dedupe global.
+  // 8 por plataforma: margen sobre los 5 que se muestran.
+  const byPlat = new Map();
+  for (const page of pages) {
+    if (page.bucket !== "popular") continue;
+    if (!byPlat.has(page.platform)) byPlat.set(page.platform, { seen: new Set(), items: [] });
+    const bucket = byPlat.get(page.platform);
+    for (const c of page.results.slice(0, 10)) {
+      const it = discoverItem(c, page.kind, page.platform);
+      if (!it.title) continue;
+      const k = norm(it.title);
+      if (bucket.seen.has(k)) continue;
+      bucket.seen.add(k);
+      bucket.items.push(it);
+    }
+  }
+  out.byPlatform = [];
+  for (const prov of PROVIDER_MAP) {
+    const bucket = byPlat.get(prov.canonical);
+    if (!bucket || !bucket.items.length) continue;
+    bucket.items.sort((a, b) => b.popularity - a.popularity);
+    out.byPlatform.push({ platform: prov.canonical, items: bucket.items.slice(0, 8) });
+  }
   return out;
 }
 

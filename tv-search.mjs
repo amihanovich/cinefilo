@@ -235,7 +235,7 @@ function pickVaried(list, want) {
 
 // Miru escribe hook/reason/synopsis para títulos REALES del catálogo
 // (Discover): acá NO inventa títulos, solo pone la voz del experto.
-async function writeReasons(items) {
+async function writeReasons(items, maxTokens) {
   const list = items
     .map((it, i) => `${i + 1}. "${it.title}" (${it.type}, ${it.year || "s/d"}, en ${it.platform})`)
     .join("\n");
@@ -253,7 +253,7 @@ async function writeReasons(items) {
     '- "reason": 2 o 3 frases (40 a 60 palabras) que den ganas de darle play: el porqué ' +
     "central, el tono/clima, qué la vuelve memorable; si suma, un dato de cinéfilo breve. " +
     "Cálido y conversacional, sin spoilers ni frases hechas repetidas entre ítems.";
-  const parsed = await callAnthropic(prompt, 7500);
+  const parsed = await callAnthropic(prompt, maxTokens || 7500);
   const byTitle = new Map();
   for (const r of (parsed && parsed.items) || []) {
     byTitle.set(String(r.title || "").toLowerCase().trim(), r);
@@ -275,16 +275,55 @@ export async function tvHome() {
   // Camino principal: catálogo REAL por Discover (qué hay de verdad en las
   // plataformas de la región) + Haiku poniendo la voz. Nada inventado.
   if (availabilityEnabled()) {
-    const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [] }));
+    const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [], byPlatform: [] }));
     if (pool.popular.length >= 8 && pool.recent.length >= 8) {
       const rec = pickVaried(pool.popular, 8);
       const latest = pickVaried(pool.recent, 8);
       const all = rec.concat(latest);
-      await writeReasons(all);
+
+      // Tiras "Top 5 en X": el ranking POR plataforma del mismo pool. Copias
+      // propias (un título puede estar en dos tiras con section distinta).
+      const tkey = (t) => String(t || "").toLowerCase().trim();
+      const inAll = new Set(all.map((it) => tkey(it.title)));
+      const rows = [];
+      const extras = []; // títulos de tiras que NO están en `all`: van a su propia pasada de Haiku
+      const extraSeen = new Set();
+      for (const p of (pool.byPlatform || [])) {
+        const rowItems = p.items.slice(0, 5).map((it) => ({ ...it, section: "Top 5 en " + p.platform }));
+        rows.push({ platform: p.platform, items: rowItems });
+        for (const it of rowItems) {
+          const k = tkey(it.title);
+          if (!inAll.has(k) && !extraSeen.has(k)) { extraSeen.add(k); extras.push(it); }
+        }
+      }
+
+      // Dos llamadas a Haiku EN PARALELO (una vez cada 6h): la de siempre para
+      // `items` y una para los ~20-25 títulos que solo aparecen en las tiras.
+      await Promise.all([
+        writeReasons(all),
+        extras.length ? writeReasons(extras, 10000) : Promise.resolve(),
+      ]);
+
+      // Propagar synopsis/hook/reason a las repeticiones (mismo título en
+      // `all` y en una tira, o en dos tiras a la vez).
+      const enriched = new Map();
+      for (const it of all.concat(extras)) enriched.set(tkey(it.title), it);
+      for (const row of rows) {
+        for (const it of row.items) {
+          const src = enriched.get(tkey(it.title));
+          if (src && src !== it) {
+            if (src.synopsis) it.synopsis = src.synopsis;
+            if (src.hook) it.hook = src.hook;
+            if (src.reason) it.reason = src.reason;
+          }
+          delete it.popularity;
+        }
+      }
+
       for (const it of all) delete it.popularity;
       for (const it of rec) it.section = "Recomendadas para vos";
       for (const it of latest) it.section = "Últimas subidas a las plataformas";
-      homeCache = { items: all };
+      homeCache = { items: all, rows: rows };
       homeCacheAt = Date.now();
       return homeCache;
     }
@@ -292,9 +331,6 @@ export async function tvHome() {
 
   // Fallback (sin TMDB_API_KEY o Discover caído): flujo clásico — Haiku
   // propone de memoria y la validación filtra lo que puede.
-  const recentLine = preferRecent
-    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
-    : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     PLATFORMS.join(", ") +
@@ -320,9 +356,15 @@ export async function tvHome() {
   const items = await attachPosters(
     pickAvailable(rec, 8, 6).concat(pickAvailable(latest, 8, 6)),
   );
-  homeCache = { items: items };
+  homeCache = { items: items, rows: [] };
   homeCacheAt = Date.now();
   return homeCache;
+}
+
+// Solo las tiras "Top 5 en X" (para el móvil): mismo caché que el home.
+export async function tvTop() {
+  const home = await tvHome();
+  return { rows: (home && home.rows) || [] };
 }
 
 // Más recomendaciones para la carga infinita del home.
@@ -332,9 +374,6 @@ export async function tvHomeMore(exclude, platforms, country) {
     exclude && exclude.length
       ? "\n\nNO repitas estos (ya se mostraron): " + exclude.slice(0, 50).join(", ")
       : "";
-  const recentLine = preferRecent
-    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
-    : "";
   const prompt =
     "Sos un experto en cine y series en español rioplatense. Plataformas: " +
     plats.join(", ") +
