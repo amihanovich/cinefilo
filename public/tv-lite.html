@@ -910,7 +910,7 @@
     h += "</div>";
     // Orden pedido: (a) Sinopsis y (b) por qué te la propongo.
     if (it.synopsis) h += '<p class="hsyn"><span class="hemo">🎬</span> ' + esc(it.synopsis) + "</p>";
-    if (it.reason) h += '<p class="hreason"><b>✦ Por qué te la propongo:</b> ' + esc(it.reason) + "</p>";
+    if (it.reason) h += '<p class="hreason">' + esc(it.reason) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
     // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
     // vive únicamente en el control del teléfono — el banner queda limpio.
