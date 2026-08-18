@@ -53,8 +53,9 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
-| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV (recomendadas + estrenos), cacheado 6h en memoria. |
+| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV: `items` (recomendadas + estrenos) **+ `rows`** (tiras "Top 5 en X" por plataforma). Cacheado 6h en memoria. |
 | `/api/tv-home-more` | POST | `tv-search.mjs` → `tvHomeMore()` | Carga infinita del home de TV. |
+| `/api/top-platforms` | GET | `tv-search.mjs` → `tvTop()` | Solo las `rows` del home (las tiras "Top 5 en X") — las consume el móvil. Mismo caché de 6h. |
 | `/api/tv-search` | GET/POST | `tv-search.mjs` → `tvSearch()` | Búsqueda para la TV liviana. |
 | `/api/transcribe` | POST | `transcribe.mjs` → `transcribeAudio()` | STT (audio → texto). |
 | `/api/tts` | POST | `tts.mjs` → `ttsAudio()` | TTS (texto → `audio/mpeg`). |
@@ -72,6 +73,13 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   `ELEVENLABS_API_KEY` (+ `ELEVENLABS_VOICE_ID` opcional). Si falla/sin créditos, los clientes caen a la
   voz nativa del dispositivo (`speechSynthesis`).
 - **Groq Whisper** STT (`transcribe.mjs`): `whisper-large-v3`, idioma `es`, `GROQ_API_KEY`.
+- **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
+  home de TV vía `discoverPopular(country)` — 6 plataformas × movie/tv × popular/recent = 24 requests
+  paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR
+  plataforma (para las tiras "Top 5 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
+  ⚠️ El "Top 5" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
+  tiene API pública). ⚠️ El caché del home no tiene key de región: el top es de `DEFAULT_REGION` (AR)
+  para todos.
 - **Pósters:** **Cinemeta (Stremio) primero**, iTunes + Wikipedia de fallback (ver §5).
 
 ---

@@ -95,5 +95,11 @@ memorias viejas o en tu cabeza, ignorarlos:
    se migran al boot de cada cliente), no DB.
 6. **Actualizar la TV sin rebuild:** editar `public/tv-lite.html` + redeployar el backend → el APK de TV ya
    instalado muestra la versión nueva (carga la URL remota).
+7. **Home sin búsqueda = tiras "Top 5 en X"** (TV y móvil): catálogo por plataforma desde
+   `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma (`byPlatform` en
+   `availability.mjs` — NO es el top oficial de cada plataforma, no hay API pública de eso). Las
+   plataformas del usuario van primero, el resto atenuado. En la TV son estado propio
+   (`topRows`/`rowFocus`), aditivo sobre `items` — "Más opciones para vos" y el scroll infinito
+   siguen igual debajo.
 
 Detalle completo de arquitectura, endpoints, pairing, deploy y env vars: **`ARCHITECTURE.md`**.
