@@ -287,6 +287,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setPosters({});
       setAvailability({});
       setCurrentIndex(0);
+      setCartOpen(false); // "Mi lista" siempre llega comprimida con resultados nuevos
       setScreen("magic");
       setLoading(false);
       setSearchInfo(null);

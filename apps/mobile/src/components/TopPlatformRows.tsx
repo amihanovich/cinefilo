@@ -191,12 +191,8 @@ export function TopPlatformRows() {
                 <p className="mt-0.5 text-sm leading-relaxed text-foreground/75">{detail.synopsis}</p>
               </>
             )}
-            {detail.reason && (
-              <>
-                <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-primary">✦ Por qué te la propongo</p>
-                <p className="mt-0.5 text-sm leading-relaxed text-foreground/85">{detail.reason}</p>
-              </>
-            )}
+            {/* Sin "Por qué te la propongo": el título está acá por ser top del
+                ranking de la plataforma, no por sugerencia de Miru. */}
             <button
               onClick={() => void openInApp(detail.platform, deepLinkFor(detail.platform, detail.title), detail.title)}
               className="mt-5 w-full rounded-full py-3 text-center text-sm font-bold text-white active:scale-95"

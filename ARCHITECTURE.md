@@ -125,6 +125,9 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   re-emitidos con `SET_PLATFORMS` en cada cambio), atajos Mi lista (sheet con carátulas desde
   `SCREEN.myList`) / Ya vistas, D-pad + OK contextual, y rueda de búsqueda propia (además de la de
   la TV). Ambos controles se mantienen espejados a mano.
+- **Sin `?session=`** (URL pelada, sin escanear el QR): redirige a la **web touch** —
+  `tv-lite.html?touch=1` en el backend principal, la misma UI de la TV en modo control tradicional
+  pero clickeable/tocable (tablets y laptops). Con `?session=` el control funciona como siempre.
 
 ### D. `src/` — web app del recomendador (TanStack Start, SSR) — LEGACY/secundaria
 - La misma que sirve `server-node.mjs`. Rutas vivas: `_authenticated/index.tsx` (home + resultados),

@@ -297,7 +297,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
   const padBtn =
     "flex aspect-square items-center justify-center rounded-2xl border border-border bg-muted/40 text-foreground transition-transform active:scale-90 active:bg-primary/20 disabled:opacity-40";
   const chipBtn =
-    "flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-2.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40";
+    "flex flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border py-3.5 text-xs font-semibold text-foreground active:scale-95 disabled:opacity-40";
 
   const myListForSheet: MediaItem[] = myList.length
     ? myList
@@ -317,7 +317,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </header>
 
       {/* Atajos que te acompañan: Filtros / Mi lista / Ya vistas / Inicio */}
-      <div className="flex shrink-0 gap-2 px-4 pt-3">
+      <div className="flex shrink-0 gap-2.5 px-4 pt-4">
         <button
           onClick={() => setFiltersOpen(true)}
           disabled={!paired}
@@ -344,7 +344,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </div>
 
       {/* Mic vivo: el orbe ES el micrófono, protagonista y directo */}
-      <div className="flex shrink-0 flex-col items-center px-4 pt-4">
+      <div className="flex shrink-0 flex-col items-center px-4 pt-5">
         {voiceState === "listening" && (
           <div className="mb-2 flex items-center gap-2 rounded-full bg-red-500/20 px-4 py-1 ring-1 ring-red-400/40">
             <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
@@ -355,12 +355,12 @@ export function ControlScreen({ session }: ControlScreenProps) {
           onClick={micTap}
           disabled={!paired}
           aria-label={voiceState === "listening" ? "Frenar y buscar" : "Hablarle a Miru"}
-          className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full shadow-[0_0_44px_rgba(136,82,224,0.30)] transition-transform active:scale-95 disabled:opacity-40"
+          className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full shadow-[0_0_44px_rgba(136,82,224,0.30)] transition-transform active:scale-95 disabled:opacity-40"
           style={{ WebkitTapHighlightColor: "transparent" }}
         >
           <Orb phase={orbPhase} size="mini" sizePx={112} volume={volume} />
           {voiceState === "idle" && (
-            <Mic className="absolute h-10 w-10 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
+            <Mic className="absolute h-8 w-8 text-white drop-shadow-[0_1px_5px_rgba(0,0,0,0.65)]" />
           )}
         </button>
         <p className="mt-2 text-center text-sm font-semibold text-primary">
@@ -376,7 +376,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </div>
 
       {/* Búsqueda por texto, secundaria al mic */}
-      <div className="shrink-0 px-4 pt-3">
+      <div className="shrink-0 px-4 pt-4">
         <form onSubmit={(e) => { e.preventDefault(); runSearch(text); }} className="flex gap-2">
           <input
             value={text}
@@ -400,7 +400,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
       {/* Preview: SOLO cuando hay algo reproduciéndose (la TV se fue a la app de
           streaming y el teléfono queda como el único lugar que dice qué lanzaste). */}
       {nowPlaying && (
-        <div className="shrink-0 px-4 pt-3">
+        <div className="shrink-0 px-4 pt-4">
           <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/20 p-3">
             <div className="h-20 w-14 shrink-0 overflow-hidden rounded-lg bg-muted">
               {nowPlaying.posterUrl ? (
@@ -431,7 +431,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
         onTouchStart={onPadTouchStart}
         onTouchEnd={onPadTouchEnd}
       >
-        <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(60vw, 224px)" }}>
+        <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(64vw, 248px)" }}>
           <div />
           <button onClick={() => nav("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
             <ChevronUp className="h-6 w-6" />
@@ -462,7 +462,7 @@ export function ControlScreen({ session }: ControlScreenProps) {
         </p>
 
         {/* Acciones */}
-        <div className="flex w-full max-w-sm items-stretch gap-2">
+        <div className="flex w-full max-w-sm items-stretch gap-2.5">
           <button onClick={() => send({ type: "BACK" })} disabled={!paired} className={chipBtn}>
             <CornerDownLeft className="h-4 w-4" /> Volver
           </button>
@@ -476,14 +476,14 @@ export function ControlScreen({ session }: ControlScreenProps) {
           <button
             onClick={play}
             disabled={!paired || !previewItem}
-            className="flex flex-1 items-center justify-center gap-1 rounded-2xl bg-primary py-2.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-40"
+            className="flex flex-1 items-center justify-center gap-1 rounded-2xl bg-primary py-3.5 text-xs font-semibold text-white active:scale-95 disabled:opacity-40"
           >
             <Play className="h-4 w-4" /> Play
           </button>
           <button
             onClick={toggleMyList}
             disabled={!paired || !centeredId}
-            className={"flex flex-1 items-center justify-center gap-1 rounded-2xl border py-2.5 text-xs font-semibold active:scale-95 disabled:opacity-40 " + (inToday(centered) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
+            className={"flex flex-1 items-center justify-center gap-1 rounded-2xl border py-3.5 text-xs font-semibold active:scale-95 disabled:opacity-40 " + (inToday(centered) ? "border-primary bg-primary/10 text-primary" : "border-border text-foreground")}
           >
             {inToday(centered) ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />} Mi lista
           </button>

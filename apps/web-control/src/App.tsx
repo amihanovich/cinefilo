@@ -1,11 +1,16 @@
 // Punto de entrada de la web-control. La URL viene del QR de la TV:
 //   https://<tu-dominio>/?session=<id-hex>
 // (también aceptamos /control?session= para compatibilidad con el link viejo).
-// Sin session mostramos una pantalla de ayuda.
+// Sin session: redirect a la versión web touch de Miru (la UI de la TV en modo
+// control tradicional, pero clickeable — para tablets y laptops).
 
-import { useMemo } from "react";
-import { Tv } from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { Loader2 } from "lucide-react";
 import { ControlScreen } from "./ControlScreen";
+
+const WEB_URL =
+  (import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app") +
+  "/tv-lite.html?touch=1";
 
 function readSession(): string {
   try {
@@ -21,15 +26,19 @@ function readSession(): string {
 export function App() {
   const session = useMemo(readSession, []);
 
+  // Llegaste a la URL pelada (sin escanear el QR): te espera la versión web de
+  // Miru — la misma experiencia de la TV, tocable. replace() para que el back
+  // del navegador no rebote acá y vuelva a redirigir.
+  useEffect(() => {
+    if (!session) window.location.replace(WEB_URL);
+  }, [session]);
+
   if (!session) {
     return (
       <main className="flex min-h-[100dvh] items-center justify-center bg-background px-6 text-center text-foreground">
         <div className="max-w-xs">
-          <Tv className="mx-auto h-10 w-10 text-muted-foreground" />
-          <h1 className="mt-4 text-xl font-semibold">Sin sesión</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Abrí este control escaneando el código QR que aparece en tu TV con Miru.
-          </p>
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+          <p className="mt-4 text-sm text-muted-foreground">Abriendo Miru…</p>
         </div>
       </main>
     );

@@ -183,7 +183,8 @@
     display:flex; align-items:center; justify-content:center; border-radius:50%;
     background:rgba(10,10,12,.55); border:1px solid rgba(255,255,255,.18);
     font-size:30px; line-height:1; color:rgba(255,255,255,.85);
-    text-shadow:0 2px 10px rgba(0,0,0,.85); pointer-events:none; }
+    /* clickeables desde el modo touch (antes eran solo decorativos) */
+    text-shadow:0 2px 10px rgba(0,0,0,.85); }
   .hchev.l { left:12px; } .hchev.r { right:12px; }
   /* Mismos chevrons en la ficha: ahí ←/→ salta al título anterior/siguiente. */
   .detail { position:relative; }
@@ -215,6 +216,17 @@
   .sec .pdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:1px; }
   .sec.dim { opacity:.5; }
   .todayrow .card { flex:0 0 auto; margin:0; }
+  /* Nº de ranking del top (1-10), como en la app móvil. Arriba a la izquierda:
+     abajo vive .cinfo (título + pill de plataforma). */
+  .card .rank { position:absolute; top:2px; left:9px; z-index:2; font-size:36px; font-weight:800;
+    line-height:1.15; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8); pointer-events:none; }
+  /* === Modo touch (web tablets/laptops, ?touch=1) === */
+  .card, .tab, .key, .fchip, .hbtn, .hchev, .chcard, .ttile { cursor:pointer; }
+  .touch .todayrow { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tback { position:fixed; left:16px; bottom:16px; z-index:60; padding:12px 22px; border-radius:999px;
+    background:rgba(18,18,22,.9); border:1px solid #3A3A40; color:#F5F5F7; font-size:17px; font-weight:600;
+    cursor:pointer; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+  .tback.hidden { display:none; }
   .todayrow.dim .card { opacity:.45; }
   .todayrow.dim .card.foc { opacity:1; }
   .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
@@ -376,7 +388,9 @@
     if (!d) {
       d = document.createElement("div");
       d.id = "err";
-      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:12px 16px;font-size:15px;z-index:9999;white-space:pre-wrap;font-family:monospace;";
+      // pointer-events:none: es informativo — en el modo touch tapaba los
+      // clicks de la franja inferior (p.ej. el botón ‹ Volver).
+      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:12px 16px;font-size:15px;z-index:9999;white-space:pre-wrap;font-family:monospace;pointer-events:none;";
       if (document.body) document.body.appendChild(d);
     }
     if (d) d.textContent = "⚠ " + text;
@@ -766,6 +780,13 @@
   //   "rc"     = manejo con el control remoto físico de la TV (tabs y teclado en pantalla)
   //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
   var uiMode = "choose";
+  // Modo touch (web para tablets/laptops): la MISMA UI del modo RC pero
+  // tocable. SOLO se activa con ?touch=1 (nada de autodetección: una WebView
+  // de TV puede reportar pointer coarse y saltearse la pantalla de elección).
+  // Los handlers de click en sí están siempre activos — en la TV no hay
+  // puntero y no molestan; en una laptop cualquiera, la página ya se clickea.
+  var TOUCH = false;
+  try { TOUCH = (window.location.search || "").indexOf("touch=1") >= 0; } catch (e) {}
   var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
   var pairReturn = "choose"; // a dónde vuelve el BACK desde la pantalla del QR
   // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
@@ -854,6 +875,11 @@
   // Detalle como overlay sobre la parte baja del póster (solo tarjeta enfocada).
   // Muestra el "hook" (porqué ultra concreto, ej "Porque hay espadas medievales
   // y honor en juego"); si el ítem es viejo y no lo trae, cae a la 1ª frase.
+  // ¿El ítem está por ranking (tira "Top 10 en X") y no por sugerencia de Miru?
+  // En los tops no va el "porqué te la propongo" — están ahí por ser top.
+  function isTopItem(it) {
+    return !!(it && it.section && it.section.indexOf("Top 10 en") === 0);
+  }
   function detHTML(it) {
     var why = it.hook || shortReason(it.reason);
     if (!why) return "";
@@ -861,6 +887,11 @@
     // separador para diferenciar las dos mitades. Si el modelo no lo mandó (o es
     // un ítem viejo), se muestra entero como porqué.
     var ix = why.indexOf(" · ");
+    if (isTopItem(it)) {
+      // Top: solo el "de qué va" (sin ✦). Fallback: sinopsis recortada.
+      var what = ix > 0 ? why.slice(0, ix) : (it.synopsis || why);
+      return '<div class="det"><p class="wsyn">🎬 ' + esc(what) + "</p></div>";
+    }
     if (ix > 0) {
       return '<div class="det"><p class="wsyn">🎬 ' + esc(why.slice(0, ix)) + "</p>" +
              '<p class="wwhy"><b>✦</b> ' + esc(why.slice(ix + 3)) + "</p></div>";
@@ -1018,16 +1049,8 @@
   }
   // El like/dislike local de la TV (tvLiked/tvDisliked) se eliminó: el feedback
   // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
-  function todayStripHTML() {
-    if (!today.length) return "";
-    var h = '<h3 class="sec">' + MYLIST_SECTION + '</h3><div class="rowwrap"><div class="todayrow" id="todayrow">';
-    for (var i = 0; i < today.length; i++) {
-      var it = today[i];
-      var p = it.posterUrl ? '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '">' : '<span class="ttl">' + esc(it.title) + "</span>";
-      h += '<div class="ttile' + (i === todayFocus ? " foc" : "") + '" id="today-' + i + '">' + p + "</div>";
-    }
-    return h + '</div><span class="rowmore hidden" id="rowmore">›</span></div>';
-  }
+  // (La tira "Mi lista" del home se eliminó: acceso por el tab del menú en RC
+  // y por el botón del control en vinculado — showToday() sigue siendo la vista.)
 
   // Affordance de una tira horizontal: si hay tiles fuera de vista a la
   // derecha, fade en el borde + flecha ›. Se recalcula al renderizar y al
@@ -1042,7 +1065,6 @@
     row.className = base + (more ? " fade" : "");
   }
   function updateRowAffordance() {
-    rowAffordance("todayrow", "rowmore");
     for (var i = 0; i < topRows.length; i++) rowAffordance("toprow-" + i, "toprowmore-" + i);
   }
 
@@ -1080,7 +1102,7 @@
       // horizontal scrolleable en vez de la grilla.
       for (var j = 0; j < row.items.length; j++) {
         var it = row.items[j];
-        h += '<div class="card' + (i === rowFocus && j === rowCol ? " foc" : "") + '" id="toptile-' + i + "-" + j + '"><div class="ph">' + cardPh(it) + "</div></div>";
+        h += '<div class="card' + (i === rowFocus && j === rowCol ? " foc" : "") + '" id="toptile-' + i + "-" + j + '"><div class="ph">' + cardPh(it) + '</div><span class="rank">' + (j + 1) + "</span></div>";
       }
       h += '</div><span class="rowmore hidden" id="toprowmore-' + i + '">›</span></div>';
     }
@@ -1135,7 +1157,8 @@
     if (it.synopsis || it.reason) {
       h += '<div class="dtext">';
       if (it.synopsis) h += '<h4 class="dsec">🎬 Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
-      if (it.reason) h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
+      // En un top el "porqué" no aplica (está por ranking, no por sugerencia).
+      if (it.reason && !isTopItem(it)) h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
       h += "</div>";
     }
     var td = isToday(it);
@@ -1335,8 +1358,8 @@
       // Banner + dots en un contenedor estable: al mover el foco solo se
       // regenera #herobox (ver updateFocusClasses), no la grilla entera.
       html += '<div id="herobox">' + heroBoxHTML() + "</div>";
-      // Tira "Mi lista" (guardadas), debajo del carrusel.
-      html += todayStripHTML();
+      // La tira "Mi lista" ya NO vive en el home (redundante: en RC está el
+      // tab del menú y en vinculado el botón del control — feedback de UX).
       // Tiras "Top 10 en X" (solo home; en búsqueda serían ruido).
       if (mode === "home") html += topRowsHTML();
       // El resto, desde el ítem 5.
@@ -1366,7 +1389,9 @@
       html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
               (onCands ? " · ← → para cambiar" : "") + "</span>";
     }
-    html += '<span class="okhint">OK = ver ficha · OK doble = guardar en Mi lista · Volver = elegir modo</span>';
+    html += '<span class="okhint">' + (TOUCH
+      ? "Tocá una tarjeta para ver la ficha · + guarda en Mi lista"
+      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = elegir modo") + "</span>";
     html += "</div>";
     return html;
   }
@@ -1397,6 +1422,7 @@
     // navegador: así el Volver físico del APK Android (que llega como
     // history.back(), no como keydown) dispara popstate → backAction().
     if (uiMode !== "choose") armBackGuard();
+    updateTback(); // botón Volver flotante del modo touch
     if (uiMode === "choose") {
       elChoose.className = "choose";
       elPair.className = "pair hidden";
@@ -1496,17 +1522,6 @@
       for (var j = 0; j < hcards.length; j++) {
         // Con el foco en el carrito, ninguna tarjeta de la grilla queda enfocada.
         hcards[j].className = "card" + (todayFocus < 0 && top + j === focusedIndex ? " foc" : "");
-      }
-      // Tiles de la tira "Mi lista": SOLO los de #todayrow (las tiras Top 10
-      // también usan .ttile y no deben togglearse con todayFocus).
-      var todayEl = document.getElementById("todayrow");
-      var tiles = todayEl ? todayEl.getElementsByClassName("ttile") : [];
-      for (var k = 0; k < tiles.length; k++) {
-        tiles[k].className = "ttile" + (k === todayFocus ? " foc" : "");
-      }
-      // Mantener visible el tile enfocado (la tira recorta el overflow).
-      if (todayFocus >= 0 && tiles[todayFocus] && todayEl) {
-        todayEl.scrollLeft = Math.max(0, tiles[todayFocus].offsetLeft - 60);
       }
       // Tiras "Top 10 en X": toggle de la tarjeta enfocada + scroll horizontal.
       for (var tr = 0; tr < topRows.length; tr++) {
@@ -1891,23 +1906,9 @@
             rowCol = Math.min(rowCol, Math.max(0, topRows[rowFocus].items.length - 1));
           } else {
             rowFocus = -1; rowCol = 0;
-            if (today.length) todayFocus = 0;
-            else if (uiMode === "rc") actionFocus = 0;
-            // vinculado sin tira "Mi lista": el foco vuelve directo al banner
+            if (uiMode === "rc") actionFocus = 0;
+            // vinculado: el foco vuelve directo al banner
           }
-          changed = true;
-        }
-      } else if (todayFocus >= 0) {
-        // En la tira "Mi lista": ←/→ entre tiles; ↑ a los botones
-        // del banner; ↓ a la grilla (o de vuelta a los botones si no hay grilla).
-        if (dir === "right") { var tr = Math.min(todayFocus + 1, today.length - 1); if (tr !== todayFocus) { todayFocus = tr; changed = true; } }
-        else if (dir === "left") { var tl = Math.max(todayFocus - 1, 0); if (tl !== todayFocus) { todayFocus = tl; changed = true; } }
-        else if (dir === "up") { todayFocus = -1; if (uiMode === "rc") actionFocus = 0; changed = true; }
-        else if (dir === "down") {
-          todayFocus = -1;
-          if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
-          else if (items.length > top) n = top;
-          else if (uiMode === "rc") actionFocus = 0;
           changed = true;
         }
       } else if (focusedIndex < top) {
@@ -1919,8 +1920,7 @@
           else if (dir === "up") { actionFocus = -1; changed = true; }
           else if (dir === "down") {
             actionFocus = -1;
-            if (today.length) todayFocus = 0;
-            else if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
+            if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
             else if (items.length > top) n = top;
             changed = true;
           }
@@ -1932,9 +1932,8 @@
           else if (dir === "down") {
             if (uiMode === "rc") { actionFocus = 0; changed = true; }
             else {
-              // Vinculado: sin botones en el banner — ↓ va directo a la tira o la grilla.
-              if (today.length) todayFocus = 0;
-              else if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
+              // Vinculado: sin botones en el banner — ↓ va a las tiras o la grilla.
+              if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
               else if (items.length > top) n = top;
               changed = true;
             }
@@ -1957,7 +1956,6 @@
               rowFocus = topRows.length - 1;
               rowCol = Math.min((focusedIndex - top) % 6, Math.max(0, topRows[rowFocus].items.length - 1));
             }
-            else if (today.length) todayFocus = 0;
             else if (uiMode === "rc") actionFocus = 0;
             // vinculado sin tira: el foco vuelve directo al banner
           }
@@ -2183,12 +2181,6 @@
       if (rit) { detailScope = "toprow"; openDetail(rit); }
       return;
     }
-    // Foco en la tira "Mi lista" (y NO en un botón): OK abre la ficha.
-    if ((mode === "home" || mode === "search") && todayFocus >= 0 && actionFocus < 0) {
-      var tit = today[todayFocus];
-      if (tit) { detailScope = "today"; openDetail(tit); }
-      return;
-    }
     if (!it) return;
     // Regla de tapping (pedido de UX): el gesto natural del tap único es VER MÁS.
     //   1 tap  → abrir la ficha (y desde ahí, otro OK = ver en la plataforma)
@@ -2260,6 +2252,123 @@
   window.addEventListener("popstate", function () {
     backGuardArmed = false;
     if (backAction()) armBackGuard();
+  });
+
+  // ═══ Puntero: la misma UI, clickeable (web touch para tablets/laptops) ═══
+  // Un solo listener delegado — respeta el patrón render-once (no se cuelgan
+  // handlers por elemento). En la TV no hay puntero: cero efecto.
+  if (TOUCH) {
+    document.body.className += " touch";
+    var tb = document.createElement("div");
+    tb.id = "tback"; tb.className = "tback hidden"; tb.textContent = "‹ Volver";
+    document.body.appendChild(tb);
+  }
+  function updateTback() {
+    var el = document.getElementById("tback");
+    if (!el) return;
+    var show = uiMode !== "choose" &&
+      (detailItem || kbOpen || filtersOpen || mode !== "home" || uiMode === "pair");
+    el.className = "tback" + (show ? "" : " hidden");
+  }
+  function indexIn(el, cls) {
+    var all = document.getElementsByClassName(cls);
+    for (var i = 0; i < all.length; i++) if (all[i] === el) return i;
+    return -1;
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var el;
+    // Pantalla de elección: tocar una tarjeta la elige.
+    el = t.closest(".chcard");
+    if (el) { chooseFocus = (el.id === "ch1") ? 1 : 0; updateChooseFocus(); chooseSelect(); return; }
+    // Botón Volver flotante del modo touch.
+    if (t.closest(".tback")) { backAction(); return; }
+    if (uiMode === "choose" || uiMode === "pair") return;
+    // Teclado en pantalla: tocar una tecla la pulsa.
+    el = t.closest(".key");
+    if (el && kbOpen) {
+      var km = /^key-(\d+)-(\d+)$/.exec(el.id || "");
+      if (km) { kbRow = +km[1]; kbCol = +km[2]; updateKbFocus(); kbPress(); }
+      return;
+    }
+    // Filtros: tocar un chip lo marca ("Listo" aplica).
+    el = t.closest(".fchip");
+    if (el && filtersOpen) {
+      var fi = indexIn(el, "fchip");
+      if (fi >= 0) { filterFocus = fi; filterPress(); }
+      return;
+    }
+    // Tabs del menú.
+    el = t.closest(".tab");
+    if (el) {
+      var ti = indexIn(el, "tab");
+      if (ti >= 0) tabAction(ti);
+      return;
+    }
+    // Botones del hero / la ficha (mismo orden que actionFocus).
+    el = t.closest(".hbtn");
+    if (el) {
+      var bi = indexIn(el, "hbtn"); // hero y ficha nunca conviven: índice global sirve
+      if (detailItem) {
+        if (bi === 0) { toggleToday(detailItem); render(); }
+        else if (bi === 1) play(detailItem.id);
+        else if (bi === 2 && uiMode === "rc") toggleSeen(detailItem);
+        return;
+      }
+      var topA = Math.min(TOP, items.length);
+      var ha = Math.min(heroIndex, topA - 1); if (ha < 0) ha = 0;
+      var hit = items[ha];
+      if (!hit) return;
+      if (bi === 0) toggleToday(hit);
+      else if (bi === 1) play(hit.id);
+      return;
+    }
+    // Chevrons ‹ ›: en la ficha pasan de título; en el hero, de candidata.
+    el = t.closest(".hchev");
+    if (el) {
+      var goLeft = / l\b|^hchev l/.test(el.className);
+      if (detailItem) { moveFocus(goLeft ? "left" : "right"); return; }
+      var topC = Math.min(TOP, items.length);
+      var nh = Math.min(Math.max(heroIndex + (goLeft ? -1 : 1), 0), topC - 1);
+      if (nh !== heroIndex) {
+        heroIndex = nh; focusedIndex = nh; actionFocus = -1; rowFocus = -1; rowCol = 0;
+        updateFocusClasses(); renderSpot(); emitScreen();
+      }
+      return;
+    }
+    // Tarjetas: tocar una abre su ficha (regla de la app: 1 toque = ficha).
+    el = t.closest(".card");
+    if (el) {
+      var id = el.id || "";
+      var tm = /^toptile-(\d+)-(\d+)$/.exec(id);
+      if (tm) {
+        rowFocus = +tm[1]; rowCol = +tm[2]; actionFocus = -1; tabFocus = -1;
+        var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
+        if (rit) { detailScope = "toprow"; openDetail(rit); }
+        return;
+      }
+      if (id.indexOf("card-") === 0) {
+        var iid = id.slice(5);
+        for (var ci = 0; ci < items.length; ci++) {
+          if (String(items[ci].id) === iid) {
+            focusedIndex = ci; rowFocus = -1; rowCol = 0; actionFocus = -1; tabFocus = -1;
+            if (mode !== "home" && mode !== "search") detailScope = "list";
+            else detailScope = (ci < Math.min(TOP, items.length)) ? "cands" : "grid";
+            openDetail(items[ci]);
+            return;
+          }
+        }
+      }
+      return;
+    }
+    // Fondo del banner: abre la ficha de la candidata visible.
+    el = t.closest(".hero");
+    if (el && !detailItem) {
+      var topH = Math.min(TOP, items.length);
+      var hh = Math.min(heroIndex, topH - 1); if (hh < 0) hh = 0;
+      if (items[hh]) { focusedIndex = hh; detailScope = "cands"; openDetail(items[hh]); }
+    }
   });
 
   // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
@@ -2530,6 +2639,9 @@
       .catch(function () {});
   }
 
+  // Web touch (?touch=1): directo al contenido en modo RC — la pantalla de
+  // elección es de la TV (acá tocás, no vinculás).
+  if (TOUCH) uiMode = "rc";
   render();
   connect();
   buildLandingRibbons();
