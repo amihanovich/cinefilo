@@ -745,7 +745,10 @@
   var controlOverride = /[?&]control=([^&]+)/.exec(window.location.search);
   var CONTROL_BASE = controlOverride
     ? decodeURIComponent(controlOverride[1])
-    : "https://cinefilo-copy-production.up.railway.app";
+    // El dominio del servicio de control cambió en Railway (cinefilo-copy-production
+    // → mirutv-touch). tv-lite se carga remoto en cada apertura, así que este fix
+    // llega a todas las TVs con el redeploy — sin reinstalar ningún APK.
+    : "https://mirutv-touch.up.railway.app";
   var controlUrl = CONTROL_BASE.replace(/\/+$/, "") + "/control?session=" + sessionId;
   var items = [];
   var focusedIndex = 0;

@@ -41,7 +41,7 @@ const TV_DOWNLOADER_CODE =
 // propio): la salida para quien no tiene Android — iPhone, desktop, lo que sea.
 const WEB_APP_URL =
   (import.meta.env.VITE_WEB_APP_URL as string | undefined) ||
-  "https://webappcinefilo-production.up.railway.app";
+  "https://webapp-miru-production.up.railway.app";
 
 function formatSize(bytes?: number): string | null {
   if (!bytes || bytes <= 0) return null;

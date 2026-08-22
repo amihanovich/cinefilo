@@ -15,7 +15,7 @@ renombrarlos rompe cosas en producción:
 | Identificador | Dónde | Por qué no se toca |
 |---|---|---|
 | appIds `com.cinefilo.app` / `com.cinefilo.tv` | `apps/{mobile,tv}/capacitor.config.ts` | Cambiar el appId = app Android NUEVA: pierde datos y updates de los usuarios |
-| Dominios `cinefilo-production` / `cinefilo-copy-production` / `webappcinefilo-production` | fallbacks en `lib/api.ts`/`stt.ts`/`tts.ts` de móvil y web-control, `CONTROL_BASE` en `tv-lite.html`, `server.url` del APK TV | Los APKs instalados los llevan **compilados**; si el dominio muere, las apps quedan muertas hasta reinstalar |
+| Dominio `cinefilo-production` | fallbacks en `lib/api.ts`/`stt.ts`/`tts.ts` de móvil y web-control, `server.url` del APK TV | Los APKs instalados lo llevan **compilado**; si muere, las apps quedan muertas hasta reinstalar. ⚠️ Los dominios de web-control (ex `cinefilo-copy-production`, ahora `mirutv-touch`) y de la webapp móvil (ex `webappcinefilo-production`) SÍ se migraron (2026-08): a diferencia del backend, `CONTROL_BASE` vive en `tv-lite.html` (se sirve remoto, sin rebuild) y la webapp no la usa ningún APK — cambiarlos no rompe nada instalado |
 | Canal Realtime `cinefilo:${sessionId}` | `tv-lite.html` + las 3 copias de `use-tv-channel.ts` | Es el wire del pairing: renombrar de un lado rompe el pairing con APKs viejos en silencio |
 | Wire-names `ADD_TODAY` / `SHOW_TODAY` / `todayTitles` | `tv-protocol.ts` (3 copias) + `tv-lite.html` | Mismo motivo: contrato TV↔control ya desplegado. En UI el concepto ahora es "Mi lista" |
 | Campo JSON `cinephile_note` | prompts + clientes | Contrato de datos entre backend y clientes |
@@ -159,7 +159,7 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
     "Mi lista" (ver tabla de identificadores legacy arriba). Los campos nuevos son aditivos:
     los clientes viejos los ignoran (Zod no-strict).
 - **QR:** la TV genera `<CONTROL_BASE>/control?session=<id>`, donde `CONTROL_BASE` es el **servicio
-  web-control** (`cinefilo-copy-production.up.railway.app`), definido en `public/tv-lite.html` (override para
+  web-control** (`mirutv-touch.up.railway.app`), definido en `public/tv-lite.html` (override para
   dev: abrir tv-lite con `?control=<base-url>`). ⚠️ NO usar el origin del backend: ahí vive el `/control`
   viejo. Ese QR lo abre la web-control, o lo escanea la app móvil (`parseSession()` saca el `session` de
   cualquier URL, así que el host no le importa).
@@ -186,7 +186,7 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 | Servicio | Config | Start | Dominio |
 |---|---|---|---|
 | Backend + web | raíz `railway.json`/`nixpacks.toml` | `node server-node.mjs` | `cinefilo-production.up.railway.app` |
-| web-control | `apps/web-control/` | `node server.mjs` | `cinefilo-copy-production.up.railway.app` |
+| web-control | `apps/web-control/` | `node server.mjs` | `mirutv-touch.up.railway.app` |
 | landing | `apps/landing/` | `node server.mjs` | (servicio propio) |
 
 - Branch conectado: **`dev`** (deploy automático al push). Restart `ON_FAILURE`, max 3.
