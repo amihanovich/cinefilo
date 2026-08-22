@@ -9,7 +9,7 @@ import { Loader2 } from "lucide-react";
 import { ControlScreen } from "./ControlScreen";
 
 const WEB_URL =
-  (import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app") +
+  (import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railway.app") +
   "/tv-lite.html?touch=1";
 
 function readSession(): string {

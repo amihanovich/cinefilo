@@ -15,7 +15,7 @@ renombrarlos rompe cosas en producción:
 | Identificador | Dónde | Por qué no se toca |
 |---|---|---|
 | appIds `com.cinefilo.app` / `com.cinefilo.tv` | `apps/{mobile,tv}/capacitor.config.ts` | Cambiar el appId = app Android NUEVA: pierde datos y updates de los usuarios |
-| Dominio `cinefilo-production` | fallbacks en `lib/api.ts`/`stt.ts`/`tts.ts` de móvil y web-control, `server.url` del APK TV | Los APKs instalados lo llevan **compilado**; si muere, las apps quedan muertas hasta reinstalar. ⚠️ Los dominios de web-control (ex `cinefilo-copy-production`, ahora `mirutv-touch`) y de la webapp móvil (ex `webappcinefilo-production`) SÍ se migraron (2026-08): a diferencia del backend, `CONTROL_BASE` vive en `tv-lite.html` (se sirve remoto, sin rebuild) y la webapp no la usa ningún APK — cambiarlos no rompe nada instalado |
+| ~~Dominio `cinefilo-production`~~ **MIGRADO a `miru-ai.up.railway.app`** (2026-08) | `server.url` del APK TV, fallbacks en `lib/api.ts`/`stt.ts`/`tts.ts` de móvil y web-control | A diferencia de los otros 3 dominios (que se leen en vivo y no rompen nada instalado), este SÍ está compilado dentro de los APKs — **el APK de TV y el móvil instalados quedan muertos hasta reinstalarlos** con el build nuevo |
 | Canal Realtime `cinefilo:${sessionId}` | `tv-lite.html` + las 3 copias de `use-tv-channel.ts` | Es el wire del pairing: renombrar de un lado rompe el pairing con APKs viejos en silencio |
 | Wire-names `ADD_TODAY` / `SHOW_TODAY` / `todayTitles` | `tv-protocol.ts` (3 copias) + `tv-lite.html` | Mismo motivo: contrato TV↔control ya desplegado. En UI el concepto ahora es "Mi lista" |
 | Campo JSON `cinephile_note` | prompts + clientes | Contrato de datos entre backend y clientes |
@@ -96,12 +96,12 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos.
 - **Modo control de TV:** `src/screens/ControlScreen.tsx` + `src/hooks/use-tv-channel.ts` + `src/lib/tv-remote.ts`.
   Escanea el QR de la TV (`@capacitor-mlkit/barcode-scanning`) y se conecta como rol "control".
-- Backend: `src/lib/api.ts` → `VITE_API_BASE_URL ?? https://cinefilo-production.up.railway.app`.
+- Backend: `src/lib/api.ts` → `VITE_API_BASE_URL ?? https://miru-ai.up.railway.app`.
 - Build APK: `npm run apk` (Gradle `assembleDebug`). NO se deploya en Railway.
 
 ### B. `apps/tv` — app de TV Android (CÁSCARA / WebView)
 - `appId com.cinefilo.tv`. Es una **cáscara**: `server.url` en `apps/tv/capacitor.config.ts` apunta a
-  **`https://cinefilo-production.up.railway.app/tv-lite.html`**. El APK carga esa TV liviana remota; el bundle
+  **`https://miru-ai.up.railway.app/tv-lite.html`**. El APK carga esa TV liviana remota; el bundle
   local (`apps/tv/src`, un placeholder mínimo) **nunca se muestra** — existe solo para que `cap sync` no falle.
 - **Consecuencia:** actualizar `public/tv-lite.html` + redeployar el backend actualiza la TV **sin rebuildear
   el APK**. Solo hace falta rebuild si cambia la URL, el manifest, el icono/banner o los `<queries>`.
@@ -185,7 +185,7 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 
 | Servicio | Config | Start | Dominio |
 |---|---|---|---|
-| Backend + web | raíz `railway.json`/`nixpacks.toml` | `node server-node.mjs` | `cinefilo-production.up.railway.app` |
+| Backend + web | raíz `railway.json`/`nixpacks.toml` | `node server-node.mjs` | `miru-ai.up.railway.app` |
 | web-control | `apps/web-control/` | `node server.mjs` | `mirutv-touch.up.railway.app` |
 | landing | `apps/landing/` | `node server.mjs` | (servicio propio) |
 

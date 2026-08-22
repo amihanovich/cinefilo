@@ -8,7 +8,7 @@
 // con AudioContext (un solo stream compartido, sin conflicto de micrófono).
 // El audio se transcribe en el backend con Groq Whisper.
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railway.app";
 
 export type RecordingState = "idle" | "recording" | "processing";
 

@@ -2,7 +2,7 @@
 // que necesita el agente conversacional (fetchOrb). Mantener la firma en sync
 // a mano con la copia de la app móvil.
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railway.app";
 
 // Orbe del control: el usuario habla mirando un título en la TV y el backend
 // infiere si es una pregunta sobre ese título o un pedido de búsqueda.

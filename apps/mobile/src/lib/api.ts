@@ -1,6 +1,6 @@
 // Cliente REST para el backend de Miru (Railway).
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railway.app";
 
 export type Message = { role: "user" | "assistant"; content: string };
 

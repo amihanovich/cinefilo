@@ -9,7 +9,7 @@ Son **servicios independientes**, todos con `npm install --legacy-peer-deps` + b
 
 | Servicio | Config | Build | Start | Dominio |
 |---|---|---|---|---|
-| **Backend + web** | raíz `railway.json` / `nixpacks.toml` | `npm run build` (Vite → `dist/`) | **`node server-node.mjs`** | `cinefilo-production.up.railway.app` |
+| **Backend + web** | raíz `railway.json` / `nixpacks.toml` | `npm run build` (Vite → `dist/`) | **`node server-node.mjs`** | `miru-ai.up.railway.app` |
 | **web-control** | `apps/web-control/` | `npm run build` | `node server.mjs` | `mirutv-touch.up.railway.app` |
 | **landing** | `apps/landing/` | `npm run build` | `node server.mjs` | (servicio propio) |
 

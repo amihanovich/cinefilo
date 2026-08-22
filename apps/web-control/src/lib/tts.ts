@@ -4,7 +4,7 @@
 // APK, de donde se podría extraer descompilando.
 // Devuelve una Promise que resuelve cuando el audio termina.
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://cinefilo-production.up.railway.app";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railway.app";
 
 let currentAudio: HTMLAudioElement | null = null;
 // Generación de habla: si llega un speak()/stopSpeaking() nuevo, los pasos

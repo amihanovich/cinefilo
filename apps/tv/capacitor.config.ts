@@ -15,7 +15,7 @@ const config: CapacitorConfig = {
   // El splash animado del front no puede taparlo porque vive DENTRO de esa página.
   backgroundColor: "#2A0F5C",
   server: {
-    url: "https://cinefilo-production.up.railway.app/tv-lite.html",
+    url: "https://miru-ai.up.railway.app/tv-lite.html",
     androidScheme: "https",
     cleartext: false,
   },
