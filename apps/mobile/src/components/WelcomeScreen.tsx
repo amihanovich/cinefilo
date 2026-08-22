@@ -154,7 +154,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   };
 
   // La bienvenida ya no es una pantalla fija: el bloque del mic ocupa casi todo
-  // el alto y debajo asoman las tiras "Top 10 en X" (catálogo sin buscar) — el
+  // el alto y debajo asoman las tiras "Top 5 en X" (catálogo sin buscar) — el
   // borde visible de la primera tira ES la affordance de scroll.
   return (
     <div className="relative h-[100dvh] overflow-y-auto bg-background safe-top safe-bottom">
@@ -260,7 +260,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       </div>
       </div>
 
-      {/* Catálogo por defecto sin búsqueda: el Top 10 de cada plataforma. */}
+      {/* Catálogo por defecto sin búsqueda: el Top 5 de cada plataforma. */}
       <div className="flex flex-col items-center px-8">
         <TopPlatformRows />
       </div>

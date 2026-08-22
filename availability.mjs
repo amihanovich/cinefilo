@@ -111,7 +111,7 @@ function discoverItem(c, kind, platform) {
  * @returns {Promise<{popular: object[], recent: object[], byPlatform: object[]}>}
  *   `popular`/`recent`: listas deduplicadas ordenadas por popularidad, con
  *   `platform` garantizada. `byPlatform`: el ranking POR plataforma que el
- *   aplanado de `popular` destruye — `[{platform, items[≤13]}]` en el orden de
+ *   aplanado de `popular` destruye — `[{platform, items[≤8]}]` en el orden de
  *   PROVIDER_MAP, dedupe solo DENTRO de cada plataforma (un título de verdad
  *   disponible en dos plataformas aparece en ambas). Todo sale del mismo batch
  *   de requests: cero costo extra. Vacías si está deshabilitado o TMDB falla
@@ -162,9 +162,9 @@ export async function discoverPopular(country) {
   out.popular.sort((a, b) => b.popularity - a.popularity);
   out.recent.sort((a, b) => b.popularity - a.popularity);
 
-  // Ranking POR plataforma (para las tiras "Top 10 en X"): mismas páginas del
+  // Ranking POR plataforma (para las tiras "Top 5 en X"): mismas páginas del
   // bucket "popular", pero agrupadas por plataforma ANTES del dedupe global.
-  // 13 por plataforma: margen sobre los 10 que se muestran.
+  // 8 por plataforma: margen sobre los 5 que se muestran.
   const byPlat = new Map();
   for (const page of pages) {
     if (page.bucket !== "popular") continue;
@@ -184,7 +184,7 @@ export async function discoverPopular(country) {
     const bucket = byPlat.get(prov.canonical);
     if (!bucket || !bucket.items.length) continue;
     bucket.items.sort((a, b) => b.popularity - a.popularity);
-    out.byPlatform.push({ platform: prov.canonical, items: bucket.items.slice(0, 13) });
+    out.byPlatform.push({ platform: prov.canonical, items: bucket.items.slice(0, 8) });
   }
   return out;
 }

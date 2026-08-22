@@ -108,7 +108,7 @@ export async function fetchIntent(text: string): Promise<string | null> {
   }
 }
 
-// Tiras "Top 10 en X" del home (catálogo por plataforma, popularidad TMDB por
+// Tiras "Top 5 en X" del home (catálogo por plataforma, popularidad TMDB por
 // región). Mismo caché de 6h que el home de la TV; el server lo tiene listo.
 export type TopItem = {
   title: string;
