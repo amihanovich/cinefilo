@@ -423,6 +423,17 @@ http
       return;
     }
 
+    // Un asset estático pedido (tv-lite.html, un .js, una imagen…) que no existe
+    // NO puede caer en silencio a la web legacy (SSR): eso mandaba a cualquiera
+    // con un link viejo/roto a `tv-lite.html` a una app completamente distinta
+    // (login, fondo claro) sin ninguna pista de qué pasó. Solo lo extensionless
+    // (rutas de la SPA legacy: /, /login, /control…) sigue yendo a SSR.
+    if (MIME[path.extname(urlPath)]) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("404: " + urlPath + " no encontrado");
+      return;
+    }
+
     ssrHandler(req, res);
   })
   .listen(port, () => {
