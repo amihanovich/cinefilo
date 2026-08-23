@@ -1,0 +1,386 @@
+// Panel "Mi cuenta" para la app mobile.
+// Modo guest: todo en localStorage. Sin Supabase auth por ahora.
+
+import { useEffect, useState } from "react";
+import { X, ChevronLeft, ChevronDown, ExternalLink, Tv, Download } from "lucide-react";
+import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
+import { openInApp } from "../lib/justwatch";
+import { fetchPostersClient } from "../lib/posters";
+
+// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+// Landing de descargas (muestra cómo instalar la app en el Android TV).
+const LANDING_URL = "https://landing-page-miru.up.railway.app/";
+const PLATFORMS_KEY = "miru:platforms";
+const WATCHLIST_KEY = "miru:watchlist";
+const LIKED_KEY = "miru:liked";
+const COUNTRY_KEY = "miru:country";
+
+// Países soportados para verificar disponibilidad (códigos JustWatch/ISO).
+const COUNTRIES: { code: string; label: string }[] = [
+  { code: "AR", label: "🇦🇷 Argentina" },
+  { code: "MX", label: "🇲🇽 México" },
+  { code: "ES", label: "🇪🇸 España" },
+  { code: "CL", label: "🇨🇱 Chile" },
+  { code: "CO", label: "🇨🇴 Colombia" },
+  { code: "PE", label: "🇵🇪 Perú" },
+  { code: "UY", label: "🇺🇾 Uruguay" },
+  { code: "BR", label: "🇧🇷 Brasil" },
+  { code: "US", label: "🇺🇸 Estados Unidos" },
+];
+
+type WatchlistItem = { title: string; platform: string; type?: string };
+type LikedItem = { title: string; platform: string; type?: string };
+
+function loadPlatforms(): string[] {
+  try { return JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[]; }
+  catch { return []; }
+}
+
+function savePlatforms(p: string[]): void {
+  localStorage.setItem(PLATFORMS_KEY, JSON.stringify(p));
+}
+
+function loadWatchlist(): WatchlistItem[] {
+  try { return JSON.parse(localStorage.getItem(WATCHLIST_KEY) ?? "[]") as WatchlistItem[]; }
+  catch { return []; }
+}
+
+function loadLiked(): LikedItem[] {
+  try { return JSON.parse(localStorage.getItem(LIKED_KEY) ?? "[]") as LikedItem[]; }
+  catch { return []; }
+}
+
+type Section = "main" | "watchlist" | "liked";
+
+interface AccountSheetProps {
+  open: boolean;
+  onClose: () => void;
+  onPlatformsChange?: (platforms: string[]) => void;
+  onCountryChange?: (country: string) => void;
+  onOpenTvRemote?: () => void;
+}
+
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote }: AccountSheetProps) {
+  const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
+  const [section, setSection] = useState<Section>("main");
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [liked, setLiked] = useState<LikedItem[]>([]);
+  const [country, setCountry] = useState<string>(() => localStorage.getItem(COUNTRY_KEY) ?? "AR");
+
+  const changeCountry = (code: string) => {
+    setCountry(code);
+    localStorage.setItem(COUNTRY_KEY, code);
+    onCountryChange?.(code);
+  };
+
+  useEffect(() => {
+    if (open) {
+      setPlatforms(loadPlatforms());
+      setWatchlist(loadWatchlist());
+      setLiked(loadLiked());
+      setSection("main");
+    }
+  }, [open]);
+
+  const togglePlatform = (p: string) => {
+    const next = platforms.includes(p) ? platforms.filter((x) => x !== p) : [...platforms, p];
+    setPlatforms(next);
+    savePlatforms(next);
+    onPlatformsChange?.(next);
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col bg-background shadow-2xl safe-top safe-bottom">
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-border px-5 py-4">
+          {section !== "main" ? (
+            <button
+              onClick={() => setSection("main")}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-transform"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          ) : (
+            <div className="h-8 w-8" />
+          )}
+          <h2 className="flex-1 text-center text-base font-bold text-foreground">
+            {section === "main" ? "Mi cuenta" : section === "watchlist" ? "Ver luego" : "Me gustó"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground active:scale-90 transition-transform"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          {section === "main" && (
+            <MainSection
+              platforms={platforms}
+              onToggle={togglePlatform}
+              watchlistCount={watchlist.length}
+              likedCount={liked.length}
+              country={country}
+              onCountryChange={changeCountry}
+              onOpenWatchlist={() => setSection("watchlist")}
+              onOpenLiked={() => setSection("liked")}
+              onOpenTvRemote={onOpenTvRemote ? () => { onClose(); onOpenTvRemote(); } : undefined}
+            />
+          )}
+          {section === "watchlist" && <ItemGallery items={watchlist} emptyText="Nada guardado todavía." />}
+          {section === "liked" && <ItemGallery items={liked} emptyText="Todavía no marcaste nada." />}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ─── Sección principal ─────────────────────────────────────────────────── */
+
+function MainSection({
+  platforms,
+  onToggle,
+  watchlistCount,
+  likedCount,
+  country,
+  onCountryChange,
+  onOpenWatchlist,
+  onOpenLiked,
+  onOpenTvRemote,
+}: {
+  platforms: string[];
+  onToggle: (p: string) => void;
+  watchlistCount: number;
+  likedCount: number;
+  country: string;
+  onCountryChange: (code: string) => void;
+  onOpenWatchlist: () => void;
+  onOpenLiked: () => void;
+  onOpenTvRemote?: () => void;
+}) {
+  return (
+    <div className="space-y-8">
+      {/* Plataformas */}
+      <section>
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Mis plataformas
+        </h3>
+        <p className="mb-4 text-xs text-muted-foreground/70">
+          Usadas en cada búsqueda. Si no elegís ninguna, busca en todas.
+        </p>
+        {/* Chips compactos: entran en 2-3 líneas en vez de ocupar toda la pantalla. */}
+        <div className="flex flex-wrap gap-2">
+          {PLATFORMS.map((p) => {
+            const active = platforms.includes(p);
+            const color = colorForPlatform(p);
+            return (
+              <button
+                key={p}
+                onClick={() => onToggle(p)}
+                className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95"
+                style={
+                  active
+                    ? { borderColor: color, backgroundColor: `${color}22`, color }
+                    : { borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)", color: "var(--color-muted-foreground)" }
+                }
+              >
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ backgroundColor: active ? color : "var(--color-muted-foreground)", opacity: active ? 1 : 0.35 }}
+                />
+                {platformLabel(p)}
+                {active && <span className="text-[10px] font-bold">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Actividad */}
+      <section>
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Mi actividad
+        </h3>
+        <div className="grid grid-cols-2 gap-3">
+          <StatCard
+            label="Ver luego"
+            count={watchlistCount}
+            emoji="🔖"
+            onClick={onOpenWatchlist}
+          />
+          <StatCard
+            label="Me gustó"
+            count={likedCount}
+            emoji="👍"
+            onClick={onOpenLiked}
+          />
+        </div>
+      </section>
+
+      {/* Región */}
+      <section>
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Mi región
+        </h3>
+        <div className="relative rounded-2xl bg-muted px-4 py-3">
+          <select
+            value={COUNTRIES.some((c) => c.code === country) ? country : "AR"}
+            onChange={(e) => onCountryChange(e.target.value)}
+            className="w-full appearance-none bg-transparent text-sm font-semibold text-foreground focus:outline-none"
+          >
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-4 top-3.5 h-4 w-4 text-muted-foreground/60" />
+          <p className="mt-0.5 text-xs text-muted-foreground/60">
+            Usada para verificar disponibilidad. Se detecta sola, pero podés corregirla.
+          </p>
+        </div>
+      </section>
+
+      {/* Miru en tu TV — controlar la TV desde el teléfono */}
+      <section>
+        <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Miru en tu TV
+        </h3>
+        <button
+          onClick={onOpenTvRemote}
+          disabled={!onOpenTvRemote}
+          className="flex w-full items-center gap-3 rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/10 to-purple-500/10 px-4 py-3.5 text-left active:scale-[0.98] transition-transform disabled:opacity-70"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/20">
+            <Tv className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Controlar la TV</p>
+            <p className="mt-0.5 text-xs text-muted-foreground/70">
+              Escaneá el QR de tu TV y usá el teléfono como control.
+            </p>
+          </div>
+        </button>
+
+        {/* Descargar la app de TV: abre la landing en el navegador (window.open
+            "_system", igual que el resto de los links externos del WebView).
+            La app de TV NO se baja al teléfono: se instala en el Android TV, y
+            la landing muestra el código de Downloader para hacerlo. */}
+        <button
+          onClick={() => window.open(LANDING_URL, "_system")}
+          className="mt-3 flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3 text-left active:scale-[0.98] transition-transform"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+            <Download className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-foreground">Instalar Miru en tu TV</p>
+            <p className="mt-0.5 text-xs text-muted-foreground/70">
+              Abrí la página de descarga para tu Android TV.
+            </p>
+          </div>
+          <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  count,
+  emoji,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  emoji: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={count === 0}
+      className="flex flex-col items-center gap-1.5 rounded-2xl bg-muted py-5 transition-all active:scale-95 disabled:opacity-40"
+    >
+      <span className="text-2xl">{emoji}</span>
+      <span className="text-xl font-bold text-foreground">{count}</span>
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+    </button>
+  );
+}
+
+/* ─── Galería de items ──────────────────────────────────────────────────── */
+
+function ItemGallery({ items, emptyText }: { items: (WatchlistItem | LikedItem)[]; emptyText: string }) {
+  const [posters, setPosters] = useState<Record<string, string | null>>({});
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    void fetchPostersClient(
+      items.map((i) => ({ title: i.title, type: i.type ?? "Película" }))
+    ).then(setPosters);
+  }, [items]);
+
+  if (items.length === 0) {
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground/60">{emptyText}</p>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {items.map((item) => {
+        const color = colorForPlatform(item.platform);
+        const poster = posters[item.title];
+        const link = deepLinkFor(item.platform, item.title);
+        return (
+          <div key={item.title} className="overflow-hidden rounded-2xl bg-muted">
+            <div className="relative h-28 w-full" style={!poster ? { backgroundColor: `${color}18` } : undefined}>
+              {poster ? (
+                <img src={poster} alt={item.title} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="text-4xl font-black opacity-10" style={{ color }}>
+                    {item.title.charAt(0)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="p-2.5">
+              <p className="line-clamp-2 text-[11px] font-semibold leading-tight text-foreground">
+                {item.title}
+              </p>
+              {item.platform && (
+                <div className="mt-1 flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="text-[10px] text-muted-foreground/60">{platformLabel(item.platform)}</span>
+                </div>
+              )}
+              {/* openInApp: <a target=_blank> no funciona en el WebView de Capacitor */}
+              <button
+                onClick={() => void openInApp(item.platform, link, item.title)}
+                className="mt-2 flex items-center gap-1 text-[10px] font-semibold active:scale-95 transition-transform"
+                style={{ color }}
+              >
+                <ExternalLink className="h-2.5 w-2.5" />
+                Ver ahora
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

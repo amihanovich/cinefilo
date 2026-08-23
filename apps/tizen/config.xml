@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Manifiesto del widget Tizen (W3C Widget + extensiones Tizen). Ver
+  apps/tizen/README.md para el setup completo (Tizen Studio, certificado,
+  modo desarrollador, instalación).
+
+  ⚠️ El prefijo "XXXXXXXXXX" del id de abajo es un placeholder: Tizen Studio
+  lo genera de verdad al crear el certificado de autor (Certificate Manager)
+  y hay que reemplazarlo por el real ANTES de empaquetar — no es un valor
+  que se pueda inventar, cada certificado tiene el suyo.
+-->
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://miru-ai.up.railway.app/tizen"
+        version="0.1.0"
+        viewmodes="fullscreen">
+  <tizen:application id="XXXXXXXXXX.MiruTV"
+                      package="XXXXXXXXXX"
+                      required_version="4.0"/>
+  <name>Miru</name>
+  <icon src="icon.png"/>
+  <content src="index.html"/>
+  <tizen:profile name="tv-samsung"/>
+  <!-- Sin esto, la política de origen de Tizen bloquea la navegación hacia
+       el dominio de Railway — es el equivalente Tizen de lo que en Android
+       resuelve directamente el campo server.url de Capacitor. -->
+  <access origin="*" subdomains="true"/>
+  <tizen:setting screen-orientation="landscape"
+                 context-menu="disable"
+                 background-support="disable"
+                 encryption="disable"
+                 install-location="auto"
+                 hwkey-event="enable"/>
+</widget>

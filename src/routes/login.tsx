@@ -70,7 +70,7 @@ function LoginPage() {
         <div className="mb-6 text-center">
           <div className="mb-3 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Cinéfilo
+            Miru
           </div>
           <h1 className="text-3xl font-bold text-foreground">
             {mode === "signin"

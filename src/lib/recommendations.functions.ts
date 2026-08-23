@@ -11,6 +11,10 @@ const recSchema = z.object({
   platform: z.string(),
   duration: z.string(),
   type: z.string(),
+  year: z.string().optional(),
+  ageRating: z.string().optional(),
+  // synopsis: opcional; solo lo pide la vista TV (recommendFromText).
+  synopsis: z.string().optional(),
   reason: z.string(),
 });
 
@@ -26,31 +30,35 @@ const filtersOutSchema = z.object({
 const resultSchema = z.object({
   filters: filtersOutSchema,
   main: recSchema,
-  alternatives: z.array(recSchema).min(2).max(12),
+  alternatives: z.array(recSchema).min(2).max(20),
   clarification_needed: z.string().nullable().optional(),
+  cinephile_note: z.string().nullable().optional(),
 });
 
-const SYSTEM_BASE = `Eres un experto recomendador de streaming en español. Tu trabajo: en máximo 90 segundos, decirle al usuario exactamente qué ver esta noche en alguna de las plataformas que ya paga.
+const SYSTEM_BASE = `Sos Miru: un experto cinematográfico apasionado con décadas de inmersión en el cine de todos los géneros y épocas. Tu conocimiento abarca desde el Hollywood clásico hasta el Neorrealismo italiano, la Nouvelle Vague francesa, el New Hollywood de los 70, el cine latinoamericano y el cine asiático contemporáneo. Sos como esos críticos y comunicadores de los programas de televisión de los años 60, 70 y 80 que con una sola frase abrían una puerta a un mundo cinematográfico desconocido — apasionados, directos, con criterio propio. Tu trabajo: decirle al usuario exactamente qué ver esta noche en alguna de las plataformas que ya paga.
 
 Reglas estrictas:
 - "platform" debe ser EXACTAMENTE una de las plataformas listadas.
 - Ajusta la duración al tiempo disponible (no recomiendes 2h si tiene 30 min).
 - Si el tipo es "Capítulo de serie", recomienda solo series.
-- Sé específico — evita blockbusters genéricos si hay algo más a medida.
+- Sé específico — evitá blockbusters genéricos si hay algo más a medida.
 - "type" debe ser "Película" o "Serie".
-- "reason" entre 25 y 45 palabras, en español, sin emojis. DEBE referenciar explícitamente 2 o 3 de las variables del contexto que más pesaron en la elección (ej: "Para un martes a las 23h, con clima nublado y eligiendo 'de fondo'…"). Sé concreto, no abstracto.
-- Devuelve 1 recomendación principal + entre 6 y 12 alternativas distintas entre sí (idealmente de plataformas distintas si es posible). Cada alternativa también debe justificar por qué encaja, idealmente atacando un ángulo distinto del contexto que la principal.
+- "reason" entre 12 y 18 palabras, en español, sin emojis. Referenciá el factor clave del contexto que más pesó. Sé concreto y directo.
+- Devolvé 1 recomendación principal + exactamente 5 alternativas distintas entre sí (de plataformas distintas si es posible). Cada alternativa justifica brevemente por qué encaja.
 - Tomá en cuenta la estación del año y el clima si están en el contexto — un domingo lluvioso de otoño pide algo distinto a un sábado soleado.
 - Si "atención" es "De fondo", priorizá contenido episódico, ligero, fácil de pausar; si es "Inmersivo", priorizá calidad cinematográfica; si es "Comfort watch", algo conocido o reconfortante.
 - Si "novedad" es "Algo conocido" o "Ya visto", priorizá clásicos/franquicias reconocibles; si es "Algo nuevo", priorizá estrenos recientes o títulos poco mainstream.
-- En "filters", devuelve los valores que efectivamente usaste para razonar (los explícitos del usuario, o los que tú elegiste si vino null). Para texto libre, indica los valores que dedujiste del texto.
-- Si el pedido en texto libre es demasiado ambiguo para recomendar, devuelve recomendaciones de tu mejor interpretación y opcionalmente un "clarification_needed" corto pidiendo más detalle. Solo en casos extremos.
+- En "filters", devolvé los valores que efectivamente usaste para razonar (los explícitos del usuario, o los que vos elegiste si vino null). Para texto libre, indicá los valores que dedujiste del texto.
+- Si el pedido en texto libre es demasiado ambiguo para recomendar, devolvé recomendaciones de tu mejor interpretación y opcionalmente un "clarification_needed" corto pidiendo más detalle. Solo en casos extremos.
 - Si el contexto incluye "Títulos a excluir", JAMÁS los recomiendes (ni en main ni en alternatives). Ya las vio o las descartó. Buscá alternativas frescas que mantengan el espíritu del pedido pero sean distintas.
 - Si el contexto incluye "Le encantó" y/o "Le gustó", usalo como SEÑAL FUERTE del gusto del usuario: tono, géneros, directores, ritmo, sensibilidad. NUNCA recomiendes esos mismos títulos otra vez, pero sí buscá títulos en esa misma línea (mismo director, mismo género/era/sensibilidad). Cuando esa preferencia influya la elección, mencionalo brevemente en "reason" (ej: "Como te encantó X, te puede atrapar…").
 - Priorizá títulos ampliamente conocidos con presencia estable en la plataforma indicada. Evitá estrenos de los últimos 6 meses salvo que tengas alta certeza de disponibilidad. Si el título es de nicho o distribución limitada, preferí una alternativa más segura. El objetivo es que el usuario encuentre el contenido cuando lo busca.
+- CLASIFICACIÓN: Incluí siempre "year" (año de estreno, ej: "2019") y "ageRating" en cada recomendación. Para "ageRating" usá: "ATP" (apto para todo público, equivalente a G), "PG" (mayores de 6 con guía parental), "+13" (mayores de 13), "+16" (mayores de 16), "+18" (adultos). Si no estás seguro, usá el valor más conservador.
+- FAMILIA CON NIÑOS / CONTENIDO INFANTIL: Si compañía es "Familia con niños", o el pedido menciona palabras como niños, hijos, chicos, kids, infantil, familiar, "con los chicos", "con mis hijos", o pide una película para ver con menores de edad → es OBLIGATORIO que main Y TODAS las alternatives sean únicamente contenido ATP o PG como máximo. JAMÁS recomiendes contenido +13, +16, +18, R, PG-13 o equivalente en ese contexto. Sin excepciones.
+- NOTA DE MIRU ("cinephile_note"): Escribí 1-2 oraciones en primera persona con voz de experto apasionado. Podés mencionar al director, el movimiento cinematográfico, el contexto histórico del título, por qué es una joya subvalorada, o una conexión con otro gran film. Si es una segunda vuelta (hay historial de conversación), arrancá reconociendo el ajuste del usuario ("Si buscás algo más oscuro…", "Entiendo, querés más adrenalina…"). Tono cálido, rioplatense, sin emojis. Máximo 35 palabras.
 
-FORMATO DE SALIDA: Devuelve ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:
-{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""},{"title":"","platform":"","duration":"","type":"","reason":""}],"clarification_needed":null}`;
+FORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:
+{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},"alternatives":[{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""},{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","reason":""}],"clarification_needed":null,"cinephile_note":""}`;
 
 function parseAiJson<T>(text: string, schema: z.ZodType<T>): T {
   const cleaned = text
@@ -61,9 +69,7 @@ function parseAiJson<T>(text: string, schema: z.ZodType<T>): T {
   const firstBrace = cleaned.indexOf("{");
   const lastBrace = cleaned.lastIndexOf("}");
   const jsonStr =
-    firstBrace >= 0 && lastBrace > firstBrace
-      ? cleaned.slice(firstBrace, lastBrace + 1)
-      : cleaned;
+    firstBrace >= 0 && lastBrace > firstBrace ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned;
   return schema.parse(JSON.parse(jsonStr));
 }
 
@@ -145,7 +151,9 @@ function buildTasteLine(taste: TasteSnapshot | null): string {
   if (taste.loved.length > 0) parts.push(`Le encantó (señal fuerte): ${taste.loved.join(", ")}`);
   if (taste.liked.length > 0) parts.push(`Le gustó: ${taste.liked.join(", ")}`);
   if (taste.disliked.length > 0)
-    parts.push(`NO le gustó (señal negativa fuerte — evitá títulos similares en tono/género/director): ${taste.disliked.join(", ")}`);
+    parts.push(
+      `NO le gustó (señal negativa fuerte — evitá títulos similares en tono/género/director): ${taste.disliked.join(", ")}`,
+    );
   return parts.length ? `\n\nGusto del usuario:\n- ${parts.join("\n- ")}` : "";
 }
 
@@ -170,9 +178,9 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-sonnet-4-5");
+    const model = provider("claude-haiku-4-5-20251001");
 
-    const fmt = (v: string | null) => (v ?? "Elegí por mí (decide tú)");
+    const fmt = (v: string | null) => v ?? "Elegí por mí (decide tú)";
 
     const extra = data.extraText?.trim()
       ? `\n\nAdemás, el usuario añadió este matiz en texto libre (combinalo con los filtros):\n"""\n${data.extraText.trim()}\n"""`
@@ -205,7 +213,9 @@ export const recommendFromFilters = createServerFn({ method: "POST" })
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? undefined }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? undefined,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -242,7 +252,7 @@ Pedido del usuario (filtros):
 Recuerda: "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -291,7 +301,7 @@ export const recommendFromText = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-sonnet-4-5");
+    const model = provider("claude-haiku-4-5-20251001");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -318,7 +328,9 @@ export const recommendFromText = createServerFn({ method: "POST" })
     }
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? data.text.length }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? data.text.length,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -351,10 +363,14 @@ Tu tarea:
 1. Inferir del texto: tiempo aproximado, compañía, mood, tipo, nivel de atención y novedad. Si algo no está claro, deducí lo más razonable según el contexto.
 2. Recomendá basándote en esa inferencia + contexto ambiental.
 3. En "filters", devolvé los valores que dedujiste (catálogo: tiempo "30 min"|"1 hora"|"1.5 horas"|"Noche entera"; tipo "Película"|"Serie"|"Capítulo de serie"; atención "Inmersivo"|"De fondo"|"Comfort watch"; novedad "Algo nuevo"|"Algo conocido"|"Ya visto (rever)").
-4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
+4. "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.
+
+IMPORTANTE (vista TV): ignorá la cantidad de alternativas indicada más arriba. Para esta búsqueda devolvé 1 principal + EXACTAMENTE 14 alternativas distintas entre sí (es una grilla grande para televisor). Mantené la misma forma de JSON, solo con más objetos en "alternatives".
+
+Además, en CADA objeto (main y cada alternative) agregá un campo "synopsis": una frase breve (máx 20 palabras) que diga de qué trata la película/serie, sin spoilers. Y en "reason" explicá por qué la elegiste para ESTA lista, conectándola con el pedido del usuario. Si algún título se aleja del pedido original (porque ya se agotaron las opciones más obvias), aclaralo explícitamente en su "reason" (ej: "Se aleja un poco de lo que pediste, pero...").`;
 
     try {
-      const { text } = await generateText({ model, prompt });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 3500 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -406,7 +422,7 @@ export const recommendConversational = createServerFn({ method: "POST" })
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
 
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-sonnet-4-5");
+    const model = provider("claude-haiku-4-5-20251001");
 
     const envParts: string[] = [];
     if (data.seasonHint) envParts.push(`Estación: ${data.seasonHint}`);
@@ -434,7 +450,9 @@ export const recommendConversational = createServerFn({ method: "POST" })
     const seedLine = buildProfileSeedLine(effectiveSeed);
     const lastMsg = data.messages[data.messages.length - 1].content;
     const personalityLine = user
-      ? (await buildViewerPersonality(user.supabase, user.userId, { currentQueryLength: data.currentQueryLength ?? lastMsg.length }))
+      ? await buildViewerPersonality(user.supabase, user.userId, {
+          currentQueryLength: data.currentQueryLength ?? lastMsg.length,
+        })
       : null;
     const personalitySection = personalityLine ? `\n\n${personalityLine}` : "";
 
@@ -457,9 +475,7 @@ export const recommendConversational = createServerFn({ method: "POST" })
     const historyLines =
       prior.length > 0
         ? `\nHistorial de la conversación:\n${prior
-            .map((m) =>
-              m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`,
-            )
+            .map((m) => (m.role === "user" ? `Usuario: ${m.content}` : `Vos: ${m.content}`))
             .join("\n")}\n`
         : "";
 
@@ -474,11 +490,11 @@ ${lastMsg}
 """
 ${tasteLine}${seedLine}${personalitySection}${excludeLine}
 
-${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"algo más viejo\", \"sin violencia\", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados." : ""}
+${prior.length > 0 ? 'Importante: es una conversación. Si el usuario refina ("algo más viejo", "sin violencia", etc.), tomalo como ajuste del pedido anterior. No repitas títulos ya recomendados.' : ""}
 "platform" debe ser EXACTAMENTE una de: ${data.platforms.join(", ")}.`;
 
     try {
-      const { text } = await generateText({ model, prompt });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, resultSchema);
       if (user) {
         await logHistory(user.supabase, user.userId, {
@@ -501,6 +517,58 @@ ${prior.length > 0 ? "Importante: es una conversación. Si el usuario refina (\"
     }
   });
 
+/* ---------- askAboutTitle (detail/argument mode) ---------- */
+
+const askAboutTitleSchema = z.object({
+  title: z.string().min(1).max(200),
+  platform: z.string().min(1).max(80),
+  userQuestion: z.string().min(1).max(500),
+  history: z
+    .array(z.object({ title: z.string(), question: z.string(), answer: z.string() }))
+    .max(6)
+    .optional()
+    .default([]),
+});
+
+const DETAIL_SYSTEM = `Sos Miru: un experto cinematográfico apasionado que conoce cada película y serie en profundidad. Cuando el usuario te pregunta sobre un título específico, respondés con criterio, pasión y precisión — como ese crítico televisivo de los 70 que abría una ventana al cine con una sola frase. Usás primera persona, tono rioplatense cálido, sin emojis. Máximo 2 oraciones. Nunca recomendés otro título: el foco es SOLO el título preguntado.
+
+IMPORTANTE: Si ya explicaste otros títulos antes en esta conversación (ver historial), no repitas fórmulas de apertura como "Esta trata de..." — arrancá de otro ángulo, como si continuaras la charla: "Y esta otra...", "En cambio acá...", "Esta va por otro lado...", etc. Variá el tono para que suene natural, no repetitivo.`;
+
+export const askAboutTitle = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => askAboutTitleSchema.parse(data))
+  .handler(async ({ data }) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+
+    const provider = createAiProvider(apiKey);
+    const model = provider("claude-haiku-4-5-20251001");
+
+    const historySection =
+      data.history.length > 0
+        ? `\nHistorial de esta sesión (lo que ya explicaste):\n${data.history
+            .map((h) => `- ${h.title}: "${h.answer}"`)
+            .join("\n")}\n`
+        : "";
+
+    const prompt = `${DETAIL_SYSTEM}
+${historySection}
+Título actual: ${data.title} (disponible en ${data.platform})
+
+Pregunta del usuario:
+"""
+${data.userQuestion}
+"""
+
+Respondé en MÁXIMO 2 oraciones. Directo, concreto, apasionado. Sin rodeos.`;
+
+    try {
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 300 });
+      return { text: text.trim() };
+    } catch (err) {
+      throw mapErr(err);
+    }
+  });
+
 /* ---------- inferMomentFilters (text → filter values) ---------- */
 
 const inferInputSchema = z.object({
@@ -513,7 +581,7 @@ export const inferMomentFilters = createServerFn({ method: "POST" })
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
     const provider = createAiProvider(apiKey);
-    const model = provider("claude-sonnet-4-5");
+    const model = provider("claude-haiku-4-5-20251001");
 
     const prompt = `Eres un asistente que traduce la descripción de una situación recurrente de ver streaming a filtros estructurados.
 
@@ -535,7 +603,7 @@ Reglas:
 - Si un campo no se infiere razonablemente, usa null (no inventes).`;
 
     try {
-      const { text } = await generateText({ model, prompt });
+      const { text } = await generateText({ model, prompt, maxOutputTokens: 1100 });
       const result = parseAiJson(text, filtersOutSchema);
       return result;
     } catch (err) {

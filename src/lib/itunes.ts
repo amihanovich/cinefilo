@@ -1,9 +1,18 @@
-// Client-side iTunes poster fetcher (called directly from the browser — no server hop)
-// iTunes Search API supports CORS, so this avoids server IP throttling.
+// Poster fetching (client-side): Cinemeta (catálogo de Stremio) como fuente
+// PRINCIPAL, con iTunes + Wikipedia como respaldo. Las tres soportan CORS desde
+// el browser. Estándar único de pósters en todo Miru (móvil, TV y web) — ver
+// ARCHITECTURE.md. Mantiene las firmas públicas `fetchPosterClient` /
+// `fetchPostersClient` (los consumidores no cambian).
+//
+// Cinemeta es mucho más confiable que iTunes: sin rate-limiting agresivo y los
+// pósters salen del CDN de Stremio (images.metahub.space). iTunes quedaba sin
+// póster cuando se disparaban muchas búsquedas en ráfaga.
+
+// Caché en memoria: una vez resuelto un título, no se vuelve a pedir.
+const posterCache = new Map<string, string | null>();
 
 function upscale(url: string): string {
-  // Replace any size suffix like /100x100bb.jpg or /500x750bb.jpg with /600x900bb.jpg
-  return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x900bb.$1");
+  return url.replace(/\/\d+x\d+bb\.(jpg|png|webp)$/i, "/600x600bb.$1");
 }
 
 function normalizeTitle(title: string): string {
@@ -33,7 +42,30 @@ function titleScore(result: string, expected: string): number {
   return 0;
 }
 
-async function searchOne(
+// Cinemeta (Stremio): fuente principal de pósters. Busca en el catálogo por título.
+async function searchCinemeta(title: string, type: string): Promise<string | null> {
+  const cType = isSeries(type) ? "series" : "movie";
+  try {
+    const url = `https://v3-cinemeta.strem.io/catalog/${cType}/top/search=${encodeURIComponent(title)}.json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { metas?: Array<{ name?: string; poster?: string }> };
+    const metas = data.metas ?? [];
+    if (metas.length === 0) return null;
+
+    let best = metas[0];
+    let bestScore = -1;
+    for (const m of metas) {
+      const score = titleScore(m.name ?? "", title);
+      if (score > bestScore) { bestScore = score; best = m; }
+    }
+    return best.poster ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function searchItunes(
   title: string,
   media: "movie" | "tvShow",
   country: string,
@@ -41,23 +73,21 @@ async function searchOne(
   try {
     const entity = media === "movie" ? "movie" : "tvSeason";
     const url = `https://itunes.apple.com/search?term=${encodeURIComponent(title)}&media=${media}&entity=${entity}&limit=5&country=${country}`;
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(3000),
+    });
     if (!res.ok) return null;
-    const data = await res.json();
-    const results: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> =
-      data.results ?? [];
+    const data = (await res.json()) as { results?: Array<{ artworkUrl100?: string; trackName?: string; collectionName?: string }> };
+    const results = data.results ?? [];
     if (results.length === 0) return null;
 
-    // Pick the result that best matches the title
     let best = results[0];
     let bestScore = -1;
     for (const r of results) {
       const name = r.trackName ?? r.collectionName ?? "";
       const score = titleScore(name, title);
-      if (score > bestScore) {
-        bestScore = score;
-        best = r;
-      }
+      if (score > bestScore) { bestScore = score; best = r; }
     }
 
     const art = best.artworkUrl100;
@@ -68,38 +98,85 @@ async function searchOne(
   }
 }
 
-export async function fetchPosterClient(title: string, type: string): Promise<string | null> {
+async function searchWikipedia(title: string, year?: string): Promise<string | null> {
+  const queries: string[] = [`${title} film`];
+  if (year) queries.push(`${title} ${year}`);
+
+  const tryQuery = async (q: string, lang = "en"): Promise<string | null> => {
+    try {
+      const url =
+        `https://${lang}.wikipedia.org/w/api.php?action=query` +
+        `&titles=${encodeURIComponent(q)}` +
+        `&prop=pageimages&pithumbsize=600&format=json&origin=*`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { query?: { pages?: Record<string, { missing?: string; thumbnail?: { source?: string } }> } };
+      const pages = data?.query?.pages ?? {};
+      const page = Object.values(pages)[0];
+      if (!page || "missing" in page) return null;
+      return page.thumbnail?.source ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const results = await Promise.all([
+    ...queries.map((q) => tryQuery(q, "en")),
+    tryQuery(title, "es"),
+  ]);
+  return results.find(Boolean) ?? null;
+}
+
+export async function fetchPosterClient(title: string, type: string, year?: string): Promise<string | null> {
+  if (posterCache.has(title)) return posterCache.get(title) ?? null;
+
   const clean = normalizeTitle(title);
   const noArticle = stripArticle(clean);
   const media: "movie" | "tvShow" = isSeries(type) ? "tvShow" : "movie";
   const altMedia: "movie" | "tvShow" = media === "movie" ? "tvShow" : "movie";
 
-  // First round: primary media type, US + AR
-  const [usMain, arMain] = await Promise.all([
-    searchOne(clean, media, "us"),
-    searchOne(clean, media, "ar"),
-  ]);
-  if (usMain ?? arMain) return usMain ?? arMain;
+  const deadline = new Promise<null>((r) => setTimeout(() => r(null), 7000));
 
-  // Second round: alternate media type + strip article
-  const [usAlt, arAlt, usNo, arNo] = await Promise.all([
-    searchOne(clean, altMedia, "us"),
-    searchOne(clean, altMedia, "ar"),
-    noArticle !== clean ? searchOne(noArticle, media, "us") : Promise.resolve(null),
-    noArticle !== clean ? searchOne(noArticle, media, "ar") : Promise.resolve(null),
-  ]);
+  const search = async (): Promise<string | null> => {
+    // Ronda 1: Cinemeta (Stremio) — fuente principal, confiable.
+    const cineMain = await searchCinemeta(clean, type);
+    if (cineMain) return cineMain;
+    // Cinemeta con el otro tipo (a veces la IA marca mal película/serie)
+    const cineAlt = await searchCinemeta(clean, isSeries(type) ? "Película" : "Serie");
+    if (cineAlt) return cineAlt;
 
-  return usAlt ?? arAlt ?? usNo ?? arNo ?? null;
+    // Ronda 2: iTunes (US + AR) en paralelo — respaldo.
+    const [usMain, arMain] = await Promise.all([
+      searchItunes(clean, media, "us"),
+      searchItunes(clean, media, "ar"),
+    ]);
+    if (usMain ?? arMain) return usMain ?? arMain;
+
+    // Ronda 3: iTunes media alternativo + sin artículo + ES.
+    const [usAlt, arAlt, usNo, esMain] = await Promise.all([
+      searchItunes(clean, altMedia, "us"),
+      searchItunes(clean, altMedia, "ar"),
+      noArticle !== clean ? searchItunes(noArticle, media, "us") : Promise.resolve(null),
+      searchItunes(clean, media, "es"),
+    ]);
+    const itunesResult = usAlt ?? arAlt ?? usNo ?? esMain ?? null;
+    if (itunesResult) return itunesResult;
+
+    // Ronda 4: Wikipedia fallback
+    return searchWikipedia(clean, year);
+  };
+
+  const result = await Promise.race([search(), deadline]);
+  posterCache.set(title, result);
+  return result;
 }
 
+// Todos los ítems en paralelo — cada uno con su propio tope adentro de fetchPosterClient.
 export async function fetchPostersClient(
-  items: { title: string; type: string }[],
+  items: { title: string; type: string; year?: string }[],
 ): Promise<Record<string, string | null>> {
-  // Sequential with small delay to avoid iTunes rate-limiting
-  const result: Record<string, string | null> = {};
-  for (const it of items) {
-    result[it.title] = await fetchPosterClient(it.title, it.type);
-    await new Promise<void>((r) => setTimeout(r, 120));
-  }
-  return result;
+  const entries = await Promise.all(
+    items.map(async (it) => [it.title, await fetchPosterClient(it.title, it.type, it.year)] as const),
+  );
+  return Object.fromEntries(entries);
 }

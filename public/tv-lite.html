@@ -1,0 +1,2775 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miru</title>
+<style>
+  /* Paleta oscura / cinematográfica: casi-negro + texto claro + acento coral. */
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0E0E10; color:#F5F5F7;
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing:antialiased; }
+  /* Misma tipografía que la app móvil (stack del sistema, sin serif de marca). */
+  .serif { font-family:inherit; }
+  .top { display:flex; align-items:center; justify-content:space-between; padding:18px 34px; border-bottom:1px solid #26262A; background:#141416; }
+  .brand { font-family:inherit; font-size:30px; font-weight:600; letter-spacing:-.01em; color:#F5F5F7; }
+  .brand span { color:#8852E0; }
+  .ai { font-size:13px; color:#8A8A93; margin-left:10px; font-family:inherit; }
+  .badge { font-size:16px; color:#C9C9CE; background:#1C1C1F; border:1px solid #2A2A2E; border-radius:999px; padding:7px 15px; }
+  .dot { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:8px; vertical-align:middle; background:#4A4A50; }
+  .dot.on { background:#3F9E6F; } .dot.wait { background:#D9A23B; }
+
+  /* === Landing / vinculación: QR protagonista | cintas de pósters de fondo ===
+     OJO con las medidas: la WebView de la TV corre con DPR 2, así que el viewport
+     CSS es 960x540 (no 1920x1080). El alto útil de .pairleft es ~465px
+     (540 - 75 del top), así que el QR no puede pasar de ~300px o se corta el
+     texto de abajo. 300px CSS = 600px reales en pantalla: se escanea a ~3 m. */
+  .pair { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
+  .pairleft { width:46%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:10px; padding:0 30px; border-right:1px solid #1E1E22; }
+  .qrbox { align-self:flex-start; background:#fff; padding:12px; border-radius:18px; box-shadow:0 14px 44px rgba(136,82,224,.26); }
+  .qrbox img { display:block; width:300px; height:300px; image-rendering:pixelated; }
+  .pairleft h1 { font-family:inherit; font-size:22px; font-weight:600; margin:2px 0 0; color:#F5F5F7; line-height:1.15; }
+  .pairleft .sub { font-size:15px; color:#B4B4BC; margin:0; max-width:340px; line-height:1.35; }
+  .sess { margin-top:2px; color:#6A6A72; font-size:13px; }
+
+  /* === Pantalla de elección (mecánica Disney): elegir cómo manejar la TV === */
+  .choose { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
+  .chooseleft { width:54%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:14px; padding:0 30px; border-right:1px solid #1E1E22; }
+  .chooseleft h1 { font-size:24px; font-weight:600; margin:0; color:#F5F5F7; line-height:1.15; }
+  .chcards { display:flex; gap:14px; }
+  .chcard { flex:1; background:#151518; border:2px solid #26262B; border-radius:16px; padding:18px 16px; }
+  .chcard .chico { font-size:30px; margin-bottom:8px; }
+  .chcard h2 { font-size:17px; font-weight:600; margin:0 0 6px; color:#F5F5F7; }
+  .chcard p { font-size:13px; color:#B4B4BC; margin:0; line-height:1.4; }
+  .chcard.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.28), 0 10px 30px rgba(136,82,224,.18); background:#191722; }
+  .chhint { font-size:12px; color:#6A6A72; }
+
+  /* Banner discreto de "control desconectado" (modo vinculado): informa sin
+     expulsar al QR — el contenido sigue en pantalla y el D-pad sigue vivo. */
+  .dcban { position:fixed; left:0; right:0; bottom:0; z-index:60; background:#1C1C1F; border-top:1px solid #2A2A30;
+    color:#D9D9DE; font-size:13px; padding:9px 16px; display:flex; align-items:center; gap:8px; }
+  .dcban b { color:#F0B429; font-weight:600; }
+
+  /* Toast de 3s (ej. "Control vinculado"). */
+  .toast { position:fixed; top:60px; right:18px; z-index:70; background:rgba(20,20,24,.94); border:1px solid #8852E0;
+    color:#F5F5F7; font-size:13px; padding:9px 14px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    opacity:0; -webkit-transform:translateY(-6px); transform:translateY(-6px);
+    transition:opacity .25s, -webkit-transform .25s, transform .25s; pointer-events:none; }
+  .toast.show { opacity:1; -webkit-transform:translateY(0); transform:translateY(0); }
+
+  /* === Modo RC (control físico): fila de accesos + teclado + filtros === */
+  .tabs { display:flex; gap:8px; margin:2px 0 8px; }
+  .tab { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:600;
+    color:#B4B4BC; background:#151518; border:2px solid #26262B; }
+  .tab.foc { color:#fff; border-color:#8852E0; background:#191722; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
+  .tab .cnt { font-size:11px; color:#8A8A93; font-weight:600; }
+  /* Tab de mic: siempre el primero, con look distinto (violeta) para que se
+     lea como "el botón de voz" y no como un ítem de menú más. */
+  .tab.mictab { background:#1D1730; border-color:#3A2465; }
+  .tab.mictab.rec { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
+  .tab.mictab.rec::before { content:"●"; color:#8852E0; margin-right:5px; animation:micpulse 1.1s ease-in-out infinite; }
+  @keyframes micpulse { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+
+  /* Teclado en pantalla (grid propio navegable con D-pad). */
+  .kb { max-width:660px; margin:12px auto 0; }
+  .kbbuf { background:#151518; border:2px solid #26262B; border-radius:12px; min-height:46px; padding:10px 14px;
+    font-size:20px; color:#F5F5F7; margin-bottom:12px; }
+  .kbbuf .cur { display:inline-block; width:2px; height:22px; background:#8852E0; vertical-align:middle; margin-left:2px; }
+  .kbbuf .ph { color:#55555C; }
+  .kbrow { display:flex; gap:6px; justify-content:center; margin-bottom:6px; }
+  .key { min-width:56px; height:44px; display:inline-flex; align-items:center; justify-content:center;
+    background:#151518; border:2px solid #26262B; border-radius:10px; font-size:16px; color:#D9D9DE; }
+  .key.wide { min-width:120px; font-size:13px; }
+  .key.go { background:#3A2465; border-color:#8852E0; color:#fff; }
+  .key.foc { border-color:#fff; box-shadow:0 0 0 3px rgba(136,82,224,.4); color:#fff; }
+  .kbhint { text-align:center; font-size:12px; color:#6A6A72; margin-top:8px; }
+
+  /* Filtros de plataformas (modo RC). */
+  .filters { max-width:640px; margin:20px auto 0; }
+  .filters h2 { font-size:20px; font-weight:600; margin:0 0 4px; }
+  .filters .fsub { font-size:13px; color:#8A8A93; margin:0 0 14px; }
+  .fchips { display:flex; flex-wrap:wrap; gap:10px; }
+  .fchip { display:inline-flex; align-items:center; gap:8px; border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600;
+    color:#B4B4BC; background:#151518; border:2px solid #26262B; }
+  .fchip .fdot { width:9px; height:9px; border-radius:50%; }
+  .fchip.on { color:#fff; background:#191722; }
+  .fchip.foc { border-color:#fff; box-shadow:0 0 0 3px rgba(136,82,224,.4); }
+  .fchip.done { background:#3A2465; border-color:#8852E0; color:#fff; }
+
+  /* Cintas de pósters: columnas que suben y bajan en loop, difuminadas, como
+     fondo ambiental. Sin títulos ni sombras al frente — no compiten con el QR. */
+  .ribbons { flex:1; position:relative; overflow:hidden; opacity:.40;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
+            mask-image:linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%); }
+  /* El track va ABSOLUTO a propósito: las cintas son mucho más altas que la
+     pantalla y, en flujo normal, estiraban .pair y empujaban el QR fuera de
+     la vista (overflow:hidden recorta, pero NO impide que el div crezca). */
+  .ribbons .track { position:absolute; inset:0; display:flex; align-items:flex-start; gap:14px; padding:0 20px; }
+  .ribbon { flex:1; display:flex; flex-direction:column; will-change:transform; animation:ribUp 48s linear infinite; }
+  /* El contenido de cada cinta va DUPLICADO, por eso -50% cierra el loop exacto.
+     El margin-bottom (en vez de gap) hace que media altura sea justo una copia. */
+  .ribbon img { display:block; width:100%; aspect-ratio:2/3; object-fit:cover; margin-bottom:14px; border-radius:14px; background:#161619; }
+  .ribbon.b { animation-name:ribDown; animation-duration:58s; }
+  .ribbon.c { animation-duration:66s; }
+  @keyframes ribUp   { from { transform:translateY(0); }      to { transform:translateY(-50%); } }
+  @keyframes ribDown { from { transform:translateY(-50%); }   to { transform:translateY(0); } }
+
+  /* === Resultados / home === */
+  .wrap { padding:10px 30px 16px; }
+  .topline { font-size:17px; color:#B4B4BC; margin-bottom:8px; }
+  .topline b { color:#F5F5F7; }
+  .topline .hint { color:#8852E0; font-weight:600; }
+
+  .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
+
+  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:7px 0 5px; color:#F5F5F7; }
+  .sec:first-child { margin-top:0; }
+
+  /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
+     El póster NO se estira a todo el ancho: las carátulas de Cinemeta son
+     chicas y a pantalla completa se pixelaban mucho. === */
+  /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
+     comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
+  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
+  /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
+  /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
+     así la razón llega más a la derecha y entra en menos líneas. */
+  .hero .hside { position:relative; width:26%; flex:0 0 auto; overflow:hidden; }
+  .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.55) 40%, rgba(16,16,19,.15) 75%, rgba(16,16,19,0) 100%); }
+  /* padding-left 68px: deja el carril del chevron ‹ libre para que el texto no
+     pase por debajo (antes se montaban). */
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:14px 22px 14px 68px; }
+  /* Panel de texto SIN caja: fondo transparente para no tapar el hero (pedido
+     de diseño). La legibilidad la dan el degradé del .hfade y el text-shadow de
+     cada línea, no un rectángulo negro. */
+  .hero .hpanel { align-self:flex-start; max-width:100%; max-height:100%; overflow:hidden;
+    background:transparent; padding:2px 0;
+    display:flex; flex-direction:column; gap:5px; }
+  /* Título, meta y botones NUNCA se comprimen (flexbox los colapsaba a 0 cuando
+     el panel quedaba corto de alto); sinopsis y porqué son los únicos que ceden
+     espacio y su -webkit-box los trunca por línea. */
+  .hero .hpanel > * { flex-shrink:0; }
+  .hero .hpanel .hsyn, .hero .hpanel .hreason { flex-shrink:1; min-height:0; }
+  /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
+  .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hmeta { display:flex; flex-wrap:nowrap; align-items:center; gap:12px; overflow:hidden; }
+  .hero .hmeta .pill { flex:0 0 auto; }
+  .hero .hsub { font-size:14px; color:#B4B4BC; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* La razón va como TEXTO PELADO sobre el hero (sin caja gris): el degradado
+     de la izquierda ya la hace legible y el text-shadow la asegura sobre la
+     imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
+     flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
+     ni max-width gana ancho y entra en 3 líneas cómodas. */
+  /* (a) Sinopsis y (b) Por qué, en ese orden — igual que la ficha. */
+  .hero .hsyn .hemo { opacity:.85; }
+  .hero .hsyn { margin:1px 0 0; font-size:13px; line-height:1.38; color:#D5D5DC; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason { margin:1px 0 0; font-size:13px; line-height:1.38; color:#EDEDF0; flex-shrink:0;
+    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hreason b { color:#A878FF; margin-right:5px; font-weight:600; }
+  .hero .htitle, .hero .hsub { text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
+  /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
+  .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
+  /* Ícono sutil (gris minimalista): guardar en lista. "Ver en X" queda prominente. */
+  .hbtn { border:none; border-radius:999px; font-weight:600; }
+  .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
+  /* Label del botón "Mi lista": oculto por defecto (banner), visible en la ficha. */
+  .blab { display:none; }
+  .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
+  .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
+  /* Chevrons ‹ ›: afirman que el banner se desplaza con ←/→ (affordance).
+     Bien visibles a pedido: disco semi-transparente + glyph grande. */
+  .hchev { position:absolute; top:50%; margin-top:-24px; z-index:4; width:48px; height:48px;
+    display:flex; align-items:center; justify-content:center; border-radius:50%;
+    background:rgba(10,10,12,.55); border:1px solid rgba(255,255,255,.18);
+    font-size:30px; line-height:1; color:rgba(255,255,255,.85);
+    /* clickeables desde el modo touch (antes eran solo decorativos) */
+    text-shadow:0 2px 10px rgba(0,0,0,.85); }
+  .hchev.l { left:12px; } .hchev.r { right:12px; }
+  /* Mismos chevrons en la ficha: ahí ←/→ salta al título anterior/siguiente. */
+  .detail { position:relative; }
+  .detail .hchev { position:absolute; top:50%; }
+  /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
+  .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
+  /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
+     que estás parado ahí y que con ←/→ cambiás de candidata. */
+  .hcount { margin-left:10px; font-size:12px; color:#6A6A72; transition:color .18s; }
+  .hdots.act .hcount { color:#B79BF0; font-weight:600; }
+  .hdots.act .hdot { background:rgba(255,255,255,.35); }
+  .hdots.act .hdot.on { background:#A878FF; box-shadow:0 0 0 3px rgba(136,82,224,.28); }
+  .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
+  .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
+  /* Tira "Mi lista" (lista guardada de la TV). */
+  .rowwrap { position:relative; }
+  .todayrow { display:flex; gap:10px; overflow:hidden; margin-bottom:3px; }
+  /* Cuando hay más tiles fuera de vista: fade en el borde derecho + flecha ›.
+     (Antes el overflow era mudo y los tiles extra simplemente "no existían".) */
+  .todayrow.fade { -webkit-mask-image:linear-gradient(to right, #000 82%, transparent 100%);
+                           mask-image:linear-gradient(to right, #000 82%, transparent 100%); }
+  .rowmore { position:absolute; right:2px; top:50%; margin-top:-16px; font-size:26px; line-height:1;
+    color:rgba(255,255,255,.7); text-shadow:0 2px 8px rgba(0,0,0,.85); pointer-events:none; }
+  .ttile { width:76px; height:114px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
+  /* Tiras "Top 5 en X": misma tarjeta que la grilla "Más opciones" (.card),
+     en fila horizontal scrolleable. Punto de color de la plataforma en el
+     título; las tiras de plataformas fuera del filtro del usuario quedan
+     atenuadas (presentes: descubren catálogo). */
+  .sec .pdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:1px; }
+  .sec.dim { opacity:.5; }
+  .todayrow .card { flex:0 0 auto; margin:0; }
+  /* Nº de ranking del top (1-10), como en la app móvil. Arriba a la izquierda:
+     abajo vive .cinfo (título + pill de plataforma). */
+  .card .rank { position:absolute; top:2px; left:9px; z-index:2; font-size:36px; font-weight:800;
+    line-height:1.15; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8); pointer-events:none; }
+  /* === Modo touch (web tablets/laptops, ?touch=1) === */
+  .card, .tab, .key, .fchip, .hbtn, .hchev, .chcard, .ttile { cursor:pointer; }
+  .touch .todayrow { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .tback { position:fixed; left:16px; bottom:16px; z-index:60; padding:12px 22px; border-radius:999px;
+    background:rgba(18,18,22,.9); border:1px solid #3A3A40; color:#F5F5F7; font-size:17px; font-weight:600;
+    cursor:pointer; box-shadow:0 8px 28px rgba(0,0,0,.5); }
+  .tback.hidden { display:none; }
+  .todayrow.dim .card { opacity:.45; }
+  .todayrow.dim .card.foc { opacity:1; }
+  .ttile.foc { border-color:#8852E0; box-shadow:0 8px 24px rgba(136,82,224,.45); transform:scale(1.06); }
+  .ttile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .ttile .ttl { display:flex; height:100%; align-items:center; justify-content:center; text-align:center; padding:4px; font-size:10px; color:#9A9AA2; }
+  /* === Ficha a pantalla completa: póster grande a la izquierda + info === */
+  .detail { display:flex; gap:28px; align-items:center; min-height:calc(100vh - 140px); padding:6px 68px 14px; }
+  .detail .dposter { width:230px; flex:0 0 auto; border-radius:18px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; box-shadow:0 26px 80px rgba(0,0,0,.65); }
+  .dph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
+  .dph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .dph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:12px; color:#9A9AA2; font-size:19px; font-weight:500; }
+  .detail .dinfo { flex:1; min-width:0; display:flex; flex-direction:column; gap:9px; }
+  /* Título + meta compactos: clamp 2 líneas + meta en UNA línea con ellipsis. */
+  .detail .dtitle { font-family:inherit; font-size:31px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .detail .hmeta { display:flex; align-items:center; gap:12px; flex-wrap:nowrap; overflow:hidden; }
+  .detail .hmeta .pill { flex:0 0 auto; }
+  .detail .hsub { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* Secciones tituladas de la ficha: a) Sinopsis, b) Por qué verla. */
+  .detail .dsec.dwhy { color:#A878FF; }
+  .detail .dsec { font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:#8A8A93; margin:5px 0 0; }
+  /* Red de seguridad de largo: el límite real vive en los prompts del backend
+     (sinopsis 30-40 palabras, reason 40-60), pero si el modelo se pasa, el
+     bloque de texto se recorta con fade en vez de desbordar la pantalla
+     (.detail está centrado verticalmente y sin scroll en TV). */
+  .detail .dtext { position:relative; }
+  .detail .dreason { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0;
+    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
+  .detail .dreason b { color:#8852E0; margin-right:6px; }
+  .detail .dsyn { margin:2px 0 0; font-size:14px; line-height:1.4; color:#B4B4BC;
+    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .detail .hbtn.play { padding:8px 16px; font-size:15px; }
+  /* En la ficha, "Mi lista" deja de ser un ícono redondo y se vuelve píldora con
+     texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
+     outline 3px + scale(1.06), y con 12px quedaba pisando al "Ver en X". */
+  .detail .hbtn.ico { width:auto; height:36px; padding:0 15px; gap:7px; font-size:15px; border-radius:999px; }
+  .detail .hbtn.ico .blab { display:inline; }
+  .detail .hactions { display:flex; align-items:center; flex-wrap:wrap; gap:22px; margin-top:4px; }
+  .detailhint { text-align:center; color:#8A8A93; font-size:13px; margin-top:8px; }
+  .detail .detailhint { text-align:left; margin-top:4px; color:#6E6E76; }
+  .jwattr { text-align:left; margin-top:2px; color:#55555C; font-size:11px; }
+  /* Hint del gesto OK del remoto nativo (discreto, bajo el carrusel). */
+  .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
+
+  /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
+  .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
+  /* Cards cinematográficas: póster de fondo + gradiente + info superpuesta abajo
+     (mismo look que el héroe y las tarjetas del móvil). */
+  .card { position:relative; width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
+  .card.foc { opacity:1; border-color:#8852E0; box-shadow:0 12px 34px rgba(136,82,224,.4); transform:scale(1.08); z-index:4; }
+  .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
+  .card .ph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .card .ph .txt { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:6px; color:#9A9AA2; font-size:13px; font-weight:500; }
+  /* Gradiente cinematográfico que sube desde abajo. */
+  .card .cgrad { position:absolute; left:0; right:0; bottom:0; height:62%; pointer-events:none;
+    background:linear-gradient(to top, rgba(10,10,12,.97) 0%, rgba(10,10,12,.6) 42%, rgba(10,10,12,0) 100%); }
+  /* Info sobre el gradiente: título + meta + plataforma. */
+  .card .cinfo { position:absolute; left:0; right:0; bottom:0; z-index:1; padding:9px 10px; }
+  .card .cinfo .tt { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; font-weight:600; line-height:1.2; color:#fff; }
+  .card .cinfo .csub { display:block; margin-top:3px; font-size:10px; color:#C9C9CE; }
+  .card .cinfo .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
+  /* Detalle (razón de Miru): al enfocar, reemplaza la info con el "por qué". */
+  .card .det { display:none; position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,10,12,.94); padding:9px 10px; border-top:1px solid rgba(136,82,224,.35); }
+  .card.foc .det { display:block; }
+  .card.foc .cinfo { display:none; }
+  /* Tarjeta chica: de qué va (gris) arriba y por qué (claro) abajo, cada uno con
+     su propio recorte por línea — un clamp en el contenedor pegaba las mitades
+     (dentro de un -webkit-box los hijos display:block no cortan línea). */
+  .card .det .wsyn { font-size:11px; color:#B4B4BC; line-height:1.32; margin:0 0 3px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .wwhy { font-size:11px; color:#EDEDF0; line-height:1.32; margin:0;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card .det .wwhy b { color:#8852E0; margin-right:3px; }
+  /* Guardada en "Mi lista": degradé violeta + check centrado (como la móvil). */
+  .card .csaved { position:absolute; top:0; left:0; right:0; bottom:0; z-index:3;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
+    background:linear-gradient(to top, rgba(18,9,34,.9) 0%, rgba(136,82,224,.42) 100%); }
+  .card .csaved .cchk { width:46px; height:46px; border-radius:50%; background:#8852E0; color:#fff;
+    font-size:24px; font-weight:700; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 8px 26px rgba(0,0,0,.55); }
+  .card .csaved .ctxt { font-size:14px; font-weight:600; color:#EDEDF0; letter-spacing:.02em; }
+  .center { text-align:center; color:#9A9AA2; font-size:21px; padding:60px 20px; }
+  .more { text-align:center; color:#9A9AA2; font-size:18px; padding:20px; width:100%; }
+  .hidden { display:none; }
+  /* Estado de búsqueda: misma estética que la rueda de la app móvil —
+     anillo girando con el color de la plataforma + "Buscando en X" ciclando +
+     dots de progreso, sobre un degradé violeta (no fondo negro plano). */
+  .searching { position:relative; min-height:calc(100vh - 210px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:36px; text-align:center; padding:0 24px;
+    background:radial-gradient(ellipse at center, rgba(136,82,224,.18) 0%, rgba(136,82,224,.06) 45%, rgba(14,14,16,0) 75%); }
+  .searching .sline { font-size:24px; color:#F5F5F7; max-width:1000px; line-height:1.3; margin:0; }
+  .searching .sline b { color:#8852E0; }
+  .swheel { position:relative; width:240px; height:240px; }
+  .swheel .sring { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:8px solid rgba(255,255,255,.09); }
+  .swheel .sarc { position:absolute; top:0; left:0; width:100%; height:100%; border-radius:50%; border:8px solid transparent; border-top-color:#8852E0; animation:sspin 1.1s linear infinite; }
+  @keyframes sspin { to { transform:rotate(360deg); } }
+  .swheel .sc { position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; }
+  .swheel .sc .slbl { font-size:13px; letter-spacing:.16em; text-transform:uppercase; color:#8A8A93; }
+  .swheel .sc .spl { font-size:28px; font-weight:700; color:#8852E0; max-width:195px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* Overlay "Abriendo <app>…" al lanzar la app de streaming (antes el PLAY no
+     daba NINGÚN feedback y la TV quedaba congelada hasta que Android levantaba
+     la app). Reusa la estética de la rueda de búsqueda, con la plataforma fija. */
+  .opening { position:fixed; left:0; top:0; right:0; bottom:0; z-index:80; background:#0E0E10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:36px; text-align:center; padding:0 24px; }
+  .sdots { display:flex; align-items:center; justify-content:center; gap:10px; }
+  .sdots span { display:inline-block; height:9px; width:9px; border-radius:999px; background:rgba(255,255,255,.18); transition:all .25s; }
+  .sdots span.on { width:34px; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand">Miru<span class="ai">✦ recomendado con IA</span></div>
+    <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
+  </div>
+
+  <div id="choose" class="choose">
+    <div class="chooseleft">
+      <h1 class="serif">¿Cómo querés manejar Miru?</h1>
+      <div class="chcards">
+        <div class="chcard foc" id="ch0">
+          <div class="chico">📱</div>
+          <h2>Vincular el teléfono</h2>
+          <p>Escaneá un QR y usá tu celu como control: le hablás a Miru y manejás todo desde ahí.</p>
+        </div>
+        <div class="chcard" id="ch1">
+          <div class="chico">🕹</div>
+          <h2>Usar el control de la TV</h2>
+          <p>Navegá con las flechas del control remoto: búsqueda, tu lista y filtros en pantalla.</p>
+        </div>
+      </div>
+      <div class="chhint">← → elegir · OK confirmar</div>
+    </div>
+    <div class="ribbons" id="chooseribbons"></div>
+  </div>
+
+  <div id="pair" class="pair hidden">
+    <div class="pairleft">
+      <div class="qrbox"><img id="qr" alt="QR"></div>
+      <h1 class="serif">Usá tu teléfono como control</h1>
+      <p class="sub">Escaneá el código con la cámara.</p>
+      <div class="sess" id="sess">Generando sesión…</div>
+      <div class="sess" id="pairhint"></div>
+    </div>
+    <div class="ribbons" id="pairribbons"></div>
+  </div>
+
+  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — tocá una flecha para usar el control de la TV · Volver = elegir modo</div>
+  <div id="toast" class="toast"></div>
+
+  <div id="results" class="wrap hidden">
+    <div class="topline" id="topline"></div>
+    <div id="content"></div>
+  </div>
+
+<script>
+/* Red de seguridad: si algo falla, mostrarlo en pantalla (no puedo ver la consola de la TV). */
+(function () {
+  function showErr(text) {
+    var d = document.getElementById("err");
+    if (!d) {
+      d = document.createElement("div");
+      d.id = "err";
+      // pointer-events:none: es informativo — en el modo touch tapaba los
+      // clicks de la franja inferior (p.ej. el botón ‹ Volver).
+      d.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:12px 16px;font-size:15px;z-index:9999;white-space:pre-wrap;font-family:monospace;pointer-events:none;";
+      if (document.body) document.body.appendChild(d);
+    }
+    if (d) d.textContent = "⚠ " + text;
+  }
+  window.__showErr = showErr; // para diagnósticos desde el script principal
+  window.onerror = function (msg, src, line, col) {
+    showErr(msg + "  (línea " + line + ":" + col + ")");
+    return false;
+  };
+  window.addEventListener("unhandledrejection", function (e) {
+    showErr("Promesa rechazada: " + ((e && e.reason && (e.reason.message || e.reason)) || "?"));
+  });
+})();
+/* Polyfills para navegadores viejos (Tizen 4.0 / chrome56). DEBEN ir antes del bundle. */
+(function () {
+  if (typeof globalThis === "undefined") { window.globalThis = window; }
+  if (typeof Object.fromEntries !== "function") {
+    Object.fromEntries = function (iter) {
+      var o = {}, arr = Array.from(iter || []);
+      for (var i = 0; i < arr.length; i++) { o[arr[i][0]] = arr[i][1]; }
+      return o;
+    };
+  }
+  if (!String.prototype.padStart) {
+    String.prototype.padStart = function (len, pad) {
+      var s = String(this); pad = pad === undefined ? " " : String(pad);
+      if (s.length >= len || !pad) return s;
+      var fill = ""; while (fill.length < len - s.length) { fill += pad; }
+      return fill.slice(0, len - s.length) + s;
+    };
+  }
+  if (typeof Promise !== "undefined" && !Promise.prototype["finally"]) {
+    Promise.prototype["finally"] = function (cb) {
+      var P = this.constructor;
+      return this.then(
+        function (v) { return P.resolve(cb()).then(function () { return v; }); },
+        function (e) { return P.resolve(cb()).then(function () { throw e; }); }
+      );
+    };
+  }
+  if (typeof AbortController === "undefined") {
+    var Sig = function () { this.aborted = false; this.onabort = null; this._l = []; };
+    Sig.prototype.addEventListener = function (t, cb) { if (t === "abort") this._l.push(cb); };
+    Sig.prototype.removeEventListener = function (t, cb) {
+      if (t === "abort") { var i = this._l.indexOf(cb); if (i >= 0) this._l.splice(i, 1); }
+    };
+    Sig.prototype.dispatchEvent = function () { return true; };
+    var Ctrl = function () { this.signal = new Sig(); };
+    Ctrl.prototype.abort = function () {
+      this.signal.aborted = true;
+      if (this.signal.onabort) { try { this.signal.onabort(); } catch (e) {} }
+      for (var i = 0; i < this.signal._l.length; i++) { try { this.signal._l[i](); } catch (e) {} }
+    };
+    window.AbortController = Ctrl;
+    window.AbortSignal = Sig;
+  }
+})();
+</script>
+<script src="/tv-supabase.js"></script>
+<script src="/tv-qrcode.js"></script>
+<script>
+/* === Miru en la TV (versión liviana) — JS clásico para navegadores viejos (Tizen 4.0). ===
+   Sin spread {...} ni optional chaining ?. — ese navegador no los soporta. */
+(function () {
+  "use strict";
+
+  var SUPABASE_URL = "https://gyxooovdwputhznnlqhi.supabase.co";
+  var SUPABASE_KEY = "sb_publishable_Rr1Xw4no3qdm2uFSI1kVYg_4asF5n6o";
+
+  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+  var userPlatforms = null; // plataformas heredadas del control (SET_PLATFORMS); null = todas
+  var COLORS = {
+    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
+    "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
+  };
+  function colorFor(p) { return COLORS[p] || "#2563EB"; }
+  // Star+ fue absorbido por Disney+ en LatAm (2024).
+  function platLabel(p) { return p === "Star+" ? "Disney+" : p; }
+
+  // Estado de búsqueda: rueda de plataformas (idéntica en concepto y estética a
+  // la SearchLoading de la app móvil). El ciclado lo maneja startSearchAnim.
+  function searchPlatList() {
+    // Plataformas del usuario (heredadas por SET_PLATFORMS) o todas; deduplicadas
+    // por label para no repetir "Disney+" (Star+ → Disney+).
+    var plats = userPlatforms && userPlatforms.length ? userPlatforms : PLATFORMS;
+    var seen = {}, list = [];
+    for (var i = 0; i < plats.length; i++) { var l = platLabel(plats[i]); if (!seen[l]) { seen[l] = 1; list.push(plats[i]); } }
+    return list;
+  }
+  function searchingHTML() {
+    var list = searchPlatList();
+    // Un solo texto (el topline se oculta durante la búsqueda): pedido + rueda.
+    var head = query ? ("Buscando resultados para <b>«" + esc(query) + "»</b>") : "Buscando lo mejor para vos";
+    var dots = "";
+    for (var j = 0; j < list.length; j++) dots += "<span></span>";
+    return (
+      '<div class="searching">' +
+      '<div class="sline">' + head + "</div>" +
+      '<div class="swheel"><div class="sring"></div><div class="sarc" id="sarc"></div>' +
+      '<div class="sc"><span class="slbl">Buscando en</span><span class="spl" id="spl"></span></div></div>' +
+      '<div class="sdots" id="sdots">' + dots + "</div>" +
+      "</div>"
+    );
+  }
+  // Cicla la plataforma del centro de la rueda (nombre + color + arco + dot).
+  // Se auto-apaga cuando la pantalla de búsqueda ya no está en el DOM.
+  var searchAnimTimer = null;
+  function stopSearchAnim() { if (searchAnimTimer) { clearInterval(searchAnimTimer); searchAnimTimer = null; } }
+  function startSearchAnim() {
+    stopSearchAnim();
+    var list = searchPlatList();
+    if (!list.length) return;
+    var i = 0;
+    function tick() {
+      var spl = document.getElementById("spl");
+      if (!spl) { stopSearchAnim(); return; }
+      var p = list[i % list.length];
+      var col = colorFor(p);
+      spl.textContent = platLabel(p);
+      spl.style.color = col;
+      var arc = document.getElementById("sarc");
+      if (arc) arc.style.borderTopColor = col;
+      var dots = document.getElementById("sdots");
+      if (dots) {
+        for (var k = 0; k < dots.children.length; k++) {
+          dots.children[k].className = k === (i % list.length) ? "on" : "";
+          dots.children[k].style.background = k === (i % list.length) ? colorFor(list[k]) : "";
+        }
+      }
+      i++;
+    }
+    tick();
+    searchAnimTimer = setInterval(tick, 850);
+  }
+
+  // Búsqueda directa DENTRO de cada plataforma: URL https que las apps de
+  // streaming registran como App Link en Android TV. Reemplaza la búsqueda de
+  // Google con btnI=1 (deprecada por Google), que en el WebView no abría nada.
+  // Esquema NATIVO de cada app. Clave en Android TV: un intent VIEW con https es
+  // ambiguo (lo puede tomar el navegador) y por eso "Ver en X" terminaba abriendo
+  // el browser. Los esquemas propios son inequívocos: solo los resuelve su app.
+  // Verificado con adb en la TV: nflx:// levanta Netflix (com.netflix.ninja).
+  function appScheme(platform, title) {
+    var t = encodeURIComponent(title);
+    // OJO: el esquema NECESITA EL HOST. "disneyplus://search?q=X" NO resuelve
+    // (verificado con adb en la TV); "disneyplus://www.disneyplus.com/search?q=X" sí.
+    // Verificados en Android TV: nflx, disneyplus, starplus.
+    // Prime Video NO declara esquema propio (solo http/https) -> va sin esquema y
+    // cae a la URL web.
+    var m = {
+      "Netflix": "nflx://www.netflix.com/search?q=" + t,
+      "Disney+": "disneyplus://www.disneyplus.com/search?q=" + t,
+      "Star+": "starplus://www.starplus.com/search?q=" + t,
+      "Max": "hbomax://play.max.com/search?q=" + t,
+      "Apple TV+": "videos://tv.apple.com/search?term=" + t,
+      "Paramount+": "paramountplus://www.paramountplus.com/search/"
+    };
+    return m[platform] || "";
+  }
+
+  function deepLink(platform, title) {
+    var t = encodeURIComponent(title);
+    var map = {
+      "Netflix": "https://www.netflix.com/search?q=" + t,
+      "Disney+": "https://www.disneyplus.com/search?q=" + t,
+      "Star+": "https://www.disneyplus.com/search?q=" + t,
+      "Max": "https://play.max.com/search?q=" + t,
+      "Prime Video": "https://www.primevideo.com/search/ref=atv_nb_sr?phrase=" + t,
+      "Apple TV+": "https://tv.apple.com/search?term=" + t,
+      "Paramount+": "https://www.paramountplus.com/search/"
+    };
+    return map[platform] || ("https://www.google.com/search?q=" + t + "+ver+online");
+  }
+
+  // ── Link exacto AL TÍTULO (JustWatch, la misma fuente que usa la app móvil) ─
+  // "Ver en X" idealmente cae EN la película (la app abre su ficha con play),
+  // no en una búsqueda. Se resuelve client-side (IP del living, como el móvil);
+  // si falla (red/CORS/sin match) el fallback silencioso son los esquemas de
+  // búsqueda de siempre. Prime es el gran ganador: no tiene esquema de búsqueda
+  // (hoy cae al browser) y con el deeplink de JustWatch abre la app en el título.
+  var JW_QUERY =
+    "query GetTitleOffers($searchQuery: String!, $country: Country!, $language: Language!, $objectTypes: [ObjectType!]) {" +
+    " popularTitles(country: $country, first: 5, filter: { searchQuery: $searchQuery, objectTypes: $objectTypes }) {" +
+    " edges { node { objectType" +
+    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " } } } }";
+  var JW_PACKAGES = {
+    "Netflix": ["nfx"], "Prime Video": ["amp", "prv"], "Disney+": ["dnp"],
+    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"]
+  };
+  var jwCache = {}; // "titulo|plataforma" → {deeplinkAndroid, standardWebURL} | null (resuelto sin match)
+
+  function jwNorm(s) {
+    var x = String(s || "").toLowerCase();
+    try { x = x.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); } catch (e) {}
+    return x.replace(/\s+/g, " ").trim();
+  }
+  function jwScore(result, expected) {
+    var r = jwNorm(result), e = jwNorm(expected);
+    if (!r || !e) return 0;
+    if (r === e) return 3;
+    if (r.indexOf(e) === 0 || e.indexOf(r) === 0) return 2;
+    if (r.indexOf(e) >= 0 || e.indexOf(r) >= 0) return 1;
+    return 0;
+  }
+
+  function jwResolve(it) {
+    if (!it || !it.title || !it.platform) return Promise.resolve(null);
+    var key = it.title + "|" + it.platform;
+    if (Object.prototype.hasOwnProperty.call(jwCache, key)) return Promise.resolve(jwCache[key]);
+    var wanted = JW_PACKAGES[it.platform] || [];
+    if (!wanted.length) { jwCache[key] = null; return Promise.resolve(null); }
+    return fetch("https://apis.justwatch.com/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "App-Version": "3.8.2" },
+      body: JSON.stringify({
+        operationName: "GetTitleOffers",
+        query: JW_QUERY,
+        // País fijo AR (misma región default del backend); la TV no geo-detecta.
+        variables: { searchQuery: it.title, country: "AR", language: "es", objectTypes: [/serie/i.test(it.type || "") ? "SHOW" : "MOVIE"] }
+      })
+    }).then(function (r) {
+      if (!r.ok) throw new Error("JW HTTP " + r.status);
+      return r.json();
+    }).then(function (data) {
+      var edges = (data && data.data && data.data.popularTitles && data.data.popularTitles.edges) || [];
+      var best = null;
+      for (var i = 0; i < edges.length; i++) {
+        var node = edges[i] && edges[i].node;
+        if (!node) continue;
+        var offers = node.offers || [];
+        var match = null;
+        for (var j = 0; j < offers.length; j++) {
+          var o = offers[j];
+          if (o && o.monetizationType === "FLATRATE" && o["package"] && wanted.indexOf(o["package"].technicalName) >= 0) { match = o; break; }
+        }
+        if (!match) continue;
+        // La búsqueda devuelve títulos "populares" que matchean el texto — el
+        // primero puede ser OTRA película. Solo confirmamos si el título coincide.
+        var score = jwScore((node.content && node.content.title) || "", it.title);
+        if (score === 0) continue;
+        if (!best || score > best.score) best = { score: score, offer: match };
+        if (best.score === 3) break;
+      }
+      var out = best ? { deeplinkAndroid: best.offer.deeplinkAndroid || "", standardWebURL: best.offer.standardWebURL || "" } : null;
+      jwCache[key] = out;
+      return out;
+    })["catch"](function () { return null; }); // error: NO se cachea (reintenta la próxima)
+  }
+
+  // Dentro de la cáscara Capacitor (Android TV) el bridge inyecta window.Capacitor:
+  // AppLauncher dispara un intent VIEW que captura la app de streaming instalada.
+  // Fuera de Capacitor (browser de prueba), fallback a window.open.
+  function openExternal(primary, fallback) {
+    try {
+      var C = window.Capacitor;
+      var AL = C && C.Plugins && C.Plugins.AppLauncher;
+      if (AL && AL.openUrl) {
+        // Primero el esquema de la app (inequívoco). Solo si NO hay app que lo
+        // resuelva, recién ahí la URL web — así el browser deja de ser el default.
+        // OJO: AppLauncher.openUrl NO rechaza si no puede abrir: RESUELVE con
+        // {completed:false}. Con solo un .catch() el fallback nunca corría y no
+        // pasaba nada. Hay que mirar el resultado, además de atrapar el error.
+        var tryOpen = function (url) {
+          if (!url) return Promise.resolve(false);
+          try {
+            return AL.openUrl({ url: url }).then(function (r) {
+              var ok = !r || r.completed !== false; // sin campo = asumimos que abrió
+              console.log("[miru] openUrl", url, "->", ok);
+              return ok;
+            })["catch"](function (e) {
+              console.log("[miru] openUrl FALLÓ", url, e && e.message);
+              return false;
+            });
+          } catch (e3) { return Promise.resolve(false); }
+        };
+        tryOpen(primary).then(function (ok) {
+          if (!ok && fallback) {
+            return tryOpen(fallback).then(function (ok2) {
+              if (!ok2) { try { window.open(fallback, "_blank"); } catch (e4) {} }
+            });
+          }
+        });
+        return;
+      }
+    } catch (e) {}
+    try { window.open(fallback || primary, "_blank"); } catch (e2) {}
+  }
+
+  function makeSessionId() {
+    try {
+      var b = new Uint8Array(6);
+      window.crypto.getRandomValues(b);
+      var s = "";
+      for (var i = 0; i < b.length; i++) { s += ("0" + b[i].toString(16)).slice(-2); }
+      return s;
+    } catch (e) { return Math.random().toString(36).slice(2, 10); }
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // --- Migración de claves (rebranding Cinefilo → Miru) ---
+  // Copia el valor viejo a la clave nueva solo si la nueva no existe todavía.
+  // Las claves viejas se dejan (rollback barato).
+  (function migrateLegacyKeys() {
+    var MAP = [
+      ["cinefilo:tv:today", "miru:tv:mylist"],
+      ["cinefilo:tv:ribbons", "miru:tv:ribbons"]
+    ];
+    try {
+      for (var i = 0; i < MAP.length; i++) {
+        if (localStorage.getItem(MAP[i][1]) === null) {
+          var old = localStorage.getItem(MAP[i][0]);
+          if (old !== null) localStorage.setItem(MAP[i][1], old);
+        }
+      }
+    } catch (e) { /* sin storage: la TV funciona igual */ }
+  })();
+
+  // --- Estado ---
+  // Sesión persistente: el QR (y el canal de pairing) sobreviven recargas y
+  // reinicios de la TV. TTL de 30 días DESLIZANTE (se refresca en cada
+  // arranque): mientras la TV se use al menos una vez al mes, un control ya
+  // vinculado la re-encuentra por presencia sin re-escanear. Antes cada carga
+  // regeneraba el id y el control quedaba huérfano en un canal muerto
+  // ("Buscando TV…" para siempre).
+  var SESSION_KEY = "miru:tv:session";
+  var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+  function loadOrCreateSession() {
+    try {
+      var raw = localStorage.getItem(SESSION_KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && s.id && typeof s.ts === "number" && (Date.now() - s.ts) < SESSION_TTL_MS) {
+          localStorage.setItem(SESSION_KEY, JSON.stringify({ id: s.id, ts: Date.now() }));
+          return s.id;
+        }
+      }
+    } catch (e) { /* sin storage: sesión efímera, como antes */ }
+    var id = makeSessionId();
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify({ id: id, ts: Date.now() })); } catch (e2) {}
+    return id;
+  }
+  var sessionId = loadOrCreateSession();
+  // El QR abre la web-control (apps/web-control, servicio Railway propio): la réplica
+  // del control remoto de la app móvil (D-pad, OK contextual, "Mi lista"). NO usar el
+  // origin de este host: ahí vive el /control viejo (lista scrolleable), que quedó atrás.
+  // Override para probar otro deploy: cargar tv-lite.html con ?control=<base-url>.
+  var controlOverride = /[?&]control=([^&]+)/.exec(window.location.search);
+  var CONTROL_BASE = controlOverride
+    ? decodeURIComponent(controlOverride[1])
+    // El dominio del servicio de control cambió en Railway (cinefilo-copy-production
+    // → mirutv-touch). tv-lite se carga remoto en cada apertura, así que este fix
+    // llega a todas las TVs con el redeploy — sin reinstalar ningún APK.
+    : "https://mirutv-touch.up.railway.app";
+  var controlUrl = CONTROL_BASE.replace(/\/+$/, "") + "/control?session=" + sessionId;
+  var items = [];
+  var focusedIndex = 0;
+  var heroIndex = 0; // banner visible del carrusel de 5 (modo home)
+  var TOP = 5;       // cantidad de recomendaciones grandes en el carrusel
+  var screen = "home";
+  var query = "";
+  var mode = "home"; // "home" | "search" | "list"
+  var detailItem = null; // ficha abierta (ítem promovido a banner grande); null = cerrada
+  var detailScope = "grid"; // de qué lista salió la ficha: cands | grid | today | list
+                            // (define entre qué ítems se mueve con ←/→ adentro de la ficha)
+  var TODAY_KEY = "miru:tv:mylist";
+  // Nombre visible de la lista guardada. En el wire sigue viajando como
+  // ADD_TODAY/todayTitles (legacy, ver ARCHITECTURE.md) — solo cambia la UI.
+  var MYLIST_SECTION = "Mi lista";
+  var today = loadToday(); // ítems en "Mi lista" (lista guardada de la TV; wire-legacy: "today")
+  var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Mi lista", 1 = "Ver en X", 2 = "Ya la vi" (RC)
+  var todayFocus = -1;     // -1 = fuera de la tira "Mi lista"; 0.. = tile enfocado de la tira
+  // Tiras "Top 5 en X" del home (catálogo por plataforma, /api/tv-home rows).
+  // Mismo patrón que la tira "Mi lista": estado propio, NO entra en `items`,
+  // así la grilla, el hero y el scroll infinito quedan idénticos.
+  var topRows = [];   // [{platform, items[≤5], dim}] ya ordenadas por orderTopRows
+  var rowFocus = -1;  // -1 = fuera de las tiras; 0.. = tira enfocada
+  var rowCol = 0;     // tile enfocado dentro de la tira
+  var history = []; // pila de pantallas anteriores (para "Volver")
+  var loading = false;
+  var loadingMore = false;
+  var paired = false;
+  // uiMode = ELECCIÓN de interfaz; paired = HECHO de red (presencia del control).
+  //   "choose" = pantalla inicial (elegir modo, mecánica Disney)
+  //   "pair"   = pantalla del QR
+  //   "rc"     = manejo con el control remoto físico de la TV (tabs y teclado en pantalla)
+  //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
+  var uiMode = "choose";
+  // Modo touch (web para tablets/laptops): la MISMA UI del modo RC pero
+  // tocable. SOLO se activa con ?touch=1 (nada de autodetección: una WebView
+  // de TV puede reportar pointer coarse y saltearse la pantalla de elección).
+  // Los handlers de click en sí están siempre activos — en la TV no hay
+  // puntero y no molestan; en una laptop cualquiera, la página ya se clickea.
+  var TOUCH = false;
+  try { TOUCH = (window.location.search || "").indexOf("touch=1") >= 0; } catch (e) {}
+  var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
+  var pairReturn = "choose"; // a dónde vuelve el BACK desde la pantalla del QR
+  // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
+  var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..N = tab enfocado
+  var kbOpen = false, kbBuffer = "", kbRow = 0, kbCol = 0;
+  var filtersOpen = false, filterFocus = 0;
+  // Mic: "siempre visible" como primer tab (no una sub-pantalla) — mismo
+  // gesto tap-to-record/tap-to-stop que el móvil, sin corte por silencio.
+  var micState = "idle"; // "idle" | "requesting" | "rec" | "processing"
+  var micStream = null, micRecorder = null, micChunks = [], micMaxTimer = null;
+  var RC_PLATFORMS_KEY = "miru:tv:platforms";
+  var SEEN_KEY = "miru:tv:seen";
+  var seen = loadSeen(); // "Ya vistas" del modo RC (persistida en el dispositivo)
+  // Filtros persistidos del modo RC → alimentan userPlatforms (el mismo
+  // pipeline que usa SET_PLATFORMS cuando hay control vinculado).
+  try {
+    var rcSaved = JSON.parse(localStorage.getItem(RC_PLATFORMS_KEY) || "null");
+    if (rcSaved && rcSaved.length) userPlatforms = rcSaved;
+  } catch (e) {}
+  var homeLoaded = false;
+  var channel = null;
+
+  var elChoose = document.getElementById("choose");
+  var elDcban = document.getElementById("dcban");
+  var elToast = document.getElementById("toast");
+  var elPair = document.getElementById("pair");
+  var elResults = document.getElementById("results");
+  var elTopline = document.getElementById("topline");
+  var elContent = document.getElementById("content");
+  var elBadge = document.getElementById("badge");
+  var elDot = document.getElementById("dot");
+
+  // QR + sesión — generado localmente (tv-qrcode.js) para no depender de un
+  // servicio externo; si la lib no cargó, fallback al servicio remoto.
+  (function renderQr() {
+    var img = document.getElementById("qr");
+    try {
+      if (window.qrcode) {
+        var q = window.qrcode(0, "M");
+        q.addData(controlUrl);
+        q.make();
+        // cellSize 12 (antes 8): el QR se muestra a 300px, así el bitmap nace
+        // con resolución de sobra y no se ve borroso al escalar.
+        img.src = q.createDataURL(12, 8);
+        return;
+      }
+    } catch (e) {}
+    img.src = "https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=8&data=" + encodeURIComponent(controlUrl);
+  })();
+  document.getElementById("sess").textContent = "Sesión " + sessionId;
+
+  function setBadge(text, cls) {
+    elBadge.textContent = text;
+    elDot.className = "dot" + (cls ? " " + cls : "");
+  }
+  // Badge según estado real: vinculado > modo RC (elegiste el control de la
+  // TV: nadie "espera" nada) > esperando teléfono.
+  function pairBadge() {
+    if (paired) setBadge("Teléfono vinculado", "on");
+    else if (uiMode === "rc") setBadge("Control de la TV", "on");
+    else setBadge("Esperando teléfono", "wait");
+  }
+
+  // --- Render ---
+  function posterHTML(it) {
+    // lazy + async: con hasta 60 tarjetas, decodificar todas de entrada era
+    // costoso en TVs de gama baja (Chrome viejo ignora los atributos sin romper).
+    if (it.posterUrl) return '<img loading="lazy" decoding="async" src="' + esc(it.posterUrl) + '" alt="">';
+    return '<div class="txt">' + esc(it.title) + "</div>";
+  }
+
+  // El panel superior (spotlight) se eliminó: la descripción vive ahora dentro
+  // de la tarjeta enfocada (.card.foc .det). Stub para no tocar los call sites.
+  function renderSpot() {}
+
+  // Recorta la razón (larga, pensada para el banner) a una frase corta para las
+  // tarjetas chicas: primera oración si entra, si no un corte prolijo por palabra + "…".
+  // Así el texto queda completo y no se ve cortado a la mitad como con el clamp solo.
+  function shortReason(text) {
+    var t = String(text || "").trim();
+    if (t.length <= 105) return t;
+    var dot = t.indexOf(". ");
+    if (dot >= 30 && dot <= 130) return t.slice(0, dot + 1);
+    var cut = t.slice(0, 100);
+    var sp = cut.lastIndexOf(" ");
+    if (sp > 40) cut = cut.slice(0, sp);
+    return cut + "…";
+  }
+
+  // Detalle como overlay sobre la parte baja del póster (solo tarjeta enfocada).
+  // Muestra el "hook" (porqué ultra concreto, ej "Porque hay espadas medievales
+  // y honor en juego"); si el ítem es viejo y no lo trae, cae a la 1ª frase.
+  // ¿El ítem está por ranking (tira "Top 5 en X") y no por sugerencia de Miru?
+  // En los tops no va el "porqué te la propongo" — están ahí por ser top.
+  function isTopItem(it) {
+    return !!(it && it.section && it.section.indexOf("Top 5 en") === 0);
+  }
+  function detHTML(it) {
+    var why = it.hook || shortReason(it.reason);
+    if (!why) return "";
+    // El hook viene como "<de qué va> · <por qué te la propongo>": partimos en el
+    // separador para diferenciar las dos mitades. Si el modelo no lo mandó (o es
+    // un ítem viejo), se muestra entero como porqué.
+    var ix = why.indexOf(" · ");
+    if (isTopItem(it)) {
+      // Top: solo el "de qué va" (sin ✦). Fallback: sinopsis recortada.
+      var what = ix > 0 ? why.slice(0, ix) : (it.synopsis || why);
+      return '<div class="det"><p class="wsyn">🎬 ' + esc(what) + "</p></div>";
+    }
+    if (ix > 0) {
+      return '<div class="det"><p class="wsyn">🎬 ' + esc(why.slice(0, ix)) + "</p>" +
+             '<p class="wwhy"><b>✦</b> ' + esc(why.slice(ix + 3)) + "</p></div>";
+    }
+    return '<div class="det"><p class="wwhy"><b>✦</b> ' + esc(why) + "</p></div>";
+  }
+
+  // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
+  // cardHTML y también al recargar el póster (loadPosters), para no perder la info.
+  function cardPh(it) {
+    var h = posterHTML(it) + '<div class="cgrad"></div>';
+    // Guardada en "Mi lista": degradé + check encima (mismo lenguaje que la
+    // app móvil) — sensación inmediata de "quedó reservada".
+    // PERO no en la lista "Mi lista": ahí TODAS están guardadas, así
+    // que la marca no informa nada y el degradé violeta + el tilde solo tapan la
+    // carátula. Se muestra solo donde distingue (grilla general, "Mi lista").
+    if (isToday(it) && it.section !== MYLIST_SECTION) {
+      h += '<div class="csaved"><span class="cchk">✓</span><span class="ctxt">En mi lista</span></div>';
+    }
+    // Info superpuesta (mismos campos que el héroe/móvil): título + tipo·año·edad + plataforma.
+    h += '<div class="cinfo"><span class="tt">' + esc(it.title) + "</span>";
+    var sub = [];
+    if (it.type) sub.push(it.type);
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="csub">' + esc(sub.join(" · ")) + "</span>";
+    if (it.platform) h += '<span class="pl" style="background:' + colorFor(it.platform) + '">' + esc(platLabel(it.platform)) + "</span>";
+    h += "</div>";
+    return h + detHTML(it);
+  }
+
+  function cardHTML(it, foc) {
+    var h = '<div class="card' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
+    h += '<div class="ph">' + cardPh(it) + "</div></div>";
+    return h;
+  }
+
+  // Héroe: la recomendación principal (item 0) a lo grande, con póster de fondo,
+  // doble gradiente cinematográfico y la razón de Miru. Comparte el id
+  // "card-<id>" con las tarjetas para reusar foco/scroll.
+  function heroHTML(it, foc, chevL, chevR) {
+    var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
+    if (chevL) h += '<span class="hchev l">‹</span>';
+    if (chevR) h += '<span class="hchev r">›</span>';
+    h += '<div class="info"><div class="hpanel">';
+    h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
+    h += '<div class="hmeta">';
+    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    var sub = [];
+    if (it.type) sub.push(it.type);
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
+    h += "</div>";
+    // Orden pedido: (a) Sinopsis y (b) por qué te la propongo.
+    if (it.synopsis) h += '<p class="hsyn"><span class="hemo">🎬</span> ' + esc(it.synopsis) + "</p>";
+    if (it.reason) h += '<p class="hreason">' + esc(it.reason) + "</p>";
+    // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
+    // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
+    // vive únicamente en el control del teléfono — el banner queda limpio.
+    var af = foc ? actionFocus : -1;
+    var td = isToday(it);
+    if (uiMode !== "rc") {
+      // Modo vinculado: SIN botones sobre el banner. El control tiene botones
+      // dedicados (Mi lista / Play / Ya la vi) y OK contextual; acá solo
+      // estorbaban — con el foco en un botón, ←/→ dejaba de cambiar de
+      // candidata y la navegación lateral quedaba "bloqueada".
+      h += '</div></div>';
+      h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+      h += "</div>";
+      return h;
+    }
+    h += '<div class="hactions">';
+    // El label "Mi lista" solo se muestra en la ficha (ahí sobra espacio); en el
+    // banner el botón queda como ícono redondo para no robarle aire al hero.
+    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
+         (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
+    h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += "</div>";
+    h += "</div></div>"; // cierra .hpanel y .info
+    // Columna del póster a la derecha (acotada, con blend hacia el panel negro).
+    h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+    h += "</div>";
+    return h;
+  }
+
+  // Grilla simple (sin encabezados de sección), desde startIndex. Para el bloque
+  // "Más opciones" del home.
+  function cardsGridHTML(start) {
+    var html = '<div class="grid">';
+    for (var i = start; i < items.length; i++) html += cardHTML(items[i], i === focusedIndex);
+    html += "</div>";
+    if (loadingMore) html += '<div class="more">Cargando más…</div>';
+    return html;
+  }
+
+  // Grilla plana agrupada por sección (búsqueda / "Mi lista"): resultados pares.
+  function gridHTML(start) {
+    var html = "";
+    var cur = null;
+    var open = false;
+    for (var i = start; i < items.length; i++) {
+      var it = items[i];
+      var sec = it.section || "";
+      if (sec !== cur) {
+        if (open) { html += "</div>"; open = false; }
+        cur = sec;
+        if (sec) html += '<h3 class="sec">' + esc(sec) + "</h3>";
+        html += '<div class="grid">'; open = true;
+      }
+      html += cardHTML(it, i === focusedIndex);
+    }
+    if (open) html += "</div>";
+    if (loadingMore) html += '<div class="more">Cargando más…</div>';
+    return html;
+  }
+
+  // --- Lista guardada "Mi lista" (identidad por título, estable entre listas) ---
+  function loadToday() { try { var v = localStorage.getItem(TODAY_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function saveToday() { try { localStorage.setItem(TODAY_KEY, JSON.stringify(today)); } catch (e) {} }
+  function isToday(item) { if (!item) return false; for (var i = 0; i < today.length; i++) if (today[i].title === item.title) return true; return false; }
+  function toggleToday(item) {
+    if (!item) return;
+    var found = -1;
+    for (var i = 0; i < today.length; i++) if (today[i].title === item.title) { found = i; break; }
+    if (found >= 0) today.splice(found, 1);
+    // Se guarda TAMBIÉN synopsis/hook: la ficha abierta desde la lista los
+    // necesita (antes se perdían y la ficha quedaba sin sinopsis).
+    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
+    if (todayFocus >= today.length) todayFocus = today.length ? today.length - 1 : -1;
+    saveToday(); render(); emitScreen(true);
+  }
+
+  // --- "Ya vistas" del modo RC (mismo patrón que la lista guardada) ---
+  function loadSeen() { try { var v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function saveSeen() { try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {} }
+  function isSeen(item) { if (!item) return false; for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) return true; return false; }
+  function toggleSeen(item) {
+    if (!item) return;
+    var found = -1;
+    for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) { found = i; break; }
+    if (found >= 0) seen.splice(found, 1);
+    else seen.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
+    saveSeen(); render();
+  }
+  function showSeen() {
+    if (!seen.length) { showToast("Todavía no marcaste nada como visto"); return; }
+    var li = [];
+    for (var i = 0; i < seen.length; i++) {
+      var t = seen[i];
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: "Ya vistas" });
+    }
+    tabFocus = -1;
+    showList(li);
+  }
+  // El like/dislike local de la TV (tvLiked/tvDisliked) se eliminó: el feedback
+  // de gustos se maneja SOLO desde el control (viaja en liked/disliked del SEARCH).
+  // (La tira "Mi lista" del home se eliminó: acceso por el tab del menú en RC
+  // y por el botón del control en vinculado — showToday() sigue siendo la vista.)
+
+  // Affordance de una tira horizontal: si hay tiles fuera de vista a la
+  // derecha, fade en el borde + flecha ›. Se recalcula al renderizar y al
+  // mover el foco. Solo togglea "fade" (las tiras Top 5 llevan más clases).
+  function rowAffordance(rowId, arrId) {
+    var row = document.getElementById(rowId);
+    var arr = document.getElementById(arrId);
+    if (!row || !arr) return;
+    var more = row.scrollWidth > Math.ceil(row.clientWidth + row.scrollLeft) + 4;
+    arr.className = "rowmore" + (more ? "" : " hidden");
+    var base = row.className.replace(/ ?\bfade\b/g, "");
+    row.className = base + (more ? " fade" : "");
+  }
+  function updateRowAffordance() {
+    for (var i = 0; i < topRows.length; i++) rowAffordance("toprow-" + i, "toprowmore-" + i);
+  }
+
+  // --- Tiras "Top 5 en X" (catálogo por plataforma del home) ---
+  // El usuario ve primero SUS plataformas (Filtros del modo RC); las demás
+  // quedan abajo, atenuadas pero presentes. Sin filtro: orden del backend.
+  function orderTopRows(rows) {
+    if (!rows || !rows.length) return [];
+    var out = [], rest = [], i, j;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      // id estable por tile (la ficha y sus chevrons comparan por id).
+      for (j = 0; j < r.items.length; j++) if (!r.items[j].id) r.items[j].id = "tr" + i + "-" + j;
+      var hasFilter = !!(userPlatforms && userPlatforms.length);
+      var sel = !hasFilter;
+      if (hasFilter) {
+        for (j = 0; j < userPlatforms.length; j++) {
+          if (r.platform === userPlatforms[j] || platLabel(r.platform) === platLabel(userPlatforms[j])) { sel = true; break; }
+        }
+      }
+      r.dim = hasFilter && !sel;
+      (sel ? out : rest).push(r);
+    }
+    return out.concat(rest);
+  }
+  function topRowsHTML() {
+    if (!topRows.length) return "";
+    var h = "";
+    for (var i = 0; i < topRows.length; i++) {
+      var row = topRows[i];
+      h += '<h3 class="sec' + (row.dim ? " dim" : "") + '"><span class="pdot" style="background:' + colorFor(row.platform) + '"></span>Top 5 en ' + esc(platLabel(row.platform)) + "</h3>";
+      h += '<div class="rowwrap"><div class="todayrow' + (row.dim ? " dim" : "") + '" id="toprow-' + i + '">';
+      // Tarjetas IGUALES a las de "Más opciones" (cardPh completo: carátula,
+      // info superpuesta y sinopsis+porqué al enfocar) — solo que en una fila
+      // horizontal scrolleable en vez de la grilla.
+      for (var j = 0; j < row.items.length; j++) {
+        var it = row.items[j];
+        h += '<div class="card' + (i === rowFocus && j === rowCol ? " foc" : "") + '" id="toptile-' + i + "-" + j + '"><div class="ph">' + cardPh(it) + '</div><span class="rank">' + (j + 1) + "</span></div>";
+      }
+      h += '</div><span class="rowmore hidden" id="toprowmore-' + i + '">›</span></div>';
+    }
+    return h;
+  }
+
+  // --- Ficha: el ítem elegido a lo grande (estilo banner), a pantalla completa ---
+  // Ítems entre los que se navega con ←/→ DENTRO de la ficha: los del mismo
+  // contexto del que la abriste (candidatas si zoomeaste una candidata, la
+  // grilla general si venías de ahí, la tira "Mi lista" si venías de ahí).
+  function detailSiblings() {
+    if (detailScope === "today") return today;
+    if (detailScope === "toprow") return (topRows[rowFocus] && topRows[rowFocus].items) || [];
+    if (mode !== "home" && mode !== "search") return items; // "Mi lista" / listas
+    var top = Math.min(TOP, items.length);
+    if (detailScope === "cands") return items.slice(0, top);
+    return items.slice(top);
+  }
+
+  function openDetail(item) {
+    if (!item) return;
+    detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true);
+    // Prefetch del link exacto al título: cuando el usuario toque "Ver en X",
+    // el deeplink de JustWatch ya está resuelto y abre directo (sin espera).
+    jwResolve(item);
+  }
+  // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
+  // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
+  // y quedaría desincronizado. "Mi lista" siempre viaja como screen "search".
+  function closeDetail() { detailItem = null; actionFocus = -1; screen = (mode === "list" ? "search" : mode); render(); emitScreen(true); }
+  // Ficha a pantalla completa (ya no reusa el banner): póster grande + info
+  // completa (razón sin recorte + sinopsis) + botones navegables con ←/→.
+  function detailHTML(it) {
+    // Chevrons de la ficha: se dibujan según haya título anterior/siguiente en
+    // el mismo contexto (detailSiblings), igual que en el banner.
+    var sib = detailSiblings(), ci = -1;
+    for (var q = 0; q < sib.length; q++) { if (sib[q].id === it.id) { ci = q; break; } }
+    var h = '<div class="detail">';
+    if (ci > 0) h += '<span class="hchev l">‹</span>';
+    if (ci >= 0 && ci < sib.length - 1) h += '<span class="hchev r">›</span>';
+    h += '<div class="dposter"><div class="dph">' + posterHTML(it) + "</div></div>";
+    h += '<div class="dinfo">';
+    h += '<h2 class="dtitle">' + esc(it.title) + "</h2>";
+    h += '<div class="hmeta">';
+    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    var sub = [];
+    if (it.type) sub.push(it.type);
+    if (it.year) sub.push(it.year);
+    if (it.ageRating) sub.push(it.ageRating);
+    if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
+    h += "</div>";
+    if (it.synopsis || it.reason) {
+      h += '<div class="dtext">';
+      if (it.synopsis) h += '<h4 class="dsec">🎬 Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
+      // En un top el "porqué" no aplica (está por ranking, no por sugerencia).
+      if (it.reason && !isTopItem(it)) h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
+      h += "</div>";
+    }
+    var td = isToday(it);
+    h += '<div class="hactions">';
+    h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
+         (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
+    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    // 3er botón SOLO en modo RC: marca "Ya la vi" (en modo vinculado ese flujo
+    // vive en el control del teléfono, con su hoja de rating).
+    if (uiMode === "rc") {
+      var sn = isSeen(it);
+      h += '<button class="hbtn ico' + (actionFocus === 2 ? " bfoc" : "") + (sn ? " on" : "") + '" title="Ya la vi">' +
+           (sn ? "✓" : "◉") + '<span class="blab">Ya la vi</span></button>';
+    }
+    h += "</div>";
+    h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
+    // Atribución requerida por TMDB: los watch providers son datos de JustWatch.
+    if (it.platform) h += '<div class="jwattr">Disponibilidad: JustWatch</div>';
+    h += "</div></div>";
+    return h;
+  }
+
+  // --- Modo RC: tabs de acceso, teclado en pantalla y filtros ---
+  function micTabLabel() {
+    return micState === "rec" ? "🎙 Escuchando…"
+      : micState === "requesting" ? "🎙 Pidiendo permiso…"
+      : micState === "processing" ? "🎙 Un momento…"
+      : "🎙 Hablar";
+  }
+  function tabList() {
+    return [
+      // Mic primero y siempre visible (mismo lugar en toda pantalla RC: home,
+      // resultados, listas) — no es una sub-pantalla, tocarlo no navega nada.
+      { label: micTabLabel(), cnt: 0, mic: true },
+      { label: "🔍 Buscar", cnt: 0 },
+      { label: "Mi lista", cnt: today.length },
+      { label: "Ya vistas", cnt: seen.length },
+      { label: "Plataformas", cnt: (userPlatforms && userPlatforms.length) ? userPlatforms.length : 0 },
+      // Siempre a mano: pasar a manejar la TV desde el teléfono sin volver al inicio.
+      { label: "📱 Vincular teléfono", cnt: 0 }
+    ];
+  }
+  function tabHTML(i) {
+    var t = tabList()[i];
+    return '<span class="tab' + (t.mic ? " mictab " + micState : "") + (i === tabFocus ? " foc" : "") +
+      '" id="tab-' + i + '">' + t.label + (t.cnt ? ' <span class="cnt">' + t.cnt + "</span>" : "") + "</span>";
+  }
+  function tabsHTML() {
+    if (uiMode !== "rc") return "";
+    var h = '<div class="tabs" id="tabs">';
+    for (var i = 0; i < tabList().length; i++) h += tabHTML(i);
+    return h + "</div>";
+  }
+  function tabAction(i) {
+    if (i === 0) { micToggle(); return; }
+    if (i === 1) { openKb(); return; }
+    if (i === 2) {
+      if (!today.length) { showToast("Tu lista está vacía — OK sobre una película la guarda"); return; }
+      tabFocus = -1;
+      showToday();
+      return;
+    }
+    if (i === 3) { showSeen(); return; }
+    if (i === 4) { openFilters(); return; }
+    // Vincular teléfono: muestra el QR y recuerda desde dónde se entró para que
+    // BACK devuelva a la pantalla en la que estabas (y no al inicio).
+    micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
+    pairReturn = "rc";
+    tabFocus = -1;
+    uiMode = "pair";
+    render();
+  }
+
+  // --- Mic: grabar → transcribir → buscar. Mismo gesto que el móvil: 1er
+  // toque graba, 2º frena (sin corte por silencio), solo un tope duro de
+  // seguridad. Actualiza SOLO el tab-0 (updateMicTab), sin regenerar la fila.
+  function updateMicTab() {
+    var el = document.getElementById("tab-0");
+    if (el) el.outerHTML = tabHTML(0);
+  }
+  function micToggle() {
+    if (micState === "rec") micStop();
+    else if (micState === "idle") micStart();
+    // "requesting"/"processing": ignora toques repetidos.
+  }
+  function micStart() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+      return;
+    }
+    micState = "requesting"; updateMicTab(); // feedback ANTES del permiso
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      micStream = stream; micChunks = [];
+      var rec;
+      try { rec = new MediaRecorder(stream); }
+      catch (e) {
+        micStopTracks(); micState = "idle"; updateMicTab();
+        showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+        return;
+      }
+      micRecorder = rec;
+      rec.ondataavailable = function (e) { if (e.data && e.data.size > 0) micChunks.push(e.data); };
+      rec.start();
+      micState = "rec"; updateMicTab();
+      // Tope duro de seguridad (60s) por si el usuario se olvida de soltar.
+      micMaxTimer = setTimeout(function () { if (micState === "rec") micStop(); }, 60000);
+    }).catch(function () {
+      micState = "idle"; updateMicTab();
+      showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+    });
+  }
+  function micStop() {
+    if (micMaxTimer) { clearTimeout(micMaxTimer); micMaxTimer = null; }
+    var rec = micRecorder;
+    micRecorder = null;
+    micState = "processing"; updateMicTab();
+    if (!rec || rec.state === "inactive") {
+      micStopTracks();
+      micFinish(new Blob(micChunks, { type: "audio/webm" }));
+      return;
+    }
+    rec.onstop = function () {
+      micStopTracks();
+      micFinish(new Blob(micChunks, { type: rec.mimeType || "audio/webm" }));
+    };
+    try { rec.stop(); } catch (e) { micStopTracks(); micFinish(new Blob(micChunks, { type: "audio/webm" })); }
+  }
+  function micStopTracks() {
+    if (micStream) {
+      var tracks = micStream.getTracks();
+      for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+      micStream = null;
+    }
+  }
+  function micCancel() {
+    if (micMaxTimer) { clearTimeout(micMaxTimer); micMaxTimer = null; }
+    try { if (micRecorder && micRecorder.state !== "inactive") micRecorder.stop(); } catch (e) {}
+    micRecorder = null; micStopTracks(); micChunks = [];
+    micState = "idle";
+  }
+  function micFinish(blob) {
+    if (blob.size < 500) {
+      micState = "idle"; updateMicTab();
+      showToast("No te escuché. Probá de nuevo.");
+      return;
+    }
+    fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "audio/webm" },
+      body: blob
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var txt = ((data && data.text) || "").trim();
+        micState = "idle"; updateMicTab();
+        if (txt) runSearch({ query: txt }); // ← mismo punto de entrada que el teclado
+        else showToast("No te escuché. Probá de nuevo.");
+      })
+      .catch(function () {
+        micState = "idle"; updateMicTab();
+        showToast("No te escuché. Probá de nuevo.");
+      });
+  }
+
+  // Teclado en pantalla propio (no el IME nativo: en Tizen el IME del sistema
+  // es errático y pelea el foco con el keydown global; un grid renderizado por
+  // innerHTML es determinista y navega igual en todas las TVs).
+  var KB_ROWS = [
+    ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+    ["J", "K", "L", "M", "N", "Ñ", "O", "P", "Q"],
+    ["R", "S", "T", "U", "V", "W", "X", "Y", "Z"],
+    ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    ["0", { k: "space", label: "ESPACIO", cls: "wide" }, { k: "del", label: "⌫ Borrar", cls: "wide" }, { k: "go", label: "BUSCAR", cls: "wide go" }]
+  ];
+  function kbBufHTML() {
+    return kbBuffer
+      ? esc(kbBuffer) + '<span class="cur"></span>'
+      : '<span class="ph">¿Qué querés ver?</span>';
+  }
+  function kbHTML() {
+    var h = '<div class="kb"><div class="kbbuf" id="kbbuf">' + kbBufHTML() + "</div>";
+    for (var r = 0; r < KB_ROWS.length; r++) {
+      h += '<div class="kbrow">';
+      for (var c = 0; c < KB_ROWS[r].length; c++) {
+        var kdef = KB_ROWS[r][c];
+        var label = typeof kdef === "string" ? kdef : kdef.label;
+        var cls = typeof kdef === "string" ? "" : (" " + (kdef.cls || ""));
+        h += '<span class="key' + cls + (r === kbRow && c === kbCol ? " foc" : "") + '" id="key-' + r + "-" + c + '">' + label + "</span>";
+      }
+      h += "</div>";
+    }
+    return h + '<div class="kbhint">OK escribe · BUSCAR lanza la búsqueda · Volver cierra</div></div>';
+  }
+  function updateKbFocus() {
+    // Patrón "render una vez + toggle de clases": regenerar el grid entero por
+    // pulsación lagea en TVs de gama baja.
+    for (var r = 0; r < KB_ROWS.length; r++) {
+      for (var c = 0; c < KB_ROWS[r].length; c++) {
+        var el = document.getElementById("key-" + r + "-" + c);
+        if (!el) continue;
+        var kdef = KB_ROWS[r][c];
+        var cls = "key" + (typeof kdef === "string" ? "" : (" " + (kdef.cls || "")));
+        el.className = cls + (r === kbRow && c === kbCol ? " foc" : "");
+      }
+    }
+  }
+  function openKb() { kbOpen = true; kbBuffer = ""; kbRow = 0; kbCol = 0; render(); }
+  function closeKb() { kbOpen = false; render(); }
+  function kbMove(dir) {
+    var r = kbRow, c = kbCol;
+    if (dir === "left") c = Math.max(0, c - 1);
+    else if (dir === "right") c = Math.min(KB_ROWS[r].length - 1, c + 1);
+    else if (dir === "up") r = Math.max(0, r - 1);
+    else if (dir === "down") r = Math.min(KB_ROWS.length - 1, r + 1);
+    if (r !== kbRow) {
+      // Columna proporcional al cambiar entre filas de distinto largo (la última
+      // fila tiene 4 teclas anchas contra 9 letras de las de arriba).
+      c = Math.round(kbCol * (KB_ROWS[r].length - 1) / Math.max(1, KB_ROWS[kbRow].length - 1));
+    }
+    if (r === kbRow && c === kbCol) return;
+    kbRow = r; kbCol = c;
+    updateKbFocus();
+  }
+  function kbPress() {
+    var kdef = KB_ROWS[kbRow][kbCol];
+    var k = typeof kdef === "string" ? kdef : kdef.k;
+    if (k === "space") kbBuffer += " ";
+    else if (k === "del") kbBuffer = kbBuffer.slice(0, -1);
+    else if (k === "go") {
+      var q = kbBuffer.trim();
+      if (!q) return;
+      kbOpen = false; tabFocus = -1;
+      runSearch({ query: q });
+      return;
+    } else kbBuffer += (kbBuffer ? k.toLowerCase() : k);
+    var buf = document.getElementById("kbbuf");
+    if (buf) buf.innerHTML = kbBufHTML();
+  }
+
+  // Filtros de plataformas del modo RC: la selección se vuelca en userPlatforms
+  // (el mismo pipeline que SET_PLATFORMS del control) y persiste en el equipo.
+  function filtersHTML() {
+    var sel = userPlatforms || [];
+    var h = '<div class="filters"><h2>Plataformas</h2><p class="fsub">Elegí dónde buscar. Sin selección = todas.</p><div class="fchips">';
+    for (var i = 0; i < PLATFORMS.length; i++) {
+      var p = PLATFORMS[i];
+      var on = sel.indexOf(p) >= 0;
+      h += '<span class="fchip' + (on ? " on" : "") + (i === filterFocus ? " foc" : "") + '">' +
+           '<span class="fdot" style="background:' + colorFor(p) + '"></span>' + esc(p) + (on ? " ✓" : "") + "</span>";
+    }
+    h += '<span class="fchip done' + (filterFocus === PLATFORMS.length ? " foc" : "") + '">Listo</span>';
+    return h + '</div><div class="kbhint">OK marca/desmarca · «Listo» aplica · Volver cierra</div></div>';
+  }
+  function openFilters() { filtersOpen = true; filterFocus = 0; render(); }
+  function applyFilters() {
+    filtersOpen = false; tabFocus = -1;
+    try {
+      if (userPlatforms && userPlatforms.length) localStorage.setItem(RC_PLATFORMS_KEY, JSON.stringify(userPlatforms));
+      else localStorage.removeItem(RC_PLATFORMS_KEY);
+    } catch (e) {}
+    goHome(); // re-carga el home aplicando filterByPlatforms
+  }
+  function filterMove(dir) {
+    var n = filterFocus;
+    if (dir === "left" || dir === "up") n = Math.max(0, n - 1);
+    else if (dir === "right" || dir === "down") n = Math.min(PLATFORMS.length, n + 1);
+    if (n === filterFocus) return;
+    filterFocus = n;
+    renderContent(); // pocos nodos: regenerar acá es barato
+  }
+  function filterPress() {
+    if (filterFocus === PLATFORMS.length) { applyFilters(); return; }
+    var p = PLATFORMS[filterFocus];
+    var sel = userPlatforms ? userPlatforms.slice() : [];
+    var ix = sel.indexOf(p);
+    if (ix >= 0) sel.splice(ix, 1); else sel.push(p);
+    userPlatforms = sel.length ? sel : null;
+    renderContent();
+  }
+
+  function renderContent() {
+    // Pantallas propias del modo RC: teclado y filtros reemplazan el contenido.
+    if (uiMode === "rc" && kbOpen) { elContent.innerHTML = kbHTML(); return; }
+    if (uiMode === "rc" && filtersOpen) { elContent.innerHTML = filtersHTML(); return; }
+    // Ficha abierta: mostramos el ítem elegido a lo grande (estilo banner).
+    if (detailItem) { elContent.innerHTML = detailHTML(detailItem); return; }
+    if (loading && items.length === 0) { elContent.innerHTML = searchingHTML(); startSearchAnim(); return; }
+    if (items.length === 0) {
+      elContent.innerHTML = '<div class="center">' + ((paired || uiMode === "rc") ? "Cargando…" : "Conectando con el teléfono…") + "</div>";
+      return;
+    }
+    // Home Y BÚSQUEDA = carrusel de 5 grandes (arriba) + grilla debajo — los
+    // principales resultados merecen la misma jerarquía que el home. Solo las
+    // listas ("Mi lista" / "Ya vistas") quedan como grilla plana.
+    if (mode === "home" || mode === "search") {
+      var top = Math.min(TOP, items.length);
+      // Fila de accesos del modo RC (Buscar / Mi lista / Ya vistas / Plataformas):
+      // en modo vinculado no se renderiza — la UI queda limpia, todo va por el control.
+      var html = tabsHTML();
+      // Banner + dots en un contenedor estable: al mover el foco solo se
+      // regenera #herobox (ver updateFocusClasses), no la grilla entera.
+      html += '<div id="herobox">' + heroBoxHTML() + "</div>";
+      // La tira "Mi lista" ya NO vive en el home (redundante: en RC está el
+      // tab del menú y en vinculado el botón del control — feedback de UX).
+      // Tiras "Top 5 en X" (solo home; en búsqueda serían ruido).
+      if (mode === "home") html += topRowsHTML();
+      // El resto, desde el ítem 5.
+      var secTitle = mode === "search" ? "Más resultados" : "Más opciones para vos";
+      if (items.length > top) html += '<h3 class="sec">' + secTitle + "</h3>" + cardsGridHTML(top);
+      elContent.innerHTML = html;
+      updateRowAffordance();
+    } else {
+      // Listas ("Mi lista" / "Ya vistas"): en modo RC el menú de tabs acompaña
+      // (mismo menú que el home) — antes la lista era un callejón sin salida.
+      elContent.innerHTML = tabsHTML() + gridHTML(0);
+    }
+  }
+
+  // Banner grande del ítem enfocado del carrusel (o el último visto) + dots.
+  function heroBoxHTML() {
+    var top = Math.min(TOP, items.length);
+    var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
+    var html = heroHTML(items[hi], tabFocus < 0 && todayFocus < 0 && rowFocus < 0 && focusedIndex < top && focusedIndex === hi, hi > 0, hi < top - 1);
+    // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
+    // ocupaba una línea entera propia y le robaba alto a la tira "Mi lista", que
+    // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
+    var onCands = (tabFocus < 0 && todayFocus < 0 && rowFocus < 0 && actionFocus < 0 && focusedIndex < top);
+    html += '<div class="hdots' + (onCands ? " act" : "") + '">';
+    if (top > 1) {
+      for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
+      html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
+              (onCands ? " · ← → para cambiar" : "") + "</span>";
+    }
+    html += '<span class="okhint">' + (TOUCH
+      ? "Tocá una tarjeta para ver la ficha · + guarda en Mi lista"
+      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = elegir modo") + "</span>";
+    html += "</div>";
+    return html;
+  }
+
+  // --- Pantalla de elección + avisos ---
+  function updateChooseFocus() {
+    var c0 = document.getElementById("ch0"), c1 = document.getElementById("ch1");
+    if (c0) c0.className = "chcard" + (chooseFocus === 0 ? " foc" : "");
+    if (c1) c1.className = "chcard" + (chooseFocus === 1 ? " foc" : "");
+  }
+  function chooseSelect() {
+    pairReturn = "choose";
+    uiMode = chooseFocus === 0 ? "pair" : "rc";
+    pairBadge();
+    render();
+  }
+  var toastTimer = null;
+  function showToast(msg) {
+    if (!elToast) return;
+    elToast.textContent = msg;
+    elToast.className = "toast show";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { elToast.className = "toast"; }, 3000);
+  }
+
+  function render() {
+    // Fuera del inicio siempre hay una entrada guard en el historial del
+    // navegador: así el Volver físico del APK Android (que llega como
+    // history.back(), no como keydown) dispara popstate → backAction().
+    if (uiMode !== "choose") armBackGuard();
+    updateTback(); // botón Volver flotante del modo touch
+    if (uiMode === "choose") {
+      elChoose.className = "choose";
+      elPair.className = "pair hidden";
+      elResults.className = "wrap hidden";
+      elDcban.className = "dcban hidden";
+      updateChooseFocus();
+      return;
+    }
+    if (uiMode === "pair") {
+      elChoose.className = "choose hidden";
+      elPair.className = "pair";
+      elResults.className = "wrap hidden";
+      elDcban.className = "dcban hidden";
+      // Si hay un control vivo, BACK vuelve al contenido; si no, al inicio.
+      var ph = document.getElementById("pairhint");
+      if (ph) {
+        ph.textContent = paired
+          ? "Volver = seguir viendo en la TV"
+          : (pairReturn === "rc" ? "Volver = seguir con el control de la TV" : "Volver = elegir modo");
+      }
+      return;
+    }
+    // uiMode === "rc" | "linked": contenido a pantalla completa.
+    elChoose.className = "choose hidden";
+    elPair.className = "pair hidden";
+    elResults.className = "wrap";
+    // Banner discreto: en modo vinculado sin control presente NO se expulsa al
+    // QR (antes updatePaired te tiraba a la pantalla de vinculación en medio
+    // del uso); se avisa abajo y el contenido sigue navegable con el D-pad.
+    elDcban.className = (uiMode === "linked" && !paired) ? "dcban" : "dcban hidden";
+    if (uiMode === "rc" && (kbOpen || filtersOpen)) {
+      // Teclado / filtros a pantalla completa: sin topline.
+      elTopline.innerHTML = "";
+    } else if (detailItem) {
+      // Ficha a pantalla completa: sin la línea instructiva de arriba (ruido).
+      elTopline.innerHTML = "";
+    } else if (loading && items.length === 0) {
+      // Buscando: la rueda ya dice "Buscando «...»" — el topline es redundante.
+      elTopline.innerHTML = "";
+    } else if (mode === "search") {
+      elTopline.innerHTML = "Resultados para <b>“" + esc(query) + "”</b>";
+    } else if (mode === "list") {
+      var listSec = (items[0] && items[0].section) || "Mi lista";
+      var listMsg = listSec === "Ya vistas"
+        ? " — películas y series que ya viste."
+        : " — tus películas y series guardadas.";
+      elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
+    } else {
+      // Home: sin línea extra — el tagline de la barra y el okhint ya cumplen esa función.
+      elTopline.innerHTML = "";
+    }
+    elTopline.style.display = elTopline.innerHTML ? "" : "none";
+    renderSpot();
+    renderContent();
+  }
+
+  function scrollFocusIntoView() {
+    var el = null;
+    // Foco en una tira "Top 5 en X": centrar el tile (queda lejos del hero).
+    if (rowFocus >= 0) el = document.getElementById("toptile-" + rowFocus + "-" + rowCol);
+    if (!el) {
+      var it = items[focusedIndex];
+      if (!it) return;
+      el = document.getElementById("card-" + it.id);
+    }
+    if (!el) {
+      // Sin tarjeta = el foco volvió al hero o a la tira "Mi lista", que viven
+      // arriba de todo (con las tiras Top 5 la página es alta y se notaba).
+      if (mode === "home" || mode === "search") { try { window.scrollTo(0, 0); } catch (e) {} }
+      return;
+    }
+    var rect = el.getBoundingClientRect();
+    var mid = rect.top + window.pageYOffset - (window.innerHeight / 2) + (rect.height / 2);
+    if (mid < 0) mid = 0;
+    try { window.scrollTo(0, mid); } catch (e) {}
+  }
+
+  function updateFocusClasses() {
+    // En home y búsqueda conviven héroe (.hero) + tarjetas (.card). Antes cada
+    // flecha del D-pad reconstruía TODO (innerHTML de héroe + hasta 60
+    // tarjetas): lag y parpadeo en TVs de gama baja. Ahora solo se regenera el
+    // banner (#herobox) y se togglean clases en la grilla.
+    if (mode === "home" || mode === "search") {
+      var hb = document.getElementById("herobox");
+      if (!hb) { renderContent(); return; }
+      hb.innerHTML = heroBoxHTML();
+      // Tabs del modo RC: toggle de clase (mismo patrón que las tarjetas).
+      var tabsEl = document.getElementById("tabs");
+      if (tabsEl) {
+        var tEls = tabsEl.getElementsByClassName("tab");
+        for (var tb = 0; tb < tEls.length; tb++) tEls[tb].className = "tab" + (tb === tabFocus ? " foc" : "");
+      }
+      var top = Math.min(TOP, items.length);
+      // SOLO las tarjetas de la grilla (.grid .card): las tiras Top 5 también
+      // usan .card y se togglean aparte (abajo) — mezclarlas corría los índices.
+      var hcards = elContent.querySelectorAll(".grid .card");
+      for (var j = 0; j < hcards.length; j++) {
+        // Con el foco en el carrito, ninguna tarjeta de la grilla queda enfocada.
+        hcards[j].className = "card" + (todayFocus < 0 && top + j === focusedIndex ? " foc" : "");
+      }
+      // Tiras "Top 5 en X": toggle de la tarjeta enfocada + scroll horizontal.
+      for (var tr = 0; tr < topRows.length; tr++) {
+        var rowEl = document.getElementById("toprow-" + tr);
+        if (!rowEl) continue;
+        var rTiles = rowEl.getElementsByClassName("card");
+        for (var tc = 0; tc < rTiles.length; tc++) {
+          rTiles[tc].className = "card" + (tr === rowFocus && tc === rowCol ? " foc" : "");
+        }
+        if (tr === rowFocus && rTiles[rowCol]) {
+          rowEl.scrollLeft = Math.max(0, rTiles[rowCol].offsetLeft - 60);
+        }
+      }
+      updateRowAffordance();
+      return;
+    }
+    var tabsEl2 = document.getElementById("tabs");
+    if (tabsEl2) {
+      var tEls2 = tabsEl2.getElementsByClassName("tab");
+      for (var t2 = 0; t2 < tEls2.length; t2++) tEls2[t2].className = "tab" + (t2 === tabFocus ? " foc" : "");
+    }
+    var cards = elContent.getElementsByClassName("card");
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].className = "card" + (tabFocus < 0 && i === focusedIndex ? " foc" : "");
+    }
+  }
+
+  // --- Mensajes al teléfono ---
+  function sendState(payload) {
+    if (channel) { try { channel.send({ type: "broadcast", event: "state", payload: payload }); } catch (e) {} }
+  }
+  function emitScreenNow() {
+    // En modo RC (o en las pantallas de inicio) no hay control escuchando y las
+    // vistas nuevas (teclado, filtros) no existen en el enum del protocolo: no
+    // emitir nada fuera del modo vinculado.
+    if (uiMode !== "linked") return;
+    var fid = (items[focusedIndex] && items[focusedIndex].id) || null;
+    // todayTitles: qué está en "Mi lista" (por título, estable; nombre wire-legacy) para que el control
+    // sepa el contexto del OK (fuera del carrito = agregar; dentro = ficha).
+    // myList: los ítems COMPLETOS (aditivo) para que el control muestre la
+    // lista con carátulas — los controles viejos lo ignoran.
+    var todayTitles = [];
+    var myList = [];
+    for (var i = 0; i < today.length; i++) {
+      var t = today[i];
+      todayTitles.push(t.title);
+      var m = { id: t.id || ("t" + i), title: t.title, section: MYLIST_SECTION };
+      if (t.platform) m.platform = t.platform;
+      if (t.posterUrl) m.posterUrl = t.posterUrl;
+      if (typeof t.year === "number") m.year = t.year;
+      if (t.synopsis) m.synopsis = t.synopsis;
+      if (t.reason) m.reason = t.reason;
+      myList.push(m);
+    }
+    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles, myList: myList });
+  }
+  // El SCREEN viaja con items completo (hasta 60 ítems con reason larga) para
+  // ser compatible con los controles ya desplegados. En ráfagas de navegación
+  // (flecha sostenida, scroll del /control) eso serializaba y transmitía
+  // decenas de KB por pulsación: se coalescen con un debounce corto. Los
+  // cambios de lista/pantalla siguen saliendo inmediatos (emitScreen(true)).
+  var emitTimer = null;
+  function emitScreen(immediate) {
+    if (immediate) {
+      if (emitTimer) { clearTimeout(emitTimer); emitTimer = null; }
+      emitScreenNow();
+      return;
+    }
+    if (emitTimer) return; // ya hay un envío agendado; saldrá con el estado más nuevo
+    emitTimer = setTimeout(function () { emitTimer = null; emitScreenNow(); }, 150);
+  }
+
+  // --- Pósters vía Cinemeta (catálogo público de Stremio: con CORS y sin clave). ---
+  var lastPosterErr = "";
+  function cinemetaPoster(title, type, cb) {
+    var kind = /serie/i.test(type || "") ? "series" : "movie";
+    var u = "https://v3-cinemeta.strem.io/catalog/" + kind + "/top/search=" +
+      encodeURIComponent(title) + ".json";
+    fetch(u)
+      .then(function (r) {
+        if (!r.ok) { lastPosterErr = "HTTP " + r.status; return null; }
+        return r.json();
+      })
+      .then(function (j) {
+        var m = j && j.metas && j.metas[0];
+        var p = m && m.poster ? String(m.poster) : null;
+        // Cinemeta suele devolver la variante "medium" de metahub (~250px de
+        // ancho): en una TV 1080p se pixela fuerte. Pedimos la "big".
+        if (p) p = p.replace("/poster/medium/", "/poster/big/");
+        cb(p);
+      })
+      .catch(function (e) { lastPosterErr = (e && e.message) || "fetch falló (¿CORS/red?)"; cb(null); });
+  }
+
+  var posterRun = 0;
+  function loadPosters() {
+    var run = ++posterRun; // una nueva lista cancela el llenado anterior
+    // Cola con concurrencia limitada: antes se disparaban hasta 60 fetches a
+    // Cinemeta simultáneos (memoria/red considerables en un TV de gama baja).
+    var CONC = 5;
+    var pending = [];
+    for (var i = 0; i < items.length; i++) { if (!items[i].posterUrl) pending.push(items[i]); }
+    var total = pending.length, done = 0, loaded = 0, idx = 0;
+    function onPoster(it, url) {
+      if (run !== posterRun) return;
+      if (url) {
+        loaded++;
+        it.posterUrl = url;
+        var ph = document.querySelector("#card-" + it.id + " .ph");
+        // Regenerar todo el contenido del ph (póster + gradiente + info + detalle).
+        if (ph) ph.innerHTML = cardPh(it);
+        // Si el ítem es el héroe (home), su póster va como fondo (.bg).
+        var bg = document.querySelector("#card-" + it.id + " .bg");
+        if (bg) bg.src = url;
+      }
+      done++;
+      if (done % 4 === 0 || done >= total) emitScreen();
+      // Diagnóstico: si terminó y no entró ninguna carátula, avisamos por qué.
+      if (done >= total && loaded === 0 && total > 0 && window.__showErr) {
+        window.__showErr("Carátulas 0/" + total + " — Cinemeta: " + (lastPosterErr || "sin resultados"));
+      }
+      next();
+    }
+    function next() {
+      if (run !== posterRun || idx >= pending.length) return;
+      var item = pending[idx++];
+      // El backend ya manda posterUrl en /api/tv-home: usarlo evita una request
+      // por título desde la TV. Solo si no vino, se resuelve en el cliente.
+      if (item.posterUrl) { onPoster(item, item.posterUrl); }
+      else cinemetaPoster(item.title, item.type, function (url) { onPoster(item, url); });
+    }
+    for (var k = 0; k < CONC && k < pending.length; k++) next();
+  }
+
+  // --- Acciones ---
+  function assignIds(raw, startIndex) {
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var r = raw[i];
+      var it = { id: "m" + (startIndex + i), title: r.title, platform: r.platform };
+      if (r.year) it.year = r.year;
+      if (r.type) it.type = r.type;
+      if (r.posterUrl) it.posterUrl = r.posterUrl;
+      if (r.synopsis) it.synopsis = r.synopsis;
+      if (r.hook) it.hook = r.hook;
+      if (r.reason) it.reason = r.reason;
+      if (r.section) it.section = r.section;
+      out.push(it);
+    }
+    return out;
+  }
+
+  // Filtro de plataformas client-side para el home: /api/tv-home es un caché
+  // global (sin parámetro de plataformas) y conviene que siga así. Acá se
+  // descartan los ítems fuera del filtro; autoFill/tv-home-more (que SÍ mandan
+  // platforms) rellenan el resto.
+  function filterByPlatforms(list) {
+    if (!userPlatforms || !userPlatforms.length) return list;
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i].platform;
+      if (!p) continue;
+      for (var j = 0; j < userPlatforms.length; j++) {
+        if (p === userPlatforms[j] || platLabel(p) === platLabel(userPlatforms[j])) { out.push(list[i]); break; }
+      }
+    }
+    return out;
+  }
+
+  var homeRetryDelay = 4000;
+  function loadHome() {
+    if (homeLoaded) return;
+    homeLoaded = true;
+    screen = "home";
+    mode = "home";
+    query = "";
+    render();
+    fetch("/api/tv-home")
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        if (query) return; // si el usuario ya buscó, no piso sus resultados
+        homeRetryDelay = 4000;
+        if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1; }
+        // Tiras "Top 5 en X": si el backend no las manda (fallback sin TMDB),
+        // el home queda exactamente como antes.
+        topRows = orderTopRows((data && data.rows) || []);
+        rowFocus = -1; rowCol = 0;
+        render();
+        emitScreen(true);
+        loadPosters();
+        autoDry = false;
+        autoFill();
+      })
+      .catch(function () {
+        // API caída / sin red: antes quedaba "Cargando…" para siempre. La TV no
+        // tiene input propio, así que avisamos y reintentamos con backoff.
+        homeLoaded = false;
+        if (items.length === 0 && !query && paired) {
+          elContent.innerHTML = '<div class="center">No pudimos cargar las recomendaciones.<br>Reintentando…</div>';
+        }
+        setTimeout(loadHome, homeRetryDelay);
+        homeRetryDelay = Math.min(homeRetryDelay * 2, 30000);
+      });
+  }
+
+  var lastLiked = [], lastDisliked = [], lastPreferRecent = false;
+  function postSearch(body) {
+    return fetch("/api/tv-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+
+  function runSearch(cmd) {
+    var q = ((cmd && cmd.query) || "").trim();
+    if (!q) return;
+    pushHistory(); // recordá la pantalla actual antes de mostrar resultados
+    // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
+    // nunca veías la rueda de "buscando…" al hablarle a Miru desde ahí.
+    detailItem = null;
+    query = q;
+    mode = "search";
+    lastLiked = (cmd && cmd.liked) || [];
+    lastDisliked = (cmd && cmd.disliked) || [];
+    lastPreferRecent = !!(cmd && cmd.preferRecent);
+    screen = "search";
+    loading = true;
+    items = [];
+    focusedIndex = 0;
+    todayFocus = -1; rowFocus = -1; rowCol = 0;
+    render();
+    emitScreen(true);
+    autoDry = false;
+    postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [], preferRecent: lastPreferRecent })
+      .then(function (data) {
+        loading = false;
+        if (data && data.items) {
+          items = assignIds(data.items, 0);
+          focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1;
+        }
+        render();
+        emitScreen(true);
+        loadPosters();
+        autoFill();
+      })
+      .catch(function () {
+        loading = false; items = [];
+        elContent.innerHTML = '<div class="center">No pudimos buscar. Probá de nuevo.</div>';
+      });
+  }
+
+  // Carga anticipada: seguir pidiendo películas sin esperar a que el usuario
+  // llegue al final. Búsqueda: hasta 36. Home: hasta el tope (60). Después de
+  // esos umbrales, recién se carga más cuando el usuario se acerca al final.
+  var autoDry = false; // true si una ronda no trajo nada nuevo (cortar el loop)
+  var MAX_ITEMS = 150;  // tope duro (antes 60: se agotaba y el final de la grilla quedaba muerto)
+  function autoFill() {
+    if (autoDry) return;
+    if (mode !== "home" && mode !== "search") return;
+    var target = mode === "search" ? 36 : 60;
+    if (items.length === 0 || items.length >= target) return;
+    setTimeout(loadMore, 300);
+  }
+
+  function loadMore() {
+    if (loadingMore || loading || items.length === 0 || items.length >= MAX_ITEMS) return;
+    if (mode !== "home" && mode !== "search") return; // "Mi lista" no tiene scroll infinito
+    loadingMore = true;
+    renderContent();
+    var titles = [];
+    for (var i = 0; i < items.length && i < 40; i++) { titles.push(items[i].title); }
+    var p;
+    if (mode === "search") {
+      p = postSearch({ q: query, exclude: titles, liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [], preferRecent: lastPreferRecent });
+    } else {
+      p = fetch("/api/tv-home-more", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exclude: titles, platforms: userPlatforms || [] })
+      }).then(function (r) { return r.json(); });
+    }
+    p
+      .then(function (data) {
+        loadingMore = false;
+        var added = 0;
+        if (data && data.items && data.items.length) {
+          var seen = {};
+          for (var j = 0; j < items.length; j++) { seen[items[j].title.toLowerCase()] = true; }
+          var fresh = [];
+          for (var k = 0; k < data.items.length; k++) {
+            if (!seen[String(data.items[k].title).toLowerCase()]) fresh.push(data.items[k]);
+          }
+          // Defensa extra en home: aunque tv-home-more respeta platforms, si el
+          // server mandó algo fuera del filtro del usuario, no lo mostramos.
+          if (mode === "home") fresh = filterByPlatforms(fresh);
+          added = fresh.length;
+          items = items.concat(assignIds(fresh, items.length));
+        }
+        if (added === 0) autoDry = true; // no hay más novedades: cortar el loop
+        render();
+        emitScreen(true);
+        loadPosters();
+        autoFill();
+      })
+      .catch(function () { loadingMore = false; autoDry = true; renderContent(); });
+  }
+
+  function itemById(mediaId) {
+    for (var i = 0; i < items.length; i++) if (items[i].id === mediaId) return items[i];
+    return null;
+  }
+
+  // Resuelve un mediaId contra TODO lo que puede estar en pantalla: la ficha
+  // abierta, la lista actual y la lista guardada. Antes ADD_TODAY/OPEN_DETAIL
+  // usaban solo itemById(items) y fallaban EN SILENCIO para ítems del carrito
+  // que ya no estaban en la lista visible (p. ej. después de otra búsqueda).
+  function findItem(mediaId) {
+    if (detailItem && detailItem.id === mediaId) return detailItem;
+    var it = itemById(mediaId);
+    if (it) return it;
+    for (var j = 0; j < today.length; j++) if (today[j].id === mediaId) return today[j];
+    return null;
+  }
+
+  function focusById(mediaId) {
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].id === mediaId) {
+        if (i !== focusedIndex) {
+          focusedIndex = i; updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen();
+        }
+        return;
+      }
+    }
+  }
+
+  function moveFocus(dir) {
+    // En la ficha: ←/→ SE MUEVE ENTRE ÍTEMS (dentro de la lista de la que salió,
+    // igual que en la app); ↑/↓ elige el botón "Mi lista" (0) / "Ver en X" (1).
+    if (detailItem) {
+      if (dir === "up" || dir === "down") {
+        // ALTERNA entre los 2 botones en vez de mapear ↑=0 / ↓=1. Clave: el
+        // control del teléfono INVIERTE las direcciones (modelo "arrastrás el
+        // contenido": INVERT[up]=down). Con el mapeo absoluto, apretar ↑ para el
+        // "+" llegaba como "down" y seleccionaba "Ver en X" → OK disparaba play()
+        // y abría el browser de la TV. Alternando, la inversión deja de importar.
+        // En modo RC hay un 3er botón ("Ya la vi"): se cicla módulo 3 — ahí las
+        // direcciones no vienen invertidas porque no hay teléfono en el medio.
+        var nBtns = (uiMode === "rc") ? 3 : 2;
+        actionFocus = (actionFocus + 1) % nBtns;
+        render();
+        return;
+      }
+      var sib = detailSiblings();
+      var ci = -1;
+      for (var q = 0; q < sib.length; q++) { if (sib[q].id === detailItem.id) { ci = q; break; } }
+      if (ci < 0) return;
+      var ti = (dir === "left") ? ci - 1 : ci + 1;
+      if (ti < 0 || ti >= sib.length) return; // no dar la vuelta: los extremos frenan
+      openDetail(sib[ti]); // conserva detailScope: seguís en el mismo contexto
+      return;
+    }
+    if (items.length === 0) return;
+    var n = focusedIndex, changed = false;
+    if (mode === "home" || mode === "search") {
+      var top = Math.min(TOP, items.length);
+      if (mode === "home" && rowFocus >= 0) {
+        // En una tira "Top 5 en X": ←/→ entre tiles; ↑/↓ tira anterior/
+        // siguiente. ↑ desde la primera vuelve a "Mi lista" (o al banner);
+        // ↓ desde la última baja a la grilla "Más opciones para vos".
+        var rlen = topRows[rowFocus] ? topRows[rowFocus].items.length : 0;
+        if (dir === "right") { if (rowCol < rlen - 1) { rowCol++; changed = true; } }
+        else if (dir === "left") { if (rowCol > 0) { rowCol--; changed = true; } }
+        else if (dir === "down") {
+          if (rowFocus < topRows.length - 1) {
+            rowFocus++;
+            rowCol = Math.min(rowCol, Math.max(0, topRows[rowFocus].items.length - 1));
+            changed = true;
+          } else if (items.length > top) { rowFocus = -1; rowCol = 0; n = top; changed = true; }
+        } else if (dir === "up") {
+          if (rowFocus > 0) {
+            rowFocus--;
+            rowCol = Math.min(rowCol, Math.max(0, topRows[rowFocus].items.length - 1));
+          } else {
+            rowFocus = -1; rowCol = 0;
+            if (uiMode === "rc") actionFocus = 0;
+            // vinculado: el foco vuelve directo al banner
+          }
+          changed = true;
+        }
+      } else if (focusedIndex < top) {
+        if (actionFocus >= 0) {
+          // En la fila de botones del banner: ←/→ entre botones; ↑ vuelve al
+          // banner; ↓ al carrito (si tiene algo) o a la grilla.
+          if (dir === "right") { var nr = Math.min(actionFocus + 1, 1); if (nr !== actionFocus) { actionFocus = nr; changed = true; } }
+          else if (dir === "left") { var nl = Math.max(actionFocus - 1, 0); if (nl !== actionFocus) { actionFocus = nl; changed = true; } }
+          else if (dir === "up") { actionFocus = -1; changed = true; }
+          else if (dir === "down") {
+            actionFocus = -1;
+            if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
+            else if (items.length > top) n = top;
+            changed = true;
+          }
+        } else {
+          // En el banner: ←/→ recorre los 5; ↓ entra a los botones; ↑ sube a la
+          // fila de tabs (solo modo RC — en vinculado no hay tabs).
+          if (dir === "right") { n = Math.min(focusedIndex + 1, top - 1); if (n < top) heroIndex = n; }
+          else if (dir === "left") { n = Math.max(focusedIndex - 1, 0); if (n < top) heroIndex = n; }
+          else if (dir === "down") {
+            if (uiMode === "rc") { actionFocus = 0; changed = true; }
+            else {
+              // Vinculado: sin botones en el banner — ↓ va a las tiras o la grilla.
+              if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
+              else if (items.length > top) n = top;
+              changed = true;
+            }
+          }
+          else if (dir === "up" && uiMode === "rc") { tabFocus = 0; changed = true; }
+        }
+      } else {
+        // En la grilla: ←/→ ±1, ↓ +6, ↑ −6 (y si sube del tope, va al carrito
+        // si tiene algo, o a los botones del banner).
+        if (dir === "right") n = Math.min(focusedIndex + 1, items.length - 1);
+        else if (dir === "left") n = Math.max(focusedIndex - 1, top);
+        else if (dir === "down") n = Math.min(focusedIndex + 6, items.length - 1);
+        else {
+          n = focusedIndex - 6;
+          if (n < top) {
+            n = heroIndex;
+            // Subiendo desde la grilla, primero las tiras "Top 5 en X" (la
+            // última), después "Mi lista", después el banner — orden visual.
+            if (mode === "home" && topRows.length) {
+              rowFocus = topRows.length - 1;
+              rowCol = Math.min((focusedIndex - top) % 6, Math.max(0, topRows[rowFocus].items.length - 1));
+            }
+            else if (uiMode === "rc") actionFocus = 0;
+            // vinculado sin tira: el foco vuelve directo al banner
+          }
+        }
+      }
+    } else {
+      if (dir === "right") n = Math.min(n + 1, items.length - 1);
+      else if (dir === "left") n = Math.max(n - 1, 0);
+      else if (dir === "down") n = Math.min(n + 6, items.length - 1);
+      else if (dir === "up") {
+        // Primera fila de la lista: ↑ sube al menú de tabs (solo modo RC).
+        if (focusedIndex - 6 < 0 && uiMode === "rc") { tabFocus = 0; changed = true; }
+        else n = Math.max(n - 6, 0);
+      }
+    }
+    if (n !== focusedIndex) { focusedIndex = n; changed = true; }
+    // Scroll infinito con el CONTROL DE LA TV: hasta ahora loadMore solo lo
+    // disparaba el autoFill (proactivo, hasta 60) o el teléfono (LOAD_MORE), así
+    // que si llegabas al final de la grilla con el remoto —típico en el home sin
+    // búsqueda— no cargaba nada más. Ahora, al acercarse al final, pide más.
+    if (changed && (mode === "home" || mode === "search") && focusedIndex >= items.length - 6) loadMore();
+    if (changed) { updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen(); }
+  }
+
+  function removeById(mediaId) {
+    var idx = -1;
+    for (var i = 0; i < items.length; i++) { if (items[i].id === mediaId) { idx = i; break; } }
+    if (idx < 0) return;
+    items.splice(idx, 1);
+    if (focusedIndex >= items.length) focusedIndex = Math.max(0, items.length - 1);
+    render();
+    emitScreen(true);
+  }
+
+  function snapshot() {
+    return {
+      items: items, mode: mode, query: query, focusedIndex: focusedIndex,
+      lastLiked: lastLiked, lastDisliked: lastDisliked
+    };
+  }
+  function pushHistory() {
+    if (items.length === 0) return; // nada que recordar
+    history.push(snapshot());
+    if (history.length > 12) history.shift();
+  }
+
+  function showList(listItems) {
+    if (mode !== "list") pushHistory(); // recordá la pantalla actual
+    mode = "list";
+    query = "";
+    screen = "search";
+    loading = false;
+    items = assignIds(listItems || [], 0); // conserva section "Mi lista"
+    focusedIndex = 0;
+    todayFocus = -1; rowFocus = -1; rowCol = 0;
+    render();
+    emitScreen(true);
+    loadPosters();
+  }
+
+  // Atajo del control: mostrar el carrito de la TV como lista con cartel claro.
+  function showToday() {
+    if (!today.length) return;
+    var li = [];
+    for (var i = 0; i < today.length; i++) {
+      var t = today[i];
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: MYLIST_SECTION });
+    }
+    showList(li);
+  }
+
+  // Atajo del control: volver al home de recomendaciones desde cualquier lado.
+  function goHome() {
+    detailItem = null;
+    history = [];
+    query = "";
+    mode = "home";
+    screen = "home";
+    actionFocus = -1;
+    todayFocus = -1; rowFocus = -1; rowCol = 0;
+    loading = false;
+    stopSearchAnim();
+    homeLoaded = false; // fuerza re-carga (el server la tiene cacheada: es rápida)
+    loadHome();
+  }
+
+  function goBack() {
+    if (history.length === 0) return; // no hay a dónde volver (pantalla inicial)
+    var s = history.pop();
+    items = s.items;
+    mode = s.mode;
+    query = s.query;
+    lastLiked = s.lastLiked || [];
+    lastDisliked = s.lastDisliked || [];
+    focusedIndex = Math.min(s.focusedIndex || 0, Math.max(0, items.length - 1));
+    todayFocus = -1; rowFocus = -1; rowCol = 0;
+    render();
+    emitScreen(true);
+  }
+
+  // Overlay de apertura de la app de streaming. Se auto-oculta a los 6s, al
+  // volver del background (pagehide/visibilitychange: la app de streaming tomó
+  // el frente y al volver la TV no debe quedar tapada) o con BACK.
+  var openingTimer = null;
+  function hideOpening() {
+    if (openingTimer) { clearTimeout(openingTimer); openingTimer = null; }
+    var d = document.getElementById("opening");
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
+  function showOpening(it) {
+    hideOpening();
+    var col = colorFor(it.platform);
+    var d = document.createElement("div");
+    d.id = "opening";
+    d.className = "opening";
+    d.innerHTML =
+      '<div class="sline">Abriendo <b>' + esc(platLabel(it.platform)) + "</b>…</div>" +
+      '<div class="swheel"><div class="sring"></div><div class="sarc" style="border-top-color:' + col + '"></div>' +
+      '<div class="sc"><span class="slbl">Reproduciendo</span><span class="spl" style="color:' + col + '">' + esc(it.title) + "</span></div></div>";
+    document.body.appendChild(d);
+    openingTimer = setTimeout(hideOpening, 6000);
+  }
+  document.addEventListener("visibilitychange", function () { if (document.hidden) hideOpening(); });
+  window.addEventListener("pagehide", hideOpening);
+
+  function play(mediaId) {
+    // La ficha puede ser un ítem de la lista guardada que ya no está en la
+    // lista actual: findItem resuelve contra ficha + lista + guardados.
+    var it = findItem(mediaId);
+    if (!it) it = items[focusedIndex];
+    if (!it) return;
+    sendState({ type: "NOW_PLAYING", media: it });
+    if (it.platform) {
+      showOpening(it);
+      var key = it.title + "|" + it.platform;
+      var jw = Object.prototype.hasOwnProperty.call(jwCache, key) ? jwCache[key] : undefined;
+      if (jw && (jw.deeplinkAndroid || jw.standardWebURL)) {
+        // Link exacto: la app de streaming abre EN el título (post-perfil, play).
+        openExternal(jw.deeplinkAndroid || jw.standardWebURL, jw.standardWebURL || deepLink(it.platform, it.title));
+      } else {
+        // Sin deeplink resuelto (aún cargando, sin match o JW caído): búsqueda
+        // prellenada de siempre. De paso se calienta para el próximo intento.
+        openExternal(appScheme(it.platform, it.title), deepLink(it.platform, it.title));
+        if (jw === undefined) jwResolve(it);
+      }
+    }
+  }
+
+  function handleCommand(cmd) {
+    if (!cmd || !cmd.type) return;
+    // Llega un comando = hay un control vivo manejando la TV: la UI pasa al
+    // modo vinculado venga de donde venga (inicio, QR o modo RC).
+    if (uiMode !== "linked") { uiMode = "linked"; render(); }
+    if (cmd.type === "SEARCH") runSearch(cmd);
+    else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
+    else if (cmd.type === "LOAD_MORE") loadMore();
+    else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
+    // SELECT con mediaId = enfocá ese ítem. SIN mediaId = "apretaron OK": lo
+    // resuelve okPress(), que respeta el botón enfocado (actionFocus). Antes el
+    // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Mi lista" te
+    // lanzaba la app de streaming porque el comando ya venía como "reproducí".
+    else if (cmd.type === "SELECT") { if (cmd.mediaId) focusById(cmd.mediaId); else okPress(); }
+    else if (cmd.type === "PLAY") play(cmd.mediaId);
+    else if (cmd.type === "REMOVE") removeById(cmd.mediaId);
+    else if (cmd.type === "SHOW_LIST") showList(cmd.items);
+    else if (cmd.type === "HOME") goHome();
+    else if (cmd.type === "SHOW_TODAY") showToday();
+    // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si
+    // no hay ficha ni historial, la TV vuelve a la pantalla de elección (desde
+    // ahí se puede re-vincular mostrando el QR).
+    else if (cmd.type === "BACK") {
+      if (detailItem) closeDetail();
+      else if (history.length) goBack();
+      else if (mode !== "home") goHome(); // lista/búsqueda sin historial: al home
+      else { uiMode = "choose"; render(); }
+    }
+    else if (cmd.type === "ADD_TODAY") { var ta = findItem(cmd.mediaId); if (ta) toggleToday(ta); }
+    else if (cmd.type === "OPEN_DETAIL") {
+      var td2 = findItem(cmd.mediaId);
+      if (td2) {
+        // Mismo criterio que el doble tap: el scope define entre qué ítems se
+        // mueve ←/→ dentro de la ficha.
+        var ix = -1;
+        for (var w = 0; w < items.length; w++) { if (items[w].id === td2.id) { ix = w; break; } }
+        if (mode !== "home" && mode !== "search") detailScope = "list";
+        else detailScope = (ix >= 0 && ix < Math.min(TOP, items.length)) ? "cands" : "grid";
+        openDetail(td2);
+      }
+    }
+    else if (cmd.type === "SET_PLATFORMS") {
+      // Lista vacía = "todas" (limpia el filtro). Antes lo vacío se ignoraba y
+      // no había forma de des-filtrar desde el control.
+      userPlatforms = (cmd.platforms && cmd.platforms.length) ? cmd.platforms : null;
+      if (loading) renderContent(); // refrescar el loader si está en pantalla
+    }
+  }
+
+  // OK contextual (mismo modelo que el móvil), válido para el remoto nativo y el
+  // control móvil (que manda "SELECT"). Ficha abierta: OK = ver ahora. En el carrito:
+  // 1 OK = ficha (en todos lados). Doble OK = guardar/sacar de "Mi lista".
+  var okTimer = null, okTitle = "";
+  function okPress() {
+    if (detailItem) {
+      // En la ficha: 0 = guardar en lista, 1 = "Ver en X", 2 = "Ya la vi" (solo RC).
+      if (actionFocus === 0) { toggleToday(detailItem); return; }
+      if (actionFocus === 2 && uiMode === "rc") { toggleSeen(detailItem); return; }
+      play(detailItem.id);
+      return;
+    }
+    var it = items[focusedIndex];
+    // Los BOTONES DEL BANNER mandan primero. Antes esta rama iba después de la del
+    // carrito, y como la del carrito abría la ficha sin mirar actionFocus, si
+    // todayFocus había quedado activo, apretar "Ver en X" te llevaba a la ficha en
+    // vez de lanzar la app de streaming.
+    if (it && (mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
+      if (actionFocus === 0) toggleToday(it);
+      else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
+      return;
+    }
+    // Foco en una tira "Top 5 en X": OK abre la ficha (mismo gesto que "Mi lista").
+    if (mode === "home" && rowFocus >= 0 && actionFocus < 0) {
+      var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
+      if (rit) { detailScope = "toprow"; openDetail(rit); }
+      return;
+    }
+    if (!it) return;
+    // Regla de tapping (pedido de UX): el gesto natural del tap único es VER MÁS.
+    //   1 tap  → abrir la ficha (y desde ahí, otro OK = ver en la plataforma)
+    //   2 taps → guardar/sacar de "Mi lista"
+    if (okTimer && okTitle === it.title) { // 2º press dentro de la ventana → doble → guardar
+      clearTimeout(okTimer); okTimer = null; okTitle = "";
+      toggleToday(it); return;
+    }
+    if (okTimer) clearTimeout(okTimer);
+    okTitle = it.title;
+    okTimer = setTimeout((function (target) {
+      return function () {
+        okTimer = null; okTitle = "";
+        // El scope define entre qué ítems te movés con ←/→ en la ficha.
+        if (mode !== "home" && mode !== "search") detailScope = "list";
+        else detailScope = (focusedIndex < Math.min(TOP, items.length)) ? "cands" : "grid";
+        openDetail(target);
+      };
+    })(it), 380);
+  }
+
+  // TODA la lógica de "Volver" en un solo lugar: la usan el keydown (Tizen /
+  // navegadores, tecla Return/Esc) Y el popstate (APK Android, donde el botón
+  // físico NO llega como keydown — Capacitor hace history.back() del WebView).
+  // Devuelve true si lo consumió; false = pantalla de inicio (dejar que el
+  // sistema cierre la app).
+  function backAction() {
+    if (uiMode === "choose") return false;
+    if (uiMode === "pair") {
+      // Con control vivo, BACK vuelve al contenido; si no, al lugar desde el
+      // que se abrió el QR (el modo RC si entraste por el tab, o el inicio).
+      if (paired) uiMode = "linked";
+      else uiMode = (pairReturn === "rc" && items.length) ? "rc" : "choose";
+      pairReturn = "choose";
+      render();
+      return true;
+    }
+    if (document.getElementById("opening")) { hideOpening(); return true; }
+    if (uiMode === "rc" && kbOpen) { closeKb(); return true; }
+    if (uiMode === "rc" && filtersOpen) { filtersOpen = false; tabFocus = -1; render(); return true; }
+    if (uiMode === "rc" && tabFocus >= 0 && !detailItem) { tabFocus = -1; updateFocusClasses(); return true; }
+    if (detailItem) { closeDetail(); return true; }
+    if (history.length) { goBack(); return true; }
+    if (mode !== "home") {
+      // En una lista o búsqueda sin historial (p. ej. la TV se recargó ahí):
+      // BACK vuelve al home — nunca puede quedar sin salida.
+      goHome();
+      return true;
+    }
+    // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
+    // QR, una sorpresa para el que solo quería "salir" de donde estaba).
+    micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
+    uiMode = "choose";
+    render();
+    return true;
+  }
+
+  // Botón Volver físico en el APK Android (Philips/Android TV): Capacitor no
+  // reenvía KEYCODE_BACK como keydown — hace history.back() del WebView, y en
+  // una página única sin historial eso no hace NADA (quedabas preso de la
+  // ficha). Sembramos una entrada "guard" en el historial del navegador
+  // (window.history — `history` a secas es nuestra pila de pantallas) y
+  // tratamos cada popstate como un BACK. En la pantalla de inicio no se
+  // re-arma: el próximo Volver cierra la app, como corresponde.
+  var backGuardArmed = false;
+  function armBackGuard() {
+    if (backGuardArmed || uiMode === "choose") return;
+    try { window.history.pushState({ miru: 1 }, ""); backGuardArmed = true; } catch (e) {}
+  }
+  window.addEventListener("popstate", function () {
+    backGuardArmed = false;
+    if (backAction()) armBackGuard();
+  });
+
+  // ═══ Puntero: la misma UI, clickeable (web touch para tablets/laptops) ═══
+  // Un solo listener delegado — respeta el patrón render-once (no se cuelgan
+  // handlers por elemento). En la TV no hay puntero: cero efecto.
+  if (TOUCH) {
+    document.body.className += " touch";
+    var tb = document.createElement("div");
+    tb.id = "tback"; tb.className = "tback hidden"; tb.textContent = "‹ Volver";
+    document.body.appendChild(tb);
+  }
+  function updateTback() {
+    var el = document.getElementById("tback");
+    if (!el) return;
+    var show = uiMode !== "choose" &&
+      (detailItem || kbOpen || filtersOpen || mode !== "home" || uiMode === "pair");
+    el.className = "tback" + (show ? "" : " hidden");
+  }
+  function indexIn(el, cls) {
+    var all = document.getElementsByClassName(cls);
+    for (var i = 0; i < all.length; i++) if (all[i] === el) return i;
+    return -1;
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var el;
+    // Pantalla de elección: tocar una tarjeta la elige.
+    el = t.closest(".chcard");
+    if (el) { chooseFocus = (el.id === "ch1") ? 1 : 0; updateChooseFocus(); chooseSelect(); return; }
+    // Botón Volver flotante del modo touch.
+    if (t.closest(".tback")) { backAction(); return; }
+    if (uiMode === "choose" || uiMode === "pair") return;
+    // Tab de mic: siempre visible, tocarlo graba/frena sin navegar a ningún lado.
+    el = t.closest(".mictab");
+    if (el) { tabFocus = 0; updateFocusClasses(); micToggle(); return; }
+    // Teclado en pantalla: tocar una tecla la pulsa.
+    el = t.closest(".key");
+    if (el && kbOpen) {
+      var km = /^key-(\d+)-(\d+)$/.exec(el.id || "");
+      if (km) { kbRow = +km[1]; kbCol = +km[2]; updateKbFocus(); kbPress(); }
+      return;
+    }
+    // Filtros: tocar un chip lo marca ("Listo" aplica).
+    el = t.closest(".fchip");
+    if (el && filtersOpen) {
+      var fi = indexIn(el, "fchip");
+      if (fi >= 0) { filterFocus = fi; filterPress(); }
+      return;
+    }
+    // Tabs del menú.
+    el = t.closest(".tab");
+    if (el) {
+      var ti = indexIn(el, "tab");
+      if (ti >= 0) tabAction(ti);
+      return;
+    }
+    // Botones del hero / la ficha (mismo orden que actionFocus).
+    el = t.closest(".hbtn");
+    if (el) {
+      var bi = indexIn(el, "hbtn"); // hero y ficha nunca conviven: índice global sirve
+      if (detailItem) {
+        if (bi === 0) { toggleToday(detailItem); render(); }
+        else if (bi === 1) play(detailItem.id);
+        else if (bi === 2 && uiMode === "rc") toggleSeen(detailItem);
+        return;
+      }
+      var topA = Math.min(TOP, items.length);
+      var ha = Math.min(heroIndex, topA - 1); if (ha < 0) ha = 0;
+      var hit = items[ha];
+      if (!hit) return;
+      if (bi === 0) toggleToday(hit);
+      else if (bi === 1) play(hit.id);
+      return;
+    }
+    // Chevrons ‹ ›: en la ficha pasan de título; en el hero, de candidata.
+    el = t.closest(".hchev");
+    if (el) {
+      var goLeft = / l\b|^hchev l/.test(el.className);
+      if (detailItem) { moveFocus(goLeft ? "left" : "right"); return; }
+      var topC = Math.min(TOP, items.length);
+      var nh = Math.min(Math.max(heroIndex + (goLeft ? -1 : 1), 0), topC - 1);
+      if (nh !== heroIndex) {
+        heroIndex = nh; focusedIndex = nh; actionFocus = -1; rowFocus = -1; rowCol = 0;
+        updateFocusClasses(); renderSpot(); emitScreen();
+      }
+      return;
+    }
+    // Tarjetas: tocar una abre su ficha (regla de la app: 1 toque = ficha).
+    el = t.closest(".card");
+    if (el) {
+      var id = el.id || "";
+      var tm = /^toptile-(\d+)-(\d+)$/.exec(id);
+      if (tm) {
+        rowFocus = +tm[1]; rowCol = +tm[2]; actionFocus = -1; tabFocus = -1;
+        var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
+        if (rit) { detailScope = "toprow"; openDetail(rit); }
+        return;
+      }
+      if (id.indexOf("card-") === 0) {
+        var iid = id.slice(5);
+        for (var ci = 0; ci < items.length; ci++) {
+          if (String(items[ci].id) === iid) {
+            focusedIndex = ci; rowFocus = -1; rowCol = 0; actionFocus = -1; tabFocus = -1;
+            if (mode !== "home" && mode !== "search") detailScope = "list";
+            else detailScope = (ci < Math.min(TOP, items.length)) ? "cands" : "grid";
+            openDetail(items[ci]);
+            return;
+          }
+        }
+      }
+      return;
+    }
+    // Fondo del banner: abre la ficha de la candidata visible.
+    el = t.closest(".hero");
+    if (el && !detailItem) {
+      var topH = Math.min(TOP, items.length);
+      var hh = Math.min(heroIndex, topH - 1); if (hh < 0) hh = 0;
+      if (items[hh]) { focusedIndex = hh; detailScope = "cands"; openDetail(items[hh]); }
+    }
+  });
+
+  // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
+  // 415=Play, 10252=Play/Pause, 10009=Return).
+  document.addEventListener("keydown", function (e) {
+    var k = e.keyCode;
+    var isOk = (k === 13 || k === 415 || k === 10252);
+    var isBack = (k === 10009 || k === 8 || k === 27 || k === 4);
+
+    // Dispatcher por modo de UI — las guardas van ANTES del flujo de contenido
+    // para que un OK en la pantalla de elección no caiga en okPress() sobre el
+    // home precargado (invisible).
+    if (uiMode === "choose") {
+      if (k === 37 || k === 39) { chooseFocus = chooseFocus === 0 ? 1 : 0; updateChooseFocus(); }
+      else if (isOk) { chooseSelect(); }
+      else return; // BACK en el inicio: no interceptar (que el sistema salga de la app)
+      e.preventDefault();
+      return;
+    }
+    // Volver, en cualquier estado: UNA sola lógica (backAction — la misma que
+    // dispara el popstate en el APK Android). false = inicio: no interceptar,
+    // que el sistema cierre la app.
+    if (isBack) {
+      if (backAction()) e.preventDefault();
+      return;
+    }
+    if (uiMode === "pair") return; // flechas/OK no operan sobre el DOM oculto
+
+    // Pantallas propias del modo RC — se evalúan ANTES del flujo de contenido
+    // para que OK sobre un tab/tecla no caiga en okPress() (orden de guardas:
+    // teclado → filtros → tabs → contenido).
+    if (uiMode === "rc" && kbOpen) {
+      if (k === 37) kbMove("left");
+      else if (k === 39) kbMove("right");
+      else if (k === 38) kbMove("up");
+      else if (k === 40) kbMove("down");
+      else if (isOk) kbPress();
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (uiMode === "rc" && filtersOpen) {
+      if (k === 37) filterMove("left");
+      else if (k === 39) filterMove("right");
+      else if (k === 38) filterMove("up");
+      else if (k === 40) filterMove("down");
+      else if (isOk) filterPress();
+      else return;
+      e.preventDefault();
+      return;
+    }
+    if (uiMode === "rc" && tabFocus >= 0 && !detailItem) {
+      if (k === 37) { tabFocus = Math.max(0, tabFocus - 1); updateFocusClasses(); }
+      else if (k === 39) { tabFocus = Math.min(tabList().length - 1, tabFocus + 1); updateFocusClasses(); }
+      else if (k === 40) { tabFocus = -1; updateFocusClasses(); }
+      else if (isOk) tabAction(tabFocus);
+      else return;
+      e.preventDefault();
+      return;
+    }
+
+    // Vinculado SIN control presente (se llevaron el teléfono / se cerró la
+    // pestaña): la primera flecha u OK del remoto físico es señal inequívoca de
+    // que ahora maneja el RC → pasar al modo RC (tabs + botones en pantalla)
+    // conservando contenido y foco. Si el teléfono vuelve, updatePaired ya
+    // devuelve la UI al modo vinculado. BACK conserva su rol (elegir modo).
+    if (uiMode === "linked" && !paired && !isBack) {
+      uiMode = "rc";
+      pairBadge();
+      showToast("Modo control de TV — botones en pantalla activados");
+      render();
+      // Una flecha sigue navegando sobre la UI nueva; un OK solo activa el
+      // modo (accionar a ciegas podría guardar algo sin querer).
+      if (isOk) { e.preventDefault(); return; }
+    }
+
+    // uiMode === "rc" | "linked": flujo de contenido.
+    if (k === 37) moveFocus("left");
+    else if (k === 39) moveFocus("right");
+    else if (k === 38) moveFocus("up");
+    else if (k === 40) moveFocus("down");
+    else if (isOk) {
+      okPress();
+    } else return;
+    e.preventDefault();
+  });
+
+  // --- Supabase Realtime ---
+  function updatePaired() {
+    var st = channel.presenceState();
+    var present = !!st && Object.prototype.hasOwnProperty.call(st, "control");
+    if (present && !paired) {
+      paired = true;
+      setBadge("Teléfono vinculado", "on");
+      sendState({ type: "PAIRED" });
+      var prev = uiMode;
+      uiMode = "linked"; // el control manda: la UI pasa al modo vinculado
+      if (prev === "rc") {
+        micCancel(); // no dejar el mic prendido de fondo si el teléfono toma el control
+        // Venía usando el control físico: avisar sin resetear items ni foco.
+        showToast("Control vinculado — ahora manejás desde el teléfono");
+      }
+      render();
+      emitScreen(true); // el home ya está precargado: mandárselo al teléfono ya
+      loadHome(); // no-op si ya cargó (guard homeLoaded): no pisa la vista actual
+    } else if (!present && paired) {
+      paired = false;
+      pairBadge();
+      // Ya NO se expulsa al QR: render() muestra el banner discreto de
+      // desconexión (si uiMode === "linked") y el contenido sigue en pantalla.
+      render();
+    }
+  }
+
+  // Reconexión: realtime-js ya RE-UNE el canal solo (auto-rejoin estilo
+  // Phoenix) y el callback de subscribe vuelve a disparar SUBSCRIBED al
+  // recuperarse. Ante un error solo avisamos y dejamos un watchdog de último
+  // recurso (15s) que recrea el canal ESPERANDO el remove — supabase.channel()
+  // deduplica por topic: si no se espera, devuelve el MISMO canal moribundo y
+  // el subscribe nuevo no se une nunca (pairing colgado para siempre).
+  var sb = null;
+  var watchdogTimer = null;
+  function clearWatchdog() { if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; } }
+  function scheduleWatchdog() {
+    if (watchdogTimer) return;
+    setBadge("Reconectando…", "wait");
+    watchdogTimer = setTimeout(function () {
+      watchdogTimer = null;
+      hardReconnect();
+    }, 15000);
+  }
+  function hardReconnect() {
+    var old = channel;
+    channel = null;
+    var proceed = function () { connect(); };
+    if (old && sb) {
+      try {
+        var p = sb.removeChannel(old);
+        if (p && typeof p.then === "function") { p.then(proceed, proceed); return; }
+      } catch (e) {}
+    }
+    proceed();
+  }
+  function connect() {
+    // Rebranding: el bundle nuevo expone MiruSB, pero uno viejo cacheado en la
+    // WebView expone solo CinefiloSB — aceptamos cualquiera de los dos.
+    var SB = window.MiruSB || window.CinefiloSB;
+    if (!SB || !SB.createClient) {
+      setBadge("Error cargando librería", "wait");
+      return;
+    }
+    if (!sb) sb = SB.createClient(SUPABASE_URL, SUPABASE_KEY);
+    if (channel) return; // ya hay un canal vivo: su auto-rejoin se encarga
+    // wire-legacy: el prefijo del canal sigue siendo "cinefilo" aunque la marca
+    // sea Miru — cambiarlo rompe el pairing con APKs de control ya instalados.
+    var ch = sb.channel("cinefilo:" + sessionId, {
+      config: { broadcast: { self: false }, presence: { key: "tv" } }
+    });
+    channel = ch;
+    ch.on("broadcast", { event: "command" }, function (msg) { handleCommand(msg && msg.payload); });
+    ch.on("presence", { event: "sync" }, updatePaired);
+    ch.on("presence", { event: "join" }, updatePaired);
+    ch.on("presence", { event: "leave" }, updatePaired);
+    ch.subscribe(function (status) {
+      if (ch !== channel) return; // callback de un canal viejo ya reemplazado
+      if (status === "SUBSCRIBED") {
+        clearWatchdog();
+        pairBadge();
+        ch.track({ role: "tv" });
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        scheduleWatchdog();
+      }
+    });
+  }
+
+  // Cintas de pósters del landing: 3 columnas que suben y bajan en loop, como
+  // fondo ambiental detrás del QR. Sin títulos ni sombras al frente.
+  // Cada columna lleva su contenido DUPLICADO ([set A][set A]) para que el
+  // translateY(-50%) del CSS cierre el ciclo sin salto visible.
+  var RIBBONS_KEY = "miru:tv:ribbons";
+  function buildLandingRibbons() {
+    // Las cintas visten DOS pantallas de entrada: la de elección (#choose) y la
+    // del QR (#pair). Un solo fetch pinta ambas.
+    var boxes = [];
+    var ids = ["chooseribbons", "pairribbons"];
+    for (var b = 0; b < ids.length; b++) {
+      var el = document.getElementById(ids[b]);
+      if (el) boxes.push(el);
+    }
+    if (!boxes.length) return;
+    var COLS = 3;
+    // Track absoluto: saca las cintas del flujo para que su altura (mucho mayor
+    // que la pantalla) no estire el contenedor ni empuje el QR fuera de vista.
+    var colsByBox = [];
+    for (var x = 0; x < boxes.length; x++) {
+      var track = document.createElement("div");
+      track.className = "track";
+      boxes[x].appendChild(track);
+      var cols = [];
+      for (var c = 0; c < COLS; c++) {
+        var col = document.createElement("div");
+        col.className = "ribbon" + (c === 1 ? " b" : c === 2 ? " c" : "");
+        track.appendChild(col);
+        cols.push(col);
+      }
+      colsByBox.push(cols);
+    }
+
+    // Pinta una lista de URLs repartida en columnas (en cada pantalla), cada una
+    // con su contenido DUPLICADO ([set A][set A]) para que el translateY(-50%)
+    // cierre sin salto.
+    function paintUrls(urls) {
+      var byCol = [];
+      for (var c2 = 0; c2 < COLS; c2++) byCol.push([]);
+      for (var i = 0; i < urls.length; i++) byCol[i % COLS].push(urls[i]);
+      for (var bx = 0; bx < colsByBox.length; bx++) {
+        for (var c3 = 0; c3 < COLS; c3++) {
+          colsByBox[bx][c3].innerHTML = "";
+          for (var rep = 0; rep < 2; rep++) {
+            for (var k = 0; k < byCol[c3].length; k++) {
+              var img = document.createElement("img");
+              img.alt = "";
+              img.src = byCol[c3][k];
+              colsByBox[bx][c3].appendChild(img);
+            }
+          }
+        }
+      }
+    }
+
+    var painted = false;
+    // 1) Caché local: las cintas del arranque anterior pintan AL INSTANTE
+    // (la pantalla del QR es la cara de entrada; no puede esperar al server).
+    try {
+      var saved = JSON.parse(localStorage.getItem(RIBBONS_KEY) || "null");
+      if (saved && saved.length) { paintUrls(saved); painted = true; }
+    } catch (e) {}
+
+    // 2) Endpoint liviano (solo pósters, sin IA): refresca el caché local y
+    // pinta si todavía no había nada. Si ya pintamos, no repintamos (evita el
+    // salto visual); el próximo arranque usa lo fresco.
+    fetch("/api/tv-ribbons")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var posters = (data && data.posters) || [];
+        if (posters.length) {
+          try { localStorage.setItem(RIBBONS_KEY, JSON.stringify(posters.slice(0, 12))); } catch (e) {}
+          if (!painted) { paintUrls(posters); painted = true; }
+        } else if (!painted) {
+          legacyRibbons(paintUrls);
+        }
+      })
+      .catch(function () { if (!painted) legacyRibbons(paintUrls); });
+  }
+
+  // Fallback (backend sin Discover): pósters desde el home completo, como antes.
+  function legacyRibbons(paintUrls) {
+    fetch("/api/tv-home")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = (data && data.items) ? data.items.slice(0, 12) : [];
+        var urls = [];
+        for (var i = 0; i < list.length; i++) { if (list[i].posterUrl) urls.push(list[i].posterUrl); }
+        if (urls.length) {
+          paintUrls(urls);
+          try { localStorage.setItem(RIBBONS_KEY, JSON.stringify(urls)); } catch (e) {}
+        }
+      })
+      .catch(function () {});
+  }
+
+  // Web touch (?touch=1): directo al contenido en modo RC — la pantalla de
+  // elección es de la TV (acá tocás, no vinculás).
+  if (TOUCH) uiMode = "rc";
+  render();
+  connect();
+  buildLandingRibbons();
+  // Precargar el home YA (mientras se muestra el QR): cuando el teléfono se
+  // vincule, las películas aparecen al instante en vez de recién pedirse.
+  loadHome();
+})();
+</script>
+</body>
+</html>
