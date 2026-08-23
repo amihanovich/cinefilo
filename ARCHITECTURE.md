@@ -117,7 +117,25 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   (`miru:tv:mylist`, wire-legacy `ADD_TODAY`/`todayTitles`); "Ya vistas" del modo RC en `miru:tv:seen`;
   filtros RC en `miru:tv:platforms`. Al lanzar una app de streaming se muestra la rueda "Abriendo X…".
 
-### C. `apps/web-control` — control web standalone (D-pad)
+### C. `apps/tizen` — app de Samsung Smart TV (Tizen, CÁSCARA)
+- Mismo espíritu que `apps/tv` (B) pero MÁS simple: sin Capacitor, sin build step, sin npm — un
+  widget Tizen (`.wgt`) no tiene un campo de config equivalente a `server.url`, así que
+  `apps/tizen/index.html` redirige a mano por JS a **`https://miru-ai.up.railway.app/tv-lite.html`**
+  (mismo criterio de fondo violeta `#2A0F5C` mientras redirige). `apps/tizen/config.xml` declara
+  `<access origin="*" subdomains="true"/>` — sin eso la política de origen de Tizen bloquea la
+  navegación al dominio de Railway (es el equivalente Tizen de lo que en Android resuelve
+  `server.url` directamente).
+- **Misma consecuencia que la app de Android**: actualizar `tv-lite.html` + redeployar el backend
+  actualiza la TV sola, sin reempaquetar el `.wgt`.
+- **v1 sin deep-link nativo** a Netflix/Prime/etc.: "Ver ahora" cae al fallback web genérico que
+  `tv-lite.html` ya usa para cualquier entorno sin el bridge de Capacitor (`openExternal()`,
+  `window.open`) — los IDs internos de Tizen de cada app de streaming no son públicos y hace falta
+  confirmarlos en un TV real; queda para una v2.
+- Instalación **solo en modo desarrollador** (certificado de autor gratis vía Tizen Studio + modo
+  desarrollador en el TV + `sdb`/`tizen install`), sin pasar por Samsung Seller Office (tienda
+  oficial) — fuera de alcance por ahora. Detalle completo del setup en `apps/tizen/README.md`.
+
+### D. `apps/web-control` — control web standalone (D-pad)
 - SPA Vite servida por su propio `server.mjs` en un **servicio Railway aparte**. `src/ControlScreen.tsx` +
   `use-tv-channel.ts` + `tv-protocol.ts`. Es la página que abre el QR de la TV cuando NO se usa la app móvil,
   y es la **réplica del control remoto de la app móvil**: mic vivo integrado (tap = grabar, tap =
@@ -129,7 +147,7 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   `tv-lite.html?touch=1` en el backend principal, la misma UI de la TV en modo control tradicional
   pero clickeable/tocable (tablets y laptops). Con `?session=` el control funciona como siempre.
 
-### D. `src/` — web app del recomendador (TanStack Start, SSR) — LEGACY/secundaria
+### E. `src/` — web app del recomendador (TanStack Start, SSR) — LEGACY/secundaria
 - La misma que sirve `server-node.mjs`. Rutas vivas: `_authenticated/index.tsx` (home + resultados),
   `wizard.tsx`, `login.tsx`, `reset-password.tsx`. Lógica AI en `src/lib/recommendations.functions.ts`
   (server fns).
@@ -138,7 +156,7 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   mantiene es `apps/web-control`.
 - La UI del recomendador (`index.tsx`/`wizard.tsx`) es legacy; se mantiene pero no es el foco.
 
-### E. `apps/landing` — landing de descargas
+### F. `apps/landing` — landing de descargas
 - SPA Vite, servicio Railway propio. Lee un **manifest** en Supabase Storage con las builds y genera QRs.
   Publicación: `scripts/publish-build.mjs` (`SUPABASE_SERVICE_ROLE_KEY`, `BUILDS_BUCKET`).
 
