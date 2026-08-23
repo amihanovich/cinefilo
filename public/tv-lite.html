@@ -63,6 +63,12 @@
     color:#B4B4BC; background:#151518; border:2px solid #26262B; }
   .tab.foc { color:#fff; border-color:#8852E0; background:#191722; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
   .tab .cnt { font-size:11px; color:#8A8A93; font-weight:600; }
+  /* Tab de mic: siempre el primero, con look distinto (violeta) para que se
+     lea como "el botón de voz" y no como un ítem de menú más. */
+  .tab.mictab { background:#1D1730; border-color:#3A2465; }
+  .tab.mictab.rec { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
+  .tab.mictab.rec::before { content:"●"; color:#8852E0; margin-right:5px; animation:micpulse 1.1s ease-in-out infinite; }
+  @keyframes micpulse { 0%,100% { opacity:1; } 50% { opacity:.25; } }
 
   /* Teclado en pantalla (grid propio navegable con D-pad). */
   .kb { max-width:660px; margin:12px auto 0; }
@@ -793,9 +799,13 @@
   var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
   var pairReturn = "choose"; // a dónde vuelve el BACK desde la pantalla del QR
   // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
-  var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..3 = tab enfocado
+  var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..N = tab enfocado
   var kbOpen = false, kbBuffer = "", kbRow = 0, kbCol = 0;
   var filtersOpen = false, filterFocus = 0;
+  // Mic: "siempre visible" como primer tab (no una sub-pantalla) — mismo
+  // gesto tap-to-record/tap-to-stop que el móvil, sin corte por silencio.
+  var micState = "idle"; // "idle" | "requesting" | "rec" | "processing"
+  var micStream = null, micRecorder = null, micChunks = [], micMaxTimer = null;
   var RC_PLATFORMS_KEY = "miru:tv:platforms";
   var SEEN_KEY = "miru:tv:seen";
   var seen = loadSeen(); // "Ya vistas" del modo RC (persistida en el dispositivo)
@@ -1185,8 +1195,17 @@
   }
 
   // --- Modo RC: tabs de acceso, teclado en pantalla y filtros ---
+  function micTabLabel() {
+    return micState === "rec" ? "🎙 Escuchando…"
+      : micState === "requesting" ? "🎙 Pidiendo permiso…"
+      : micState === "processing" ? "🎙 Un momento…"
+      : "🎙 Hablar";
+  }
   function tabList() {
     return [
+      // Mic primero y siempre visible (mismo lugar en toda pantalla RC: home,
+      // resultados, listas) — no es una sub-pantalla, tocarlo no navega nada.
+      { label: micTabLabel(), cnt: 0, mic: true },
       { label: "🔍 Buscar", cnt: 0 },
       { label: "Mi lista", cnt: today.length },
       { label: "Ya vistas", cnt: seen.length },
@@ -1195,32 +1214,126 @@
       { label: "📱 Vincular teléfono", cnt: 0 }
     ];
   }
+  function tabHTML(i) {
+    var t = tabList()[i];
+    return '<span class="tab' + (t.mic ? " mictab " + micState : "") + (i === tabFocus ? " foc" : "") +
+      '" id="tab-' + i + '">' + t.label + (t.cnt ? ' <span class="cnt">' + t.cnt + "</span>" : "") + "</span>";
+  }
   function tabsHTML() {
     if (uiMode !== "rc") return "";
-    var t = tabList();
     var h = '<div class="tabs" id="tabs">';
-    for (var i = 0; i < t.length; i++) {
-      h += '<span class="tab' + (i === tabFocus ? " foc" : "") + '">' + t[i].label +
-           (t[i].cnt ? ' <span class="cnt">' + t[i].cnt + "</span>" : "") + "</span>";
-    }
+    for (var i = 0; i < tabList().length; i++) h += tabHTML(i);
     return h + "</div>";
   }
   function tabAction(i) {
-    if (i === 0) { openKb(); return; }
-    if (i === 1) {
+    if (i === 0) { micToggle(); return; }
+    if (i === 1) { openKb(); return; }
+    if (i === 2) {
       if (!today.length) { showToast("Tu lista está vacía — OK sobre una película la guarda"); return; }
       tabFocus = -1;
       showToday();
       return;
     }
-    if (i === 2) { showSeen(); return; }
-    if (i === 3) { openFilters(); return; }
+    if (i === 3) { showSeen(); return; }
+    if (i === 4) { openFilters(); return; }
     // Vincular teléfono: muestra el QR y recuerda desde dónde se entró para que
     // BACK devuelva a la pantalla en la que estabas (y no al inicio).
+    micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
     pairReturn = "rc";
     tabFocus = -1;
     uiMode = "pair";
     render();
+  }
+
+  // --- Mic: grabar → transcribir → buscar. Mismo gesto que el móvil: 1er
+  // toque graba, 2º frena (sin corte por silencio), solo un tope duro de
+  // seguridad. Actualiza SOLO el tab-0 (updateMicTab), sin regenerar la fila.
+  function updateMicTab() {
+    var el = document.getElementById("tab-0");
+    if (el) el.outerHTML = tabHTML(0);
+  }
+  function micToggle() {
+    if (micState === "rec") micStop();
+    else if (micState === "idle") micStart();
+    // "requesting"/"processing": ignora toques repetidos.
+  }
+  function micStart() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+      return;
+    }
+    micState = "requesting"; updateMicTab(); // feedback ANTES del permiso
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      micStream = stream; micChunks = [];
+      var rec;
+      try { rec = new MediaRecorder(stream); }
+      catch (e) {
+        micStopTracks(); micState = "idle"; updateMicTab();
+        showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+        return;
+      }
+      micRecorder = rec;
+      rec.ondataavailable = function (e) { if (e.data && e.data.size > 0) micChunks.push(e.data); };
+      rec.start();
+      micState = "rec"; updateMicTab();
+      // Tope duro de seguridad (60s) por si el usuario se olvida de soltar.
+      micMaxTimer = setTimeout(function () { if (micState === "rec") micStop(); }, 60000);
+    }).catch(function () {
+      micState = "idle"; updateMicTab();
+      showToast("Micrófono bloqueado — usá 🔍 Buscar para escribir");
+    });
+  }
+  function micStop() {
+    if (micMaxTimer) { clearTimeout(micMaxTimer); micMaxTimer = null; }
+    var rec = micRecorder;
+    micRecorder = null;
+    micState = "processing"; updateMicTab();
+    if (!rec || rec.state === "inactive") {
+      micStopTracks();
+      micFinish(new Blob(micChunks, { type: "audio/webm" }));
+      return;
+    }
+    rec.onstop = function () {
+      micStopTracks();
+      micFinish(new Blob(micChunks, { type: rec.mimeType || "audio/webm" }));
+    };
+    try { rec.stop(); } catch (e) { micStopTracks(); micFinish(new Blob(micChunks, { type: "audio/webm" })); }
+  }
+  function micStopTracks() {
+    if (micStream) {
+      var tracks = micStream.getTracks();
+      for (var i = 0; i < tracks.length; i++) tracks[i].stop();
+      micStream = null;
+    }
+  }
+  function micCancel() {
+    if (micMaxTimer) { clearTimeout(micMaxTimer); micMaxTimer = null; }
+    try { if (micRecorder && micRecorder.state !== "inactive") micRecorder.stop(); } catch (e) {}
+    micRecorder = null; micStopTracks(); micChunks = [];
+    micState = "idle";
+  }
+  function micFinish(blob) {
+    if (blob.size < 500) {
+      micState = "idle"; updateMicTab();
+      showToast("No te escuché. Probá de nuevo.");
+      return;
+    }
+    fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": blob.type || "audio/webm" },
+      body: blob
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var txt = ((data && data.text) || "").trim();
+        micState = "idle"; updateMicTab();
+        if (txt) runSearch({ query: txt }); // ← mismo punto de entrada que el teclado
+        else showToast("No te escuché. Probá de nuevo.");
+      })
+      .catch(function () {
+        micState = "idle"; updateMicTab();
+        showToast("No te escuché. Probá de nuevo.");
+      });
   }
 
   // Teclado en pantalla propio (no el IME nativo: en Tizen el IME del sistema
@@ -2235,6 +2348,7 @@
     }
     // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
     // QR, una sorpresa para el que solo quería "salir" de donde estaba).
+    micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
     uiMode = "choose";
     render();
     return true;
@@ -2288,6 +2402,9 @@
     // Botón Volver flotante del modo touch.
     if (t.closest(".tback")) { backAction(); return; }
     if (uiMode === "choose" || uiMode === "pair") return;
+    // Tab de mic: siempre visible, tocarlo graba/frena sin navegar a ningún lado.
+    el = t.closest(".mictab");
+    if (el) { tabFocus = 0; updateFocusClasses(); micToggle(); return; }
     // Teclado en pantalla: tocar una tecla la pulsa.
     el = t.closest(".key");
     if (el && kbOpen) {
@@ -2470,6 +2587,7 @@
       var prev = uiMode;
       uiMode = "linked"; // el control manda: la UI pasa al modo vinculado
       if (prev === "rc") {
+        micCancel(); // no dejar el mic prendido de fondo si el teléfono toma el control
         // Venía usando el control físico: avisar sin resetear items ni foco.
         showToast("Control vinculado — ahora manejás desde el teléfono");
       }
