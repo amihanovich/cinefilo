@@ -45,3 +45,9 @@ dist-ssr
 apps/tizen/*.wgt
 apps/tizen/.buildResult/
 apps/tizen/.metadata/
+# Firmas y staging que deja el empaquetador si se corre sobre el directorio
+# (build-wgt.ps1 empaqueta desde _wgt-staging justamente para evitarlo).
+apps/tizen/author-signature.xml
+apps/tizen/signature1.xml
+apps/tizen/.manifest.tmp
+apps/tizen/_wgt-staging/
