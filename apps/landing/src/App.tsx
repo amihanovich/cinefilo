@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, Globe, Loader2, QrCode, Tv } from "lucide-react";
+import { Download, Globe, Loader2, MonitorPlay, QrCode, Tv } from "lucide-react";
 import QRCode from "qrcode";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,7 +12,7 @@ import QRCode from "qrcode";
 // /tv en server.mjs).
 // ─────────────────────────────────────────────────────────────────────────────
 
-type AppKey = "tv" | "mobile-android";
+type AppKey = "tv" | "mobile-android" | "tizen" | "webos";
 
 interface Build {
   version: string;
@@ -230,6 +230,86 @@ function TvSection({ build }: { build?: Build }) {
   );
 }
 
+// Samsung (Tizen) y LG (webOS): el camino REAL es el navegador del televisor.
+// A diferencia de Android TV, estos sistemas no tienen sideload para el usuario
+// final — no hay un "Downloader" equivalente: instalar el .wgt/.ipk exige una PC
+// con el SDK y el TV en modo desarrollador. Por eso el protagonista acá es la
+// URL corta, y los paquetes van al final, explicados como lo que son.
+function SmartTvSection({ tizen, webos }: { tizen?: Build; webos?: Build }) {
+  const tvUrl = "miru-ai.up.railway.app/tv";
+
+  return (
+    <section className="flex flex-col gap-5 rounded-2xl border border-border p-6">
+      <div className="flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+          <MonitorPlay className="h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold leading-tight">¿Tenés un Samsung o LG?</h2>
+          <p className="text-sm text-muted-foreground">
+            No hace falta instalar nada: Miru funciona en el navegador del televisor.
+          </p>
+        </div>
+      </div>
+
+      <ol className="flex flex-col gap-3">
+        <Step n={1}>
+          En el televisor, abrí el navegador (se llama{" "}
+          <strong className="text-foreground">Internet</strong> en Samsung y{" "}
+          <strong className="text-foreground">Web Browser</strong> en LG).
+        </Step>
+        <Step n={2}>
+          Escribí esta dirección con el control remoto:
+          <span className="mt-2 block break-all rounded-lg bg-muted px-3 py-2 text-center font-mono text-base font-semibold text-foreground">
+            {tvUrl}
+          </span>
+        </Step>
+        <Step n={3}>
+          Listo. Navegás con las flechas del control, igual que cualquier app. Guardalo en favoritos
+          para no tipearlo de nuevo.
+        </Step>
+      </ol>
+
+      <p className="text-xs text-muted-foreground">
+        Funciona todo: las recomendaciones, tu lista, y el QR para usar el celular de control.
+      </p>
+
+      {(tizen || webos) && (
+        <details className="border-t border-border pt-4">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+            Instalar la app nativa (solo para desarrolladores)
+          </summary>
+          <div className="mt-3 flex flex-col gap-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Estos paquetes <strong className="text-foreground">no se instalan desde el televisor</strong>:
+              Samsung y LG no permiten sideload al usuario final. Hace falta una PC con el SDK
+              correspondiente y el TV en modo desarrollador.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {tizen && (
+                <a
+                  href={tizen.url}
+                  className="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  Samsung .wgt v{tizen.version}
+                </a>
+              )}
+              {webos && (
+                <a
+                  href={webos.url}
+                  className="rounded-lg border border-border px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  LG .ipk v{webos.version}
+                </a>
+              )}
+            </div>
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
 export function App() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -299,6 +379,7 @@ export function App() {
         <main className="flex flex-col gap-4">
           <MobileHero build={apps["mobile-android"]} />
           <TvSection build={apps.tv} />
+          <SmartTvSection tizen={apps.tizen} webos={apps.webos} />
         </main>
       )}
 

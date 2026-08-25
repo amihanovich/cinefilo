@@ -396,6 +396,18 @@ http
       return;
     }
 
+    // Atajo /tv → la TV liviana. Existe para que se pueda TIPEAR con el control
+    // remoto en el navegador de un Samsung/LG: ahí no hay sideload posible, así
+    // que abrir la URL ES la forma de usar Miru en esos televisores, y
+    // "miru-ai.up.railway.app/tv" es tipeable donde "/tv-lite.html" ya no.
+    // Preserva la query (?touch=1 para pantallas con puntero/tacto).
+    if (urlPath === "/tv" || urlPath === "/tv/") {
+      const qs = reqUrl.search || "";
+      res.writeHead(302, { Location: `/tv-lite.html${qs}`, "Cache-Control": "no-store" });
+      res.end();
+      return;
+    }
+
     const filePath = path.join(clientDir, urlPath);
 
     if (urlPath.startsWith("/assets/")) {
