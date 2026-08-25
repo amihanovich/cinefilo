@@ -33,7 +33,8 @@ recomendación principal + N alternativas, con refinamiento conversacional, feed
 |---|---|---|
 | **`apps/mobile`** | La app principal (recomendador por voz/texto + control de TV) | APK Capacitor, bundlea el front, `com.cinefilo.app` |
 | **`apps/tv`** | App de TV = **cáscara WebView** que carga `public/tv-lite.html` (remoto) | APK Capacitor, `server.url`, `com.cinefilo.tv` |
-| **`apps/tizen`** | App de Samsung Smart TV = **cáscara** que redirige a `public/tv-lite.html` (remoto). v1 sin deep-link nativo (fallback web) | `.wgt`, sin build/npm, solo modo desarrollador (sin tienda Samsung) |
+| **`apps/tizen`** | App de Samsung Smart TV = **cáscara** que redirige a `public/tv-lite.html` (remoto). v1 sin deep-link nativo (fallback web) | `.wgt` FIRMADO (`build-wgt.ps1`), solo modo desarrollador (sin tienda Samsung) |
+| **`apps/webos`** | App de LG webOS = **cáscara** gemela de la de Tizen (mismo redirect). Cubre LG + webOS Hub | `.ipk` SIN firma (`build-ipk.ps1`, CLI `@webosose/ares-cli`), modo desarrollador (expira a las ~50 h) |
 | **`apps/web-control`** | Control web (D-pad) que abre el QR de la TV — **réplica del control remoto de la móvil**. Es el único control web vivo | Servicio Railway propio |
 | **`src/` (web)** | Recomendador web (TanStack Start). **Legacy/secundaria** (incluido su `/control` viejo, que ya no abre el QR) | Sirve la web + el backend `/api/*` |
 | **`apps/landing`** | Landing de descargas (QRs desde un manifest en Supabase) | Servicio Railway propio |

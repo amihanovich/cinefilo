@@ -134,6 +134,28 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 - Instalación **solo en modo desarrollador** (certificado de autor gratis vía Tizen Studio + modo
   desarrollador en el TV + `sdb`/`tizen install`), sin pasar por Samsung Seller Office (tienda
   oficial) — fuera de alcance por ahora. Detalle completo del setup en `apps/tizen/README.md`.
+- El empaquetado se hace con `apps/tizen/build-wgt.ps1` (empaqueta desde un staging y verifica que
+  el `.wgt` salga firmado). ⚠️ **La identidad de firma vive fuera del repo**: `miru-author.p12` +
+  su contraseña. Tizen exige la MISMA firma de autor y el MISMO package ID (`MiruTV0001`) para
+  actualizar una app ya instalada — si se pierde el `.p12`, cada copia instalada hay que
+  desinstalarla y reinstalarla (se pierde Mi lista y la sesión del QR).
+
+### C-bis. `apps/webos` — app de LG webOS (CÁSCARA)
+- Gemela de `apps/tizen`, mismo redirect JS a `tv-lite.html` desde un `index.html` sin lógica.
+  Cubre LG y las marcas que licencian webOS Hub (Hyundai, RCA, Konka). Manifiesto = `appinfo.json`
+  (en vez de `config.xml`), paquete = `.ipk` (en vez de `.wgt`), CLI = `@webosose/ares-cli` (un
+  paquete npm, no un SDK aparte).
+- **Bastante menos trabajoso que Tizen**: el `.ipk` de modo desarrollador **NO se firma** — no hay
+  certificados ni perfiles. Se empaqueta con `apps/webos/build-ipk.ps1`, que además verifica que
+  adentro viajen solo los 4 archivos de la app.
+- `appinfo.json` pone **`disableBackHistoryAPI: true`**: el botón Volver llega como keydown
+  (**keycode 461**, mapeado en `tv-lite.html` junto al 10009 de Tizen) en vez de que webOS haga
+  `history.back()` por su cuenta — así el back tiene UN solo camino, el mismo `backAction()`.
+- ⚠️ **El modo desarrollador de LG expira a las ~50 horas** y hay que renovarlo desde la app
+  Developer Mode; si vence, el TV desactiva las apps sideloadeadas. Necesita además una cuenta de
+  desarrollador LG (gratis). Detalle en `apps/webos/README.md`.
+- **No cambiar el `id`** (`com.miru.tv`): es la identidad de actualización, igual que el package ID
+  en Tizen.
 
 ### D. `apps/web-control` — control web standalone (D-pad)
 - SPA Vite servida por su propio `server.mjs` en un **servicio Railway aparte**. `src/ControlScreen.tsx` +

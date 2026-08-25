@@ -51,3 +51,6 @@ apps/tizen/author-signature.xml
 apps/tizen/signature1.xml
 apps/tizen/.manifest.tmp
 apps/tizen/_wgt-staging/
+
+# webOS (apps/webos): el .ipk es artefacto de build, se regenera con build-ipk.ps1.
+apps/webos/*.ipk

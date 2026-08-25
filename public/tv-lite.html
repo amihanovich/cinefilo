@@ -2492,11 +2492,12 @@
   });
 
   // Teclas del control remoto de la TV (flechas + OK/Enter + teclas Tizen:
-  // 415=Play, 10252=Play/Pause, 10009=Return).
+  // 415=Play, 10252=Play/Pause, 10009=Return; y 461=Back de LG webOS, que
+  // llega como keydown porque appinfo.json pone disableBackHistoryAPI:true).
   document.addEventListener("keydown", function (e) {
     var k = e.keyCode;
     var isOk = (k === 13 || k === 415 || k === 10252);
-    var isBack = (k === 10009 || k === 8 || k === 27 || k === 4);
+    var isBack = (k === 10009 || k === 461 || k === 8 || k === 27 || k === 4);
 
     // Dispatcher por modo de UI — las guardas van ANTES del flujo de contenido
     // para que un OK en la pantalla de elección no caiga en okPress() sobre el

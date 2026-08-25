@@ -1,0 +1,14 @@
+{
+  "id": "com.miru.tv",
+  "version": "0.1.0",
+  "vendor": "Miru",
+  "type": "web",
+  "main": "index.html",
+  "title": "Miru",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#2A0F5C",
+  "iconColor": "#2A0F5C",
+  "disableBackHistoryAPI": true,
+  "supportPortraitMode": false
+}
