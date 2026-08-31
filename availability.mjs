@@ -41,6 +41,38 @@ function canonicalProvider(p) {
   return null;
 }
 
+// Detección de "pedido explícito de plataforma" en texto libre ("buscame algo
+// en Netflix", "para ver en Disney"): un pedido así debe PISAR el filtro de
+// plataformas del perfil/control para ESA búsqueda puntual. Reglas propias
+// (no PROVIDER_MAP, que matchea provider_name de TMDB) porque acá hay que
+// evitar falsos positivos con títulos que contienen el nombre de una
+// plataforma (ej. "Mad Max"): se exige la plataforma precedida de "en/de/
+// para", el patrón natural de cómo se la nombra al pedir algo.
+const PLATFORM_MENTION_RULES = [
+  { canonical: "Netflix", re: /\b(?:en|de|para)\s+netflix\b/i },
+  { canonical: "Prime Video", re: /\b(?:en|de|para)\s+(?:amazon\s+)?prime(?:\s+video)?\b/i },
+  { canonical: "Disney+", re: /\b(?:en|de|para)\s+disney\s*\+?\b/i },
+  { canonical: "Max", re: /\b(?:en|de|para)\s+(?:hbo\s*)?max\b/i },
+  { canonical: "Apple TV+", re: /\b(?:en|de|para)\s+apple\s*tv\s*\+?\b/i },
+  { canonical: "Paramount+", re: /\b(?:en|de|para)\s+paramount\s*\+?\b/i },
+];
+
+/**
+ * Si el usuario nombró una plataforma explícita en el pedido ("buscame algo
+ * en Netflix"), ese pedido puntual debe buscar SOLO ahí, pisando el preset
+ * de plataformas del perfil/control. Devuelve [] si no hay mención explícita.
+ * @param {string} text
+ * @returns {string[]} nombres canónicos sin duplicados, en orden de aparición
+ */
+export function detectPlatformMentions(text) {
+  const t = String(text || "");
+  const found = [];
+  for (const rule of PLATFORM_MENTION_RULES) {
+    if (rule.re.test(t) && !found.includes(rule.canonical)) found.push(rule.canonical);
+  }
+  return found;
+}
+
 function tmdbAuth() {
   const key = process.env.TMDB_API_KEY || "";
   // v4 Read Access Token (JWT) → header; v3 api key corta → query param.

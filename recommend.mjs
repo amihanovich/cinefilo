@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable } from "./availability.mjs";
+import { validateItems, pickAvailable, detectPlatformMentions } from "./availability.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs.
@@ -91,7 +91,13 @@ async function callAnthropic(messages, alternativesCount = 4) {
  * @param {string} [params.country] - ISO2 del usuario (default región del server)
  */
 export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country }) {
-  const effectivePlatforms = (platforms && platforms.length > 0) ? platforms : PLATFORMS;
+  // Si el pedido de ESTE turno nombra una plataforma explícita ("buscame algo
+  // en Netflix", "para ver en Disney"), eso PISA el preset de plataformas del
+  // perfil — solo para este pedido puntual, no para toda la conversación.
+  const lastUserQuery = [...messages].reverse().find((m) => m.role === "user")?.content || "";
+  const mentioned = detectPlatformMentions(lastUserQuery);
+  const effectivePlatforms = mentioned.length ? mentioned : ((platforms && platforms.length > 0) ? platforms : PLATFORMS);
+  const validationPlatforms = mentioned.length ? mentioned : ((platforms && platforms.length) ? platforms : null);
   // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
   // por país) puede descartar títulos, y así igual se llega al count pedido.
   const askCount = alternativesCount + 2;
@@ -142,7 +148,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   // El main solo se reemplaza si quedó confirmado como NO disponible ("unknown"
   // se deja pasar: nunca peor que hoy) — y en ese caso se regenera la intro de
   // voz, que lo presenta por nombre.
-  await validateItems([main, ...alternatives], platforms && platforms.length ? platforms : null, country);
+  await validateItems([main, ...alternatives], validationPlatforms, country);
   const mainOk = main._avail === "confirmed" || main._avail === "corrected" || main._avail === "unknown";
   const pool = pickAvailable(alternatives, askCount, alternativesCount);
   delete main._avail;

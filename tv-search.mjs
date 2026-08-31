@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable, discoverPopular, availabilityEnabled } from "./availability.mjs";
+import { validateItems, pickAvailable, discoverPopular, availabilityEnabled, detectPlatformMentions } from "./availability.mjs";
 
 // Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
@@ -79,9 +79,13 @@ const itemRules = (plats) =>
 
 export async function tvSearch(query, exclude, liked, disliked, platforms, country, preferRecent) {
   if (!query || !query.trim()) return { items: [] };
-  // Plataformas del usuario (si las mandó el control) — restringen el prompt Y
-  // la validación de disponibilidad. Antes la TV siempre buscaba en las 7.
-  const plats = platforms && platforms.length ? platforms : PLATFORMS;
+  // Si el pedido nombra una plataforma explícita ("buscame algo en Netflix"),
+  // eso PISA el preset de plataformas del control para este pedido puntual.
+  // Si no, valen las plataformas del usuario (si las mandó el control) — antes
+  // de esto la TV siempre buscaba en las 7 sin importar el preset.
+  const mentioned = detectPlatformMentions(query);
+  const effectivePlatforms = mentioned.length ? mentioned : (platforms && platforms.length ? platforms : null);
+  const plats = effectivePlatforms || PLATFORMS;
   const excludeLine =
     exclude && exclude.length
       ? "\n\nNO recomiendes estos títulos (ya vistos o mostrados): " + exclude.join(", ")
@@ -119,7 +123,7 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
   // validación de disponibilidad (TMDB, por país) descarta o no confirma.
   const parsed = await callAnthropic(prompt, 7000);
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
-  await validateItems(items, platforms && platforms.length ? platforms : null, country);
+  await validateItems(items, effectivePlatforms, country);
   // minFill 8: con 8+ verificados no se rellena con títulos no resueltos
   // (en pedidos nicho Haiku inventa varios y TMDB no los encuentra).
   return { items: pickAvailable(items, 15, 8) };
