@@ -42,33 +42,50 @@ function canonicalProvider(p) {
 }
 
 // Detección de "pedido explícito de plataforma" en texto libre ("buscame algo
-// en Netflix", "para ver en Disney"): un pedido así debe PISAR el filtro de
-// plataformas del perfil/control para ESA búsqueda puntual. Reglas propias
-// (no PROVIDER_MAP, que matchea provider_name de TMDB) porque acá hay que
-// evitar falsos positivos con títulos que contienen el nombre de una
-// plataforma (ej. "Mad Max"): se exige la plataforma precedida de "en/de/
-// para", el patrón natural de cómo se la nombra al pedir algo.
-const PLATFORM_MENTION_RULES = [
-  { canonical: "Netflix", re: /\b(?:en|de|para)\s+netflix\b/i },
-  { canonical: "Prime Video", re: /\b(?:en|de|para)\s+(?:amazon\s+)?prime(?:\s+video)?\b/i },
-  { canonical: "Disney+", re: /\b(?:en|de|para)\s+disney\s*\+?\b/i },
-  { canonical: "Max", re: /\b(?:en|de|para)\s+(?:hbo\s*)?max\b/i },
-  { canonical: "Apple TV+", re: /\b(?:en|de|para)\s+apple\s*tv\s*\+?\b/i },
-  { canonical: "Paramount+", re: /\b(?:en|de|para)\s+paramount\s*\+?\b/i },
+// en Netflix", "fijate qué hay en Netflix o Disney"): un pedido así debe PISAR
+// el filtro de plataformas del perfil/control para ESA búsqueda puntual.
+// Reglas propias (no PROVIDER_MAP, que matchea provider_name de TMDB) porque
+// acá hay que evitar falsos positivos con títulos que contienen el nombre de
+// una plataforma (ej. "Mad Max"): se exige que la PRIMERA plataforma esté
+// precedida de "en/de/para" — el patrón natural al pedir algo — y recién ahí
+// se permite extender a una lista completa encadenada con coma/"y"/"o" (con
+// o sin repetir la preposición: "Netflix o Disney" y "Netflix o en Disney"
+// valen igual), así "en Netflix o Disney" agarra las dos.
+const ANY_PLATFORM_NAME =
+  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+const PREP = "(?:en|de|para)";
+const PLATFORM_LIST_RE = new RegExp(
+  `\\b${PREP}\\s+${ANY_PLATFORM_NAME}(?:\\s*(?:,|y|o|u)\\s*(?:${PREP}\\s+)?${ANY_PLATFORM_NAME})*`,
+  "i",
+);
+// Para clasificar CADA plataforma dentro del tramo ya confirmado como pedido
+// explícito por PLATFORM_LIST_RE — acá sí sin exigir preposición, porque el
+// contexto (venir de esa lista) ya descartó el falso positivo de un título.
+const PLATFORM_NAME_RULES = [
+  { canonical: "Netflix", re: /\bnetflix\b/i },
+  { canonical: "Prime Video", re: /\b(?:amazon\s+)?prime(?:\s+video)?\b/i },
+  { canonical: "Disney+", re: /\bdisney\s*\+?\b/i },
+  { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
+  { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
+  { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
 ];
 
 /**
- * Si el usuario nombró una plataforma explícita en el pedido ("buscame algo
- * en Netflix"), ese pedido puntual debe buscar SOLO ahí, pisando el preset
- * de plataformas del perfil/control. Devuelve [] si no hay mención explícita.
+ * Si el usuario nombró una o más plataformas explícitas en el pedido
+ * ("buscame algo en Netflix", "qué hay en Netflix o Disney"), ese pedido
+ * puntual debe buscar SOLO ahí, pisando el preset de plataformas del
+ * perfil/control. Devuelve [] si no hay mención explícita.
  * @param {string} text
  * @returns {string[]} nombres canónicos sin duplicados, en orden de aparición
  */
 export function detectPlatformMentions(text) {
   const t = String(text || "");
+  const m = PLATFORM_LIST_RE.exec(t);
+  if (!m) return [];
+  const clause = m[0];
   const found = [];
-  for (const rule of PLATFORM_MENTION_RULES) {
-    if (rule.re.test(t) && !found.includes(rule.canonical)) found.push(rule.canonical);
+  for (const rule of PLATFORM_NAME_RULES) {
+    if (rule.re.test(clause) && !found.includes(rule.canonical)) found.push(rule.canonical);
   }
   return found;
 }
