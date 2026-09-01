@@ -19,6 +19,7 @@ import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
 import { useBackLayer } from "./lib/back";
+import { detectPlatformMentions } from "./lib/platform-mentions";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
 
@@ -260,7 +261,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     // Feedback inmediato (≤100ms): plataformas activas + eco literal del pedido.
     // (Sin inferencia: era una llamada extra que agregaba latencia; el literal alcanza.)
-    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
+    // Si el pedido nombra una plataforma explícita ("en Netflix"), la rueda
+    // muestra SOLO esa (mismo criterio que el override real del backend).
+    const mentioned = detectPlatformMentions(userQuery);
+    setSearchInfo({ query: userQuery, platforms: mentioned.length ? mentioned : effectivePlatforms, type: queryType });
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 

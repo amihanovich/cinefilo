@@ -4,7 +4,7 @@
 // texto + filtros que te acompañan + Mi lista / Ya vistas + D-pad y acciones,
 // por el mismo canal Realtime (lado "control").
 
-import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   Search, Play, CornerDownLeft, Mic, Smartphone, Sparkles, Plus, Check, X,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
@@ -15,6 +15,7 @@ import type { ControlCommandMessage, MediaItem } from "./lib/tv-protocol";
 import { colorForPlatform, platformLabel, PLATFORM_COLORS } from "./lib/deeplink";
 import { Orb, type OrbPhase } from "./components/Orb";
 import { SearchLoading } from "./components/SearchLoading";
+import { detectPlatformMentions } from "./lib/platform-mentions";
 import { VoiceRecorder, transcribe } from "./lib/stt";
 
 const LIKED_KEY = "miru:web-liked";
@@ -77,6 +78,15 @@ export function ControlScreen({ session }: ControlScreenProps) {
 
   // Feedback de actividad: rueda de búsqueda / rueda de "Abriendo X…"
   const [searching, setSearching] = useState<string | null>(null);
+  // Si el pedido en curso nombró una plataforma explícita ("en Netflix"), la
+  // rueda debe mostrar SOLO esa, pisando el filtro de plataformas del control.
+  const wheelPlatforms = useMemo(
+    () => {
+      const mentioned = detectPlatformMentions(searching ?? "");
+      return mentioned.length ? mentioned : platforms;
+    },
+    [searching, platforms],
+  );
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [opening, setOpening] = useState<MediaItem | null>(null);
 
@@ -498,7 +508,9 @@ export function ControlScreen({ session }: ControlScreenProps) {
       </div>
 
       {/* Rueda de búsqueda (overlay): también acá, no solo en la TV */}
-      {searching !== null && <SearchLoading query={searching} platforms={platforms} />}
+      {/* Si el pedido nombró una plataforma explícita ("en Netflix"), la rueda
+          muestra SOLO esa en vez del filtro de plataformas del control. */}
+      {searching !== null && <SearchLoading query={searching} platforms={wheelPlatforms} />}
 
       {/* Rueda "Abriendo <plataforma>…" al dar Play */}
       {opening?.platform && (

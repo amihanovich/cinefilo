@@ -468,6 +468,44 @@
 
   var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
   var userPlatforms = null; // plataformas heredadas del control (SET_PLATFORMS); null = todas
+  var queryPlatforms = null; // mención explícita del PEDIDO en curso ("en Netflix"); pisa userPlatforms
+
+  // Detección de "pedido explícito de plataforma" en texto libre — puerto ES5
+  // de availability.mjs (backend) y apps/mobile/src/lib/platform-mentions.ts.
+  // Mantener en sync a mano: misma lista de plataformas, misma regla (la
+  // primera precedida de "en/de/para" para evitar el falso positivo de un
+  // título como "Mad Max"; de ahí se puede extender a una lista con coma/y/o).
+  var PLATFORM_MENTION_NAME = "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+  var PLATFORM_MENTION_PREP = "(?:en|de|para)";
+  var PLATFORM_MENTION_LIST_RE = new RegExp(
+    "\\b" + PLATFORM_MENTION_PREP + "\\s+" + PLATFORM_MENTION_NAME +
+    "(?:\\s*(?:,|y|o|u)\\s*(?:" + PLATFORM_MENTION_PREP + "\\s+)?" + PLATFORM_MENTION_NAME + ")*",
+    "i"
+  );
+  var PLATFORM_MENTION_NAME_RULES = [
+    { canonical: "Netflix", re: /\bnetflix\b/i },
+    { canonical: "Prime Video", re: /\b(?:amazon\s+)?prime(?:\s+video)?\b/i },
+    { canonical: "Disney+", re: /\bdisney\s*\+?\b/i },
+    { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
+    { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
+    { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i }
+  ];
+  function detectPlatformMentions(text) {
+    var t = String(text || "");
+    var m = PLATFORM_MENTION_LIST_RE.exec(t);
+    if (!m) return [];
+    var clause = m[0];
+    var found = [];
+    for (var i = 0; i < PLATFORM_MENTION_NAME_RULES.length; i++) {
+      var rule = PLATFORM_MENTION_NAME_RULES[i];
+      if (rule.re.test(clause)) {
+        var already = false;
+        for (var j = 0; j < found.length; j++) { if (found[j] === rule.canonical) { already = true; break; } }
+        if (!already) found.push(rule.canonical);
+      }
+    }
+    return found;
+  }
   var COLORS = {
     "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
     "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
@@ -479,9 +517,11 @@
   // Estado de búsqueda: rueda de plataformas (idéntica en concepto y estética a
   // la SearchLoading de la app móvil). El ciclado lo maneja startSearchAnim.
   function searchPlatList() {
-    // Plataformas del usuario (heredadas por SET_PLATFORMS) o todas; deduplicadas
-    // por label para no repetir "Disney+" (Star+ → Disney+).
-    var plats = userPlatforms && userPlatforms.length ? userPlatforms : PLATFORMS;
+    // Si el pedido en curso nombró una plataforma explícita, esa pisa el
+    // preset del control. Si no, las del usuario (heredadas por SET_PLATFORMS)
+    // o todas; deduplicadas por label para no repetir "Disney+" (Star+ → Disney+).
+    var plats = queryPlatforms && queryPlatforms.length ? queryPlatforms
+      : (userPlatforms && userPlatforms.length ? userPlatforms : PLATFORMS);
     var seen = {}, list = [];
     for (var i = 0; i < plats.length; i++) { var l = platLabel(plats[i]); if (!seen[l]) { seen[l] = 1; list.push(plats[i]); } }
     return list;
@@ -1860,6 +1900,7 @@
     // nunca veías la rueda de "buscando…" al hablarle a Miru desde ahí.
     detailItem = null;
     query = q;
+    queryPlatforms = detectPlatformMentions(q); // [] si no hay mención explícita
     mode = "search";
     lastLiked = (cmd && cmd.liked) || [];
     lastDisliked = (cmd && cmd.disliked) || [];

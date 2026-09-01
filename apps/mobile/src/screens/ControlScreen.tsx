@@ -4,7 +4,7 @@
 // por texto + filtros que te acompañan + Mi lista / Ya vistas + D-pad y
 // acciones, por el mismo canal Realtime (lado "control").
 
-import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   Search, Play, CornerDownLeft, X, Smartphone, Plus, Check, Mic,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
@@ -15,6 +15,7 @@ import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
 import { colorForPlatform, PLATFORM_COLORS } from "../lib/deeplink";
 import { Orb, type OrbPhase } from "../components/Orb";
 import { ControlSearchOverlay } from "../components/ControlSearchOverlay";
+import { detectPlatformMentions } from "../lib/platform-mentions";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { useBackLayer } from "../lib/back";
 
@@ -83,6 +84,15 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
 
   // Feedback de actividad: rueda de búsqueda / rueda de "Abriendo X…"
   const [searching, setSearching] = useState<string | null>(null);
+  // Si el pedido en curso nombró una plataforma explícita ("en Netflix"), la
+  // rueda debe mostrar SOLO esa, pisando el filtro de plataformas del control.
+  const wheelPlatforms = useMemo(
+    () => {
+      const mentioned = detectPlatformMentions(searching ?? "");
+      return mentioned.length ? mentioned : platforms;
+    },
+    [searching, platforms],
+  );
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [opening, setOpening] = useState<MediaItem | null>(null);
 
@@ -502,8 +512,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </div>
       </div>
 
-      {/* Rueda de búsqueda (overlay): también acá, no solo en la TV */}
-      {searching !== null && <ControlSearchOverlay query={searching} platforms={platforms} />}
+      {/* Rueda de búsqueda (overlay): también acá, no solo en la TV. Si el
+          pedido nombró una plataforma explícita ("en Netflix"), la rueda
+          muestra SOLO esa en vez del filtro de plataformas del control. */}
+      {searching !== null && <ControlSearchOverlay query={searching} platforms={wheelPlatforms} />}
 
       {/* Rueda "Abriendo <plataforma>…" al dar Play */}
       {opening?.platform && (
