@@ -120,10 +120,12 @@ function normalizeItem(r, section) {
     title: String(r.title || ""),
     platform: String(r.platform || ""),
     type: String(r.type || ""),
-    synopsis: r.synopsis ? String(r.synopsis) : undefined,
-    hook: r.hook ? String(r.hook) : undefined,
-    reason: r.reason ? String(r.reason) : undefined,
   };
+  // Textos solo si vienen (la búsqueda liviana ya no los pide; el home sí).
+  if (r.synopsis) item.synopsis = String(r.synopsis);
+  if (r.hook) item.hook = String(r.hook);
+  if (r.reason) item.reason = String(r.reason);
+  if (r.blurb) item.blurb = String(r.blurb);
   if (Number.isFinite(yearNum)) item.year = yearNum;
   if (section) item.section = section;
   return item;
@@ -151,6 +153,23 @@ const itemRules = (plats) =>
   "\n- Títulos conocidos con disponibilidad estable." +
   "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
   "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida.";
+
+// Forma LIVIANA para la búsqueda y el scroll infinito (revisión con Carlos,
+// 2026-09): solo lo que hace falta para pintar la grilla — título, plataforma,
+// año, tipo. Sin synopsis/hook/reason: eso lo escribía Haiku para los 18 ítems
+// (~3000 tokens de salida) antes de que el cliente viera nada, y el usuario
+// solo lee el texto del título que tiene en el banner. Ahora ese texto lo
+// pide la TV bajo demanda a /api/tv-blurb (tvBlurb). La forma completa
+// (ITEM_SHAPE) sigue para el home cacheado (writeReasons / fallback).
+const ITEM_SHAPE_LITE = '{"title":"","platform":"","year":"","type":"Película"}';
+const itemRulesLite = (plats) =>
+  '- "platform" EXACTAMENTE una de: ' +
+  plats.join(", ") +
+  '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
+  "- Títulos conocidos con disponibilidad estable." +
+  "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
+  "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida." +
+  "\n- Nada de texto extra: solo el JSON con esos cuatro campos.";
 
 export async function tvSearch(query, exclude, liked, disliked, platforms, country, preferRecent) {
   if (!query || !query.trim()) return { items: [] };
@@ -190,14 +209,14 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
     recentLine +
     "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[' +
-    ITEM_SHAPE +
-    "]}\n\nReglas:\n- EXACTAMENTE 18 ítems distintos entre sí.\n" +
-    itemRules(plats) +
-    '\n- Si un título se aleja del pedido, aclaralo en "reason" (ej "Se aleja un poco, pero...").';
+    ITEM_SHAPE_LITE +
+    "]}\n\nReglas:\n- EXACTAMENTE 18 ítems distintos entre sí, ordenados del que mejor encaja al que menos.\n" +
+    itemRulesLite(plats);
   // Se piden 18 y se devuelven hasta 15: el margen absorbe los que la
   // validación de disponibilidad (TMDB, por país) descarta o no confirma.
+  // 18 ítems livianos son ~500-600 tokens; 1200 deja el doble de margen.
   const t0 = Date.now();
-  const parsed = await callAnthropic(prompt, 7000);
+  const parsed = await callAnthropic(prompt, 1200);
   const llmMs = Date.now() - t0;
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
   const t1 = Date.now();
@@ -477,11 +496,11 @@ export async function tvHomeMore(exclude, platforms, country) {
     excludeLine +
     "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
     '{"items":[' +
-    ITEM_SHAPE +
+    ITEM_SHAPE_LITE +
     "]}\n\nReglas:\n- EXACTAMENTE 10 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
-    itemRules(plats);
+    itemRulesLite(plats);
   const t0 = Date.now();
-  const parsed = await callAnthropic(prompt, 5500);
+  const parsed = await callAnthropic(prompt, 900);
   const llmMs = Date.now() - t0;
   const items = ((parsed && parsed.items) || []).map((r) =>
     normalizeItem(r, "Más recomendadas para vos"),
