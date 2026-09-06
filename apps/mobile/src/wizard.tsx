@@ -265,6 +265,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     // muestra SOLO esa (mismo criterio que el override real del backend).
     const mentioned = detectPlatformMentions(userQuery);
     setSearchInfo({ query: userQuery, platforms: mentioned.length ? mentioned : effectivePlatforms, type: queryType });
+    const tSubmit = performance.now(); // métricas de la búsqueda (B0)
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -297,12 +298,17 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setSearchInfo(null);
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
+      const tResults = Math.round(performance.now() - tSubmit);
 
       // MVP de voz: hablarle a Miru = buscar. Los resultados hablan solos —
       // ya no se reproduce la intro (cinephile_note sigue viniendo del backend,
       // dormida, por si se retoma el modo asesor).
 
-      void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
+      void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then((p) => {
+        setPosters(p);
+        // Tiempos desde el envío: resultados navegables y carátulas resueltas.
+        track("search_timing", { query_type: queryType, results_ms: tResults, posters_ms: Math.round(performance.now() - tSubmit), items: allItems.length });
+      });
       void loadAvailability(allItems);
       // "Más opciones": ESCALONADO. Antes se disparaba en paralelo con la reco
       // principal (2 llamadas pesadas a la vez) y saturaba red/backend, colgando la

@@ -1752,6 +1752,36 @@
 
   // --- Pósters vía Cinemeta (catálogo público de Stremio: con CORS y sin clave). ---
   var lastPosterErr = "";
+  // Métricas de la búsqueda (B0 de la revisión con Carlos): tiempos desde que
+  // se manda el pedido hasta la rueda, los resultados navegables, la primera
+  // carátula y el primer texto. Van a console ("[metrics-tv]") y, con
+  // ?debug=1, a un overlay abajo a la izquierda (en la TV no hay consola).
+  var DEBUG = false;
+  try { DEBUG = (window.location.search || "").indexOf("debug=1") >= 0; } catch (e) {}
+  var perf = { t0: 0, marks: {}, blurbBeforeInput: 0, inputSeen: false };
+  function markStart() {
+    perf.t0 = Date.now(); perf.marks = {}; perf.blurbBeforeInput = 0; perf.inputSeen = false;
+    mark("submit");
+  }
+  function mark(name) {
+    if (!perf.t0 || perf.marks[name] !== undefined) return; // solo la primera vez por búsqueda
+    var ms = Date.now() - perf.t0;
+    perf.marks[name] = ms;
+    try { console.log("[metrics-tv] " + name + " " + ms + "ms"); } catch (e) {}
+    if (DEBUG) paintDebug();
+  }
+  function paintDebug() {
+    var d = document.getElementById("dbg");
+    if (!d) {
+      d = document.createElement("div"); d.id = "dbg";
+      d.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99;background:rgba(0,0,0,.75);color:#9FE;font:11px/1.4 monospace;padding:6px 8px;border-radius:6px;white-space:pre;pointer-events:none";
+      document.body.appendChild(d);
+    }
+    var lines = [];
+    for (var k in perf.marks) if (Object.prototype.hasOwnProperty.call(perf.marks, k)) lines.push(k + " " + perf.marks[k] + "ms");
+    lines.push("blurb antes de navegar: " + perf.blurbBeforeInput);
+    d.textContent = lines.join("\n");
+  }
   function cinemetaPoster(title, type, cb) {
     var kind = /serie/i.test(type || "") ? "series" : "movie";
     var u = "https://v3-cinemeta.strem.io/catalog/" + kind + "/top/search=" +
@@ -1780,11 +1810,14 @@
     var CONC = 5;
     var pending = [];
     for (var i = 0; i < items.length; i++) { if (!items[i].posterUrl) pending.push(items[i]); }
+    // Si el backend ya trajo carátulas (TMDB), la primera imagen está desde el render.
+    if (items.length && items.length > pending.length) mark("first_image");
     var total = pending.length, done = 0, loaded = 0, idx = 0;
     function onPoster(it, url) {
       if (run !== posterRun) return;
       if (url) {
         loaded++;
+        mark("first_image");
         it.posterUrl = url;
         var ph = document.querySelector("#card-" + it.id + " .ph");
         // Regenerar todo el contenido del ph (póster + gradiente + info + detalle).
@@ -1901,6 +1934,7 @@
     if (!q) return;
     lastSearchCmd = cmd;
     searchError = false;
+    markStart();
     pushHistory(); // recordá la pantalla actual antes de mostrar resultados
     // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
     // nunca veías la rueda de "buscando…" al hablarle a Miru desde ahí.
@@ -1917,6 +1951,7 @@
     focusedIndex = 0;
     todayFocus = -1; rowFocus = -1; rowCol = 0;
     render();
+    mark("wheel"); // feedback visual: la rueda ya está pintada
     emitScreen(true);
     autoDry = false;
     postSearch({ q: q, exclude: (cmd && cmd.exclude) || [], liked: lastLiked, disliked: lastDisliked, platforms: userPlatforms || [], preferRecent: lastPreferRecent })
@@ -1925,9 +1960,11 @@
         // mirar el status): sin `items` es un error, no una lista vacía.
         if (!data || !data.items) throw new Error("respuesta inválida");
         loading = false;
+        mark("response");
         items = assignIds(data.items, 0);
         focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1;
         render();
+        mark("navigable"); // grilla pintada con foco: ya se puede navegar
         emitScreen(true);
         loadPosters();
         autoFill();
@@ -2286,7 +2323,7 @@
     if (cmd.type === "SEARCH") runSearch(cmd);
     else if (cmd.type === "FOCUS") focusById(cmd.mediaId);
     else if (cmd.type === "LOAD_MORE") loadMore();
-    else if (cmd.type === "NAVIGATE") moveFocus(cmd.direction);
+    else if (cmd.type === "NAVIGATE") { perf.inputSeen = true; moveFocus(cmd.direction); }
     // SELECT con mediaId = enfocá ese ítem. SIN mediaId = "apretaron OK": lo
     // resuelve okPress(), que respeta el botón enfocado (actionFocus). Antes el
     // teléfono, estando en la ficha, mandaba PLAY siempre: el "+ Mi lista" te
@@ -2623,6 +2660,7 @@
     }
 
     // uiMode === "rc" | "linked": flujo de contenido.
+    perf.inputSeen = true;
     if (k === 37) moveFocus("left");
     else if (k === 39) moveFocus("right");
     else if (k === 38) moveFocus("up");
