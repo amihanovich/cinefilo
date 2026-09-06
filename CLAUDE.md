@@ -20,9 +20,9 @@ Recomendador conversacional de pelis/series. El foco es la **app móvil**:
    remoto** (la experiencia visual pasa a la TV).
 3. Si llega a una TV con Miru y no quiere instalar la móvil, **escanea el QR** y la maneja desde la
    **web-control**.
-4. Y si no quiere vincular nada: al abrir, la TV ofrece **"Usar el control de la TV"** (mecánica
-   Disney+) — home navegable con el D-pad físico, búsqueda con teclado en pantalla, Mi lista,
-   Ya vistas y filtros de plataformas, todo local a la TV.
+4. Y si no quiere vincular nada: la TV abre **directo en el QR** y **cualquier flecha u OK del control
+   físico entra al home** (sin selector previo) — home navegable con el D-pad, búsqueda con teclado en
+   pantalla, Mi lista, Ya vistas, Abiertos y filtros de plataformas, todo local a la TV.
 
 El AI es **Claude Haiku** (`claude-haiku-4-5-20251001`) vía un backend Node en Railway. Devuelve 1
 recomendación principal + N alternativas, con refinamiento conversacional, feedback de gustos y voz (STT/TTS).
@@ -97,7 +97,16 @@ memorias viejas o en tu cabeza, ignorarlos:
    se migran al boot de cada cliente), no DB.
 6. **Actualizar la TV sin rebuild:** editar `public/tv-lite.html` + redeployar el backend → el APK de TV ya
    instalado muestra la versión nueva (carga la URL remota).
-7. **Home sin búsqueda = banner grande + tiras "Top 5 en X"** (TV y móvil): catálogo por
+7. **TV = un solo banner que sigue al foco + grilla completa** (revisión con Carlos, 2026-09): el
+   banner es la ficha de la tarjeta enfocada (no un carrusel); todos los resultados van en la grilla
+   desde el primero, 6 por fila, tarjetas solo imagen. El texto del banner/ficha es **una frase**
+   (`blurb`, sinopsis + porqué) que la TV pide bajo demanda a `/api/tv-blurb` solo para el título en
+   pantalla; la búsqueda (`/api/tv-search`) ya no genera textos para los 18 ítems. Ítems `avail:
+   "unknown"` se muestran "Por confirmar en X". Detalle en `ARCHITECTURE.md` §3.B.
+8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
+   "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
+   visto fuera de Miru.
+9. **Home sin búsqueda = banner + tiras "Top 5 en X"** (TV y móvil): catálogo por
    plataforma desde `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma
    (`byPlatform` en `availability.mjs` — NO es el top oficial de cada plataforma, no hay API
    pública de eso), numerado 1-10. Las plataformas del usuario van primero, el resto atenuado.
@@ -105,7 +114,7 @@ memorias viejas o en tu cabeza, ignorarlos:
    son estado propio (`topRows`/`rowFocus`), aditivo sobre `items` — "Más opciones para vos" y el
    scroll infinito siguen igual debajo. La tira "Mi lista" NO vive en el home (acceso: tab del
    menú en RC, botón del control en vinculado, desplegable comprimido en el móvil).
-8. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
+10. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
    clickeable (listener de click delegado + botón ‹ Volver flotante + scroll táctil de tiras;
    arranca directo en el contenido). Entrada: la URL de la web-control SIN `?session=` redirige
    ahí; con `?session=` sigue siendo el control del QR.
