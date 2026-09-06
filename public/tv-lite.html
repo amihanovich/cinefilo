@@ -50,8 +50,8 @@
   .toast.show { opacity:1; -webkit-transform:translateY(0); transform:translateY(0); }
 
   /* === Modo RC (control físico): fila de accesos + teclado + filtros === */
-  .tabs { display:flex; gap:8px; margin:2px 0 8px; }
-  .tab { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 13px; font-size:13px; font-weight:600;
+  .tabs { display:flex; gap:8px; margin:0 0 6px; }
+  .tab { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 11px; font-size:13px; font-weight:600;
     color:#B4B4BC; background:#151518; border:2px solid #26262B; }
   .tab.foc { color:#fff; border-color:#8852E0; background:#191722; box-shadow:0 0 0 3px rgba(136,82,224,.25); }
   .tab .cnt { font-size:11px; color:#8A8A93; font-weight:600; }
@@ -107,14 +107,14 @@
   @keyframes ribDown { from { transform:translateY(-50%); }   to { transform:translateY(0); } }
 
   /* === Resultados / home === */
-  .wrap { padding:10px 30px 16px; }
+  .wrap { padding:6px 30px 16px; }
   .topline { font-size:17px; color:#B4B4BC; margin-bottom:8px; }
   .topline b { color:#F5F5F7; }
   .topline .hint { color:#8852E0; font-weight:600; }
 
   .pill { display:inline-block; color:#fff; font-size:13px; font-weight:600; border-radius:999px; padding:2px 11px; }
 
-  .sec { font-family:inherit; font-size:19px; font-weight:600; margin:7px 0 5px; color:#F5F5F7; }
+  .sec { font-family:inherit; font-size:16px; font-weight:600; margin:4px 0 3px; color:#F5F5F7; }
   .sec:first-child { margin-top:0; }
 
   /* === Héroe (home): panel de info sobre negro + póster acotado a la derecha.
@@ -122,7 +122,10 @@
      chicas y a pantalla completa se pixelaban mucho. === */
   /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
      comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
-  .hero { position:relative; display:flex; height:44vh; min-height:260px; max-height:360px; margin-bottom:6px; border-radius:24px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
+  /* Banner ÚNICO (patrón Prime Video): es la ficha del tile enfocado. Alto
+     acotado para que debajo entre la primera fila completa de tarjetas sin
+     scroll: viewport CSS 960x540 (1080p, DPR 2) → 173px; 1280x720 → 220px. */
+  .hero { position:relative; display:flex; height:32vh; min-height:160px; max-height:220px; margin-bottom:6px; border-radius:20px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
   .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
   /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
   /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
@@ -132,7 +135,7 @@
   .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.55) 40%, rgba(16,16,19,.15) 75%, rgba(16,16,19,0) 100%); }
   /* padding-left 68px: deja el carril del chevron ‹ libre para que el texto no
      pase por debajo (antes se montaban). */
-  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:14px 22px 14px 68px; }
+  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:10px 22px 22px 24px; }
   /* Panel de texto SIN caja: fondo transparente para no tapar el hero (pedido
      de diseño). La legibilidad la dan el degradé del .hfade y el text-shadow de
      cada línea, no un rectángulo negro. */
@@ -145,7 +148,7 @@
   .hero .hpanel > * { flex-shrink:0; }
   .hero .hpanel .hblurb { flex-shrink:1; min-height:0; }
   /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
-  .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
+  .hero .htitle { font-family:inherit; font-size:24px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hmeta { display:flex; flex-wrap:nowrap; align-items:center; gap:12px; overflow:hidden; }
   .hero .hmeta .pill { flex:0 0 auto; }
@@ -164,37 +167,26 @@
   .pill.unk, .card .cinfo .pl.unk { background:transparent !important; border:1px solid #55555C; color:#B4B4BC; }
   .hero .htitle, .hero .hsub { text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
   /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
-  .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
+  .hero .hactions { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center; }
   /* Ícono sutil (gris minimalista): guardar en lista. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
-  .hbtn.ico { width:31px; height:31px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico { width:28px; height:28px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
   /* Label del botón "Mi lista": oculto por defecto (banner), visible en la ficha. */
   .blab { display:none; }
   .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
-  /* Chevrons ‹ ›: afirman que el banner se desplaza con ←/→ (affordance).
-     Bien visibles a pedido: disco semi-transparente + glyph grande. */
+  /* Chevrons ‹ › de la ficha: ←/→ salta al título anterior/siguiente. */
   .hchev { position:absolute; top:50%; margin-top:-24px; z-index:4; width:48px; height:48px;
     display:flex; align-items:center; justify-content:center; border-radius:50%;
     background:rgba(10,10,12,.55); border:1px solid rgba(255,255,255,.18);
     font-size:30px; line-height:1; color:rgba(255,255,255,.85);
-    /* clickeables desde el modo touch (antes eran solo decorativos) */
     text-shadow:0 2px 10px rgba(0,0,0,.85); }
   .hchev.l { left:12px; } .hchev.r { right:12px; }
-  /* Mismos chevrons en la ficha: ahí ←/→ salta al título anterior/siguiente. */
   .detail { position:relative; }
   .detail .hchev { position:absolute; top:50%; }
-  /* Dots del carrusel de 5 (indicador de posición, como el móvil). */
-  .hdots { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:9px; margin:5px 0 2px; }
-  /* Cuando el foco está en las candidatas, el indicador se enciende: deja claro
-     que estás parado ahí y que con ←/→ cambiás de candidata. */
-  .hcount { margin-left:10px; font-size:12px; color:#6A6A72; transition:color .18s; }
-  .hdots.act .hcount { color:#B79BF0; font-weight:600; }
-  .hdots.act .hdot { background:rgba(255,255,255,.35); }
-  .hdots.act .hdot.on { background:#A878FF; box-shadow:0 0 0 3px rgba(136,82,224,.28); }
-  .hdot { width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.22); transition:all .18s; }
-  .hdot.on { width:28px; border-radius:999px; background:#8852E0; }
+  /* Leyenda de gestos, dentro del banner (abajo a la izquierda): costo vertical cero. */
+  .hero .okhint { position:absolute; left:24px; bottom:6px; z-index:3; margin:0; text-shadow:0 1px 4px rgba(0,0,0,.9); }
   /* Tira "Mi lista" (lista guardada de la TV). */
   .rowwrap { position:relative; }
   .todayrow { display:flex; gap:10px; overflow:hidden; margin-bottom:3px; }
@@ -264,10 +256,11 @@
   .okhint { color:#5C5C64; font-size:11px; margin:0 0 0 6px; }
 
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
+  :root { --cols:6; } /* tarjetas por fila — mismo valor que COLS en el JS (navegación ↑/↓) */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
   /* Cards cinematográficas: póster de fondo + gradiente + info superpuesta abajo
      (mismo look que el héroe y las tarjetas del móvil). */
-  .card { position:relative; width:16.666%; width:calc(16.666% - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
+  .card { position:relative; width:16.666%; width:calc(100% / var(--cols, 6) - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
   .card.foc { opacity:1; border-color:#8852E0; box-shadow:0 12px 34px rgba(136,82,224,.4); transform:scale(1.08); z-index:4; }
   .card .ph { position:relative; width:100%; height:0; padding-bottom:150%; background:#1E1E22; overflow:hidden; }
   .card .ph img { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
@@ -280,18 +273,7 @@
   .card .cinfo .tt { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; font-weight:600; line-height:1.2; color:#fff; }
   .card .cinfo .csub { display:block; margin-top:3px; font-size:10px; color:#C9C9CE; }
   .card .cinfo .pl { display:inline-block; margin-top:5px; font-size:10px; font-weight:700; color:#fff; border-radius:999px; padding:2px 8px; }
-  /* Detalle (razón de Miru): al enfocar, reemplaza la info con el "por qué". */
-  .card .det { display:none; position:absolute; left:0; right:0; bottom:0; z-index:2; background:rgba(10,10,12,.94); padding:9px 10px; border-top:1px solid rgba(136,82,224,.35); }
-  .card.foc .det { display:block; }
-  .card.foc .cinfo { display:none; }
-  /* Tarjeta chica: de qué va (gris) arriba y por qué (claro) abajo, cada uno con
-     su propio recorte por línea — un clamp en el contenedor pegaba las mitades
-     (dentro de un -webkit-box los hijos display:block no cortan línea). */
-  .card .det .wsyn { font-size:11px; color:#B4B4BC; line-height:1.32; margin:0 0 3px;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .card .det .wwhy { font-size:11px; color:#EDEDF0; line-height:1.32; margin:0;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .card .det .wwhy b { color:#8852E0; margin-right:3px; }
+  /* Tiles solo imagen (patrón Prime): el texto vive en el banner, no en la tarjeta. */
   /* Guardada en "Mi lista": degradé violeta + check centrado (como la móvil). */
   .card .csaved { position:absolute; top:0; left:0; right:0; bottom:0; z-index:3;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px;
@@ -794,8 +776,12 @@
   var controlUrl = CONTROL_BASE.replace(/\/+$/, "") + "/control?session=" + sessionId;
   var items = [];
   var focusedIndex = 0;
-  var heroIndex = 0; // banner visible del carrusel de 5 (modo home)
-  var TOP = 5;       // cantidad de recomendaciones grandes en el carrusel
+  // Tarjetas por fila de la grilla — mismo valor que --cols en el CSS. Antes
+  // estaba duplicado (16.666% en CSS y ±6 suelto en el JS) sin constante común.
+  var COLS = 6;
+  // (Antes: carrusel de 5 grandes con heroIndex/TOP. Revisión con Carlos,
+  // 2026-09: un solo banner que refleja la tarjeta enfocada; la grilla arranca
+  // en el primer resultado.)
   var screen = "home";
   var query = "";
   var mode = "home"; // "home" | "search" | "list"
@@ -965,24 +951,6 @@
     var label = (unk ? "Por confirmar en " : "Disponible en ") + esc(platLabel(it.platform));
     return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + '">' + label + "</span>";
   }
-  function detHTML(it) {
-    var why = it.hook || shortReason(it.reason);
-    if (!why) return "";
-    // El hook viene como "<de qué va> · <por qué te la propongo>": partimos en el
-    // separador para diferenciar las dos mitades. Si el modelo no lo mandó (o es
-    // un ítem viejo), se muestra entero como porqué.
-    var ix = why.indexOf(" · ");
-    if (isTopItem(it)) {
-      // Top: solo el "de qué va" (sin ✦). Fallback: sinopsis recortada.
-      var what = ix > 0 ? why.slice(0, ix) : (it.synopsis || why);
-      return '<div class="det"><p class="wsyn">🎬 ' + esc(what) + "</p></div>";
-    }
-    if (ix > 0) {
-      return '<div class="det"><p class="wsyn">🎬 ' + esc(why.slice(0, ix)) + "</p>" +
-             '<p class="wwhy"><b>✦</b> ' + esc(why.slice(ix + 3)) + "</p></div>";
-    }
-    return '<div class="det"><p class="wwhy"><b>✦</b> ' + esc(why) + "</p></div>";
-  }
 
   // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
   // cardHTML y también al recargar el póster (loadPosters), para no perder la info.
@@ -1008,7 +976,7 @@
       h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
     }
     h += "</div>";
-    return h + detHTML(it);
+    return h;
   }
 
   function cardHTML(it, foc) {
@@ -1020,10 +988,10 @@
   // Héroe: la recomendación principal (item 0) a lo grande, con póster de fondo,
   // doble gradiente cinematográfico y la razón de Miru. Comparte el id
   // "card-<id>" con las tarjetas para reusar foco/scroll.
-  function heroHTML(it, foc, chevL, chevR) {
-    var h = '<div class="hero' + (foc ? " foc" : "") + '" id="card-' + esc(it.id) + '">';
-    if (chevL) h += '<span class="hchev l">‹</span>';
-    if (chevR) h += '<span class="hchev r">›</span>';
+  function heroHTML(it, foc) {
+    // id="hero" + data-id (no "card-<id>": el mismo ítem vive también en la
+    // grilla y habría ids duplicados). data-ui: los botones dependen del modo.
+    var h = '<div class="hero' + (foc ? " foc" : "") + '" id="hero" data-id="' + esc(it.id) + '" data-ui="' + uiMode + '">';
     h += '<div class="info"><div class="hpanel">';
     h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
@@ -1039,28 +1007,23 @@
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
     // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
     // vive únicamente en el control del teléfono — el banner queda limpio.
-    var af = foc ? actionFocus : -1;
-    var td = isToday(it);
-    if (uiMode !== "rc") {
-      // Modo vinculado: SIN botones sobre el banner. El control tiene botones
-      // dedicados (Mi lista / Play / Ya la vi) y OK contextual; acá solo
-      // estorbaban — con el foco en un botón, ←/→ dejaba de cambiar de
-      // candidata y la navegación lateral quedaba "bloqueada".
-      h += '</div></div>';
-      h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+    // En modo vinculado NO hay botones: el control tiene los suyos.
+    if (uiMode === "rc") {
+      var af = foc ? actionFocus : -1;
+      var td = isToday(it);
+      h += '<div class="hactions">';
+      h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
+           (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
+      h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
       h += "</div>";
-      return h;
     }
-    h += '<div class="hactions">';
-    // El label "Mi lista" solo se muestra en la ficha (ahí sobra espacio); en el
-    // banner el botón queda como ícono redondo para no robarle aire al hero.
-    h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
-         (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
-    h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
-    h += "</div>";
     h += "</div></div>"; // cierra .hpanel y .info
     // Columna del póster a la derecha (acotada, con blend hacia el panel negro).
     h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+    // Leyenda de gestos, dentro del banner (costo vertical cero).
+    h += '<span class="okhint">' + (TOUCH
+      ? "Tocá una tarjeta para elegirla · otra vez para ver la ficha · + guarda en Mi lista"
+      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = mostrar el QR") + "</span>";
     h += "</div>";
     return h;
   }
@@ -1203,10 +1166,7 @@
   function detailSiblings() {
     if (detailScope === "today") return today;
     if (detailScope === "toprow") return (topRows[rowFocus] && topRows[rowFocus].items) || [];
-    if (mode !== "home" && mode !== "search") return items; // "Mi lista" / listas
-    var top = Math.min(TOP, items.length);
-    if (detailScope === "cands") return items.slice(0, top);
-    return items.slice(top);
+    return items; // grilla (home/búsqueda) o lista ("Mi lista" / "Ya vistas")
   }
 
   function openDetail(item) {
@@ -1231,7 +1191,12 @@
   //     siendo el del banner / la ficha: nunca pisa la selección actual;
   //   - un error se reintenta recién al volver a enfocar, pasados 10 s.
   var blurbTimer = null;
-  function heroItem() { return items[heroIndex] || null; }
+  // El banner es la ficha de lo que está enfocado: un tile de "Top 5 en X"
+  // (home) o la tarjeta de la grilla. Nunca cambia solo: sigue al foco.
+  function heroItem() {
+    if (rowFocus >= 0 && topRows[rowFocus]) return topRows[rowFocus].items[rowCol] || null;
+    return items[focusedIndex] || null;
+  }
   function needsBlurb(it) {
     if (!it || isTopItem(it) || blurbOf(it)) return false;
     if (it._bs === "loading" || it._bs === "ok") return false;
@@ -1247,8 +1212,8 @@
   }
   function patchBlurb(it) {
     // Banner: solo si el ítem sigue siendo el que se muestra (id en el nodo).
-    var hero = document.querySelector("#herobox .hero");
-    if (hero && hero.id === "card-" + it.id) {
+    var hero = document.getElementById("hero");
+    if (hero && hero.getAttribute("data-id") === String(it.id)) {
       var hb = hero.querySelector(".hblurb");
       if (hb) { hb.innerHTML = blurbHTML(it); if (it.blurb) mark("first_text"); }
     }
@@ -1603,20 +1568,19 @@
     // principales resultados merecen la misma jerarquía que el home. Solo las
     // listas ("Mi lista" / "Ya vistas") quedan como grilla plana.
     if (mode === "home" || mode === "search") {
-      var top = Math.min(TOP, items.length);
       // Fila de accesos del modo RC (Buscar / Mi lista / Ya vistas / Plataformas):
       // en modo vinculado no se renderiza — la UI queda limpia, todo va por el control.
       var html = tabsHTML();
-      // Banner + dots en un contenedor estable: al mover el foco solo se
-      // regenera #herobox (ver updateFocusClasses), no la grilla entera.
+      // Banner en un contenedor estable: al mover el foco solo se parchea
+      // #herobox (ver syncHero), no la grilla entera.
       html += '<div id="herobox">' + heroBoxHTML() + "</div>";
-      // La tira "Mi lista" ya NO vive en el home (redundante: en RC está el
-      // tab del menú y en vinculado el botón del control — feedback de UX).
       // Tiras "Top 5 en X" (solo home; en búsqueda serían ruido).
       if (mode === "home") html += topRowsHTML();
-      // El resto, desde el ítem 5.
-      var secTitle = mode === "search" ? "Más resultados" : "Más opciones para vos";
-      if (items.length > top) html += '<h3 class="sec">' + secTitle + "</h3>" + cardsGridHTML(top);
+      // TODOS los ítems en la grilla, desde el primero: el banner es la ficha
+      // del enfocado, no un carrusel aparte. En búsqueda sin título de sección
+      // (todo es resultado y cuesta 22px de alto).
+      if (mode === "home") html += '<h3 class="sec">Más opciones para vos</h3>';
+      html += cardsGridHTML(0);
       elContent.innerHTML = html;
       updateRowAffordance();
     } else {
@@ -1628,24 +1592,42 @@
 
   // Banner grande del ítem enfocado del carrusel (o el último visto) + dots.
   function heroBoxHTML() {
-    var top = Math.min(TOP, items.length);
-    var hi = Math.min(heroIndex, top - 1); if (hi < 0) hi = 0;
-    var html = heroHTML(items[hi], tabFocus < 0 && todayFocus < 0 && rowFocus < 0 && focusedIndex < top && focusedIndex === hi, hi > 0, hi < top - 1);
-    // Dots + contador + leyenda de gestos, TODO en una sola fila: la leyenda
-    // ocupaba una línea entera propia y le robaba alto a la tira "Mi lista", que
-    // quedaba cortado. Metida acá al lado de los dots, se gana esa línea entera.
-    var onCands = (tabFocus < 0 && todayFocus < 0 && rowFocus < 0 && actionFocus < 0 && focusedIndex < top);
-    html += '<div class="hdots' + (onCands ? " act" : "") + '">';
-    if (top > 1) {
-      for (var d = 0; d < top; d++) html += '<span class="hdot' + (d === hi ? " on" : "") + '"></span>';
-      html += '<span class="hcount">Recomendación ' + (hi + 1) + " de " + top +
-              (onCands ? " · ← → para cambiar" : "") + "</span>";
+    var it = heroItem();
+    if (!it) return "";
+    // El marco de foco del banner solo cuando el foco está en SUS botones.
+    return heroHTML(it, actionFocus >= 0 && rowFocus < 0 && tabFocus < 0);
+  }
+  // Repinta el banner sin regenerar la grilla. Si cambió el ítem (o el modo),
+  // se regenera el banner entero (el póster cambia sí o sí) y se precargan
+  // los pósters vecinos; si es el mismo ítem, solo texto y botones — sin
+  // parpadeo en cada flecha.
+  function syncHero() {
+    var hb = document.getElementById("herobox");
+    if (!hb) return;
+    var it = heroItem();
+    if (!it) { hb.innerHTML = ""; return; }
+    var hero = document.getElementById("hero");
+    var foc = actionFocus >= 0 && rowFocus < 0 && tabFocus < 0;
+    if (!hero || hero.getAttribute("data-id") !== String(it.id) || hero.getAttribute("data-ui") !== uiMode) {
+      hb.innerHTML = heroBoxHTML();
+      preloadNeighbors();
+      return;
     }
-    html += '<span class="okhint">' + (TOUCH
-      ? "Tocá una tarjeta para ver la ficha · + guarda en Mi lista"
-      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = mostrar el QR") + "</span>";
-    html += "</div>";
-    return html;
+    var hb2 = hero.querySelector(".hblurb");
+    if (hb2) hb2.innerHTML = blurbHTML(it);
+    var btns = hero.getElementsByClassName("hbtn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].className = btns[i].className.replace(/ ?\bbfoc\b/, "") + (foc && i === actionFocus ? " bfoc" : "");
+    }
+    hero.className = "hero" + (foc ? " foc" : "");
+  }
+  function preloadNeighbors() {
+    if (rowFocus >= 0) return;
+    var idx = [focusedIndex - 1, focusedIndex + 1, focusedIndex - COLS, focusedIndex + COLS];
+    for (var i = 0; i < idx.length; i++) {
+      var it = items[idx[i]];
+      if (it && it.posterUrl) { var im = new Image(); im.src = it.posterUrl; }
+    }
   }
 
   // --- Entrada (QR) → modo RC + avisos ---
@@ -1724,6 +1706,8 @@
   }
 
   function scrollFocusIntoView() {
+    // Foco en los botones del banner: arriba de todo.
+    if (actionFocus >= 0 && rowFocus < 0) { try { window.scrollTo(0, 0); } catch (e) {} return; }
     var el = null;
     // Foco en una tira "Top 5 en X": centrar el tile (queda lejos del hero).
     if (rowFocus >= 0) el = document.getElementById("toptile-" + rowFocus + "-" + rowCol);
@@ -1750,9 +1734,8 @@
     // tarjetas): lag y parpadeo en TVs de gama baja. Ahora solo se regenera el
     // banner (#herobox) y se togglean clases en la grilla.
     if (mode === "home" || mode === "search") {
-      var hb = document.getElementById("herobox");
-      if (!hb) { renderContent(); return; }
-      hb.innerHTML = heroBoxHTML();
+      if (!document.getElementById("herobox")) { renderContent(); return; }
+      syncHero();
       scheduleBlurb(heroItem()); // el banner pide su texto (debounced) si no lo tiene
       // Tabs del modo RC: toggle de clase (mismo patrón que las tarjetas).
       var tabsEl = document.getElementById("tabs");
@@ -1760,13 +1743,13 @@
         var tEls = tabsEl.getElementsByClassName("tab");
         for (var tb = 0; tb < tEls.length; tb++) tEls[tb].className = "tab" + (tb === tabFocus ? " foc" : "");
       }
-      var top = Math.min(TOP, items.length);
       // SOLO las tarjetas de la grilla (.grid .card): las tiras Top 5 también
       // usan .card y se togglean aparte (abajo) — mezclarlas corría los índices.
       var hcards = elContent.querySelectorAll(".grid .card");
       for (var j = 0; j < hcards.length; j++) {
-        // Con el foco en el carrito, ninguna tarjeta de la grilla queda enfocada.
-        hcards[j].className = "card" + (todayFocus < 0 && top + j === focusedIndex ? " foc" : "");
+        // Con el foco en una tira o en los botones del banner, ninguna tarjeta
+        // de la grilla queda enfocada.
+        hcards[j].className = "card" + (rowFocus < 0 && actionFocus < 0 && j === focusedIndex ? " foc" : "");
       }
       // Tiras "Top 5 en X": toggle de la tarjeta enfocada + scroll horizontal.
       for (var tr = 0; tr < topRows.length; tr++) {
@@ -1912,9 +1895,12 @@
         var ph = document.querySelector("#card-" + it.id + " .ph");
         // Regenerar todo el contenido del ph (póster + gradiente + info + detalle).
         if (ph) ph.innerHTML = cardPh(it);
-        // Si el ítem es el héroe (home), su póster va como fondo (.bg).
-        var bg = document.querySelector("#card-" + it.id + " .bg");
-        if (bg) bg.src = url;
+        // Si el ítem es el del banner, su póster va como fondo (.bg).
+        var hero = document.getElementById("hero");
+        if (hero && hero.getAttribute("data-id") === String(it.id)) {
+          var bg = hero.querySelector(".bg");
+          if (bg) bg.src = url;
+        }
       }
       done++;
       if (done % 4 === 0 || done >= total) emitScreen();
@@ -1985,7 +1971,7 @@
       .then(function (data) {
         if (query) return; // si el usuario ya buscó, no piso sus resultados
         homeRetryDelay = 4000;
-        if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1; }
+        if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; actionFocus = -1; todayFocus = -1; }
         // Tiras "Top 5 en X": si el backend no las manda (fallback sin TMDB),
         // el home queda exactamente como antes.
         topRows = orderTopRows((data && data.rows) || []);
@@ -2055,7 +2041,7 @@
         loading = false;
         mark("response");
         items = assignIds(data.items, 0);
-        focusedIndex = 0; heroIndex = 0; actionFocus = -1; todayFocus = -1;
+        focusedIndex = 0; actionFocus = -1; todayFocus = -1;
         render();
         mark("navigable"); // grilla pintada con foco: ya se puede navegar
         emitScreen(true);
@@ -2188,11 +2174,10 @@
     if (items.length === 0) return;
     var n = focusedIndex, changed = false;
     if (mode === "home" || mode === "search") {
-      var top = Math.min(TOP, items.length);
       if (mode === "home" && rowFocus >= 0) {
         // En una tira "Top 5 en X": ←/→ entre tiles; ↑/↓ tira anterior/
-        // siguiente. ↑ desde la primera vuelve a "Mi lista" (o al banner);
-        // ↓ desde la última baja a la grilla "Más opciones para vos".
+        // siguiente. ↑ desde la primera sube a los botones del banner (RC);
+        // ↓ desde la última baja a la primera fila de la grilla.
         var rlen = topRows[rowFocus] ? topRows[rowFocus].items.length : 0;
         if (dir === "right") { if (rowCol < rlen - 1) { rowCol++; changed = true; } }
         else if (dir === "left") { if (rowCol > 0) { rowCol--; changed = true; } }
@@ -2201,76 +2186,53 @@
             rowFocus++;
             rowCol = Math.min(rowCol, Math.max(0, topRows[rowFocus].items.length - 1));
             changed = true;
-          } else if (items.length > top) { rowFocus = -1; rowCol = 0; n = top; changed = true; }
+          } else if (items.length) { rowFocus = -1; rowCol = 0; n = focusedIndex % COLS; changed = true; }
         } else if (dir === "up") {
           if (rowFocus > 0) {
             rowFocus--;
             rowCol = Math.min(rowCol, Math.max(0, topRows[rowFocus].items.length - 1));
-          } else {
-            rowFocus = -1; rowCol = 0;
-            if (uiMode === "rc") actionFocus = 0;
-            // vinculado: el foco vuelve directo al banner
+            changed = true;
+          } else if (uiMode === "rc") {
+            rowFocus = -1; rowCol = 0; actionFocus = 0; changed = true;
           }
+          // vinculado: el banner ya refleja el tile; no hay botones adonde subir.
+        }
+      } else if (actionFocus >= 0) {
+        // En la fila de botones del banner (solo RC): ←/→ entre botones; ↑ al
+        // menú de tabs; ↓ a las tiras (home) o de vuelta a la grilla.
+        if (dir === "right") { var nr = Math.min(actionFocus + 1, 1); if (nr !== actionFocus) { actionFocus = nr; changed = true; } }
+        else if (dir === "left") { var nl = Math.max(actionFocus - 1, 0); if (nl !== actionFocus) { actionFocus = nl; changed = true; } }
+        else if (dir === "up") { actionFocus = -1; if (uiMode === "rc") tabFocus = 0; changed = true; }
+        else if (dir === "down") {
+          actionFocus = -1;
+          if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
           changed = true;
         }
-      } else if (focusedIndex < top) {
-        if (actionFocus >= 0) {
-          // En la fila de botones del banner: ←/→ entre botones; ↑ vuelve al
-          // banner; ↓ al carrito (si tiene algo) o a la grilla.
-          if (dir === "right") { var nr = Math.min(actionFocus + 1, 1); if (nr !== actionFocus) { actionFocus = nr; changed = true; } }
-          else if (dir === "left") { var nl = Math.max(actionFocus - 1, 0); if (nl !== actionFocus) { actionFocus = nl; changed = true; } }
-          else if (dir === "up") { actionFocus = -1; changed = true; }
-          else if (dir === "down") {
-            actionFocus = -1;
-            if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
-            else if (items.length > top) n = top;
+      } else {
+        // En la grilla (desde el primer ítem): ←/→ ±1, ↓ +COLS, ↑ −COLS. Desde la
+        // primera fila, ↑ sube a las tiras "Top 5" (home) o a los botones del
+        // banner (RC); en vinculado sin tiras, no hay nada arriba.
+        if (dir === "right") n = Math.min(focusedIndex + 1, items.length - 1);
+        else if (dir === "left") n = Math.max(focusedIndex - 1, 0);
+        else if (dir === "down") n = Math.min(focusedIndex + COLS, items.length - 1);
+        else {
+          if (focusedIndex - COLS >= 0) n = focusedIndex - COLS;
+          else if (mode === "home" && topRows.length) {
+            rowFocus = topRows.length - 1;
+            rowCol = Math.min(focusedIndex % COLS, Math.max(0, topRows[rowFocus].items.length - 1));
             changed = true;
           }
-        } else {
-          // En el banner: ←/→ recorre los 5; ↓ entra a los botones; ↑ sube a la
-          // fila de tabs (solo modo RC — en vinculado no hay tabs).
-          if (dir === "right") { n = Math.min(focusedIndex + 1, top - 1); if (n < top) heroIndex = n; }
-          else if (dir === "left") { n = Math.max(focusedIndex - 1, 0); if (n < top) heroIndex = n; }
-          else if (dir === "down") {
-            if (uiMode === "rc") { actionFocus = 0; changed = true; }
-            else {
-              // Vinculado: sin botones en el banner — ↓ va a las tiras o la grilla.
-              if (mode === "home" && topRows.length) { rowFocus = 0; rowCol = 0; }
-              else if (items.length > top) n = top;
-              changed = true;
-            }
-          }
-          else if (dir === "up" && uiMode === "rc") { tabFocus = 0; changed = true; }
-        }
-      } else {
-        // En la grilla: ←/→ ±1, ↓ +6, ↑ −6 (y si sube del tope, va al carrito
-        // si tiene algo, o a los botones del banner).
-        if (dir === "right") n = Math.min(focusedIndex + 1, items.length - 1);
-        else if (dir === "left") n = Math.max(focusedIndex - 1, top);
-        else if (dir === "down") n = Math.min(focusedIndex + 6, items.length - 1);
-        else {
-          n = focusedIndex - 6;
-          if (n < top) {
-            n = heroIndex;
-            // Subiendo desde la grilla, primero las tiras "Top 5 en X" (la
-            // última), después "Mi lista", después el banner — orden visual.
-            if (mode === "home" && topRows.length) {
-              rowFocus = topRows.length - 1;
-              rowCol = Math.min((focusedIndex - top) % 6, Math.max(0, topRows[rowFocus].items.length - 1));
-            }
-            else if (uiMode === "rc") actionFocus = 0;
-            // vinculado sin tira: el foco vuelve directo al banner
-          }
+          else if (uiMode === "rc") { actionFocus = 0; changed = true; }
         }
       }
     } else {
       if (dir === "right") n = Math.min(n + 1, items.length - 1);
       else if (dir === "left") n = Math.max(n - 1, 0);
-      else if (dir === "down") n = Math.min(n + 6, items.length - 1);
+      else if (dir === "down") n = Math.min(n + COLS, items.length - 1);
       else if (dir === "up") {
         // Primera fila de la lista: ↑ sube al menú de tabs (solo modo RC).
-        if (focusedIndex - 6 < 0 && uiMode === "rc") { tabFocus = 0; changed = true; }
-        else n = Math.max(n - 6, 0);
+        if (focusedIndex - COLS < 0 && uiMode === "rc") { tabFocus = 0; changed = true; }
+        else n = Math.max(n - COLS, 0);
       }
     }
     if (n !== focusedIndex) { focusedIndex = n; changed = true; }
@@ -2278,7 +2240,7 @@
     // disparaba el autoFill (proactivo, hasta 60) o el teléfono (LOAD_MORE), así
     // que si llegabas al final de la grilla con el remoto —típico en el home sin
     // búsqueda— no cargaba nada más. Ahora, al acercarse al final, pide más.
-    if (changed && (mode === "home" || mode === "search") && focusedIndex >= items.length - 6) loadMore();
+    if (changed && (mode === "home" || mode === "search") && focusedIndex >= items.length - COLS) loadMore();
     if (changed) { updateFocusClasses(); renderSpot(); scrollFocusIntoView(); emitScreen(); }
   }
 
@@ -2445,10 +2407,7 @@
       if (td2) {
         // Mismo criterio que el doble tap: el scope define entre qué ítems se
         // mueve ←/→ dentro de la ficha.
-        var ix = -1;
-        for (var w = 0; w < items.length; w++) { if (items[w].id === td2.id) { ix = w; break; } }
-        if (mode !== "home" && mode !== "search") detailScope = "list";
-        else detailScope = (ix >= 0 && ix < Math.min(TOP, items.length)) ? "cands" : "grid";
+        detailScope = (mode !== "home" && mode !== "search") ? "list" : "grid";
         openDetail(td2);
       }
     }
@@ -2478,7 +2437,7 @@
     // carrito, y como la del carrito abría la ficha sin mirar actionFocus, si
     // todayFocus había quedado activo, apretar "Ver en X" te llevaba a la ficha en
     // vez de lanzar la app de streaming.
-    if (it && (mode === "home" || mode === "search") && focusedIndex < Math.min(TOP, items.length) && actionFocus >= 0) {
+    if (it && (mode === "home" || mode === "search") && rowFocus < 0 && actionFocus >= 0) {
       if (actionFocus === 0) toggleToday(it);
       else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
       return;
@@ -2503,8 +2462,7 @@
       return function () {
         okTimer = null; okTitle = "";
         // El scope define entre qué ítems te movés con ←/→ en la ficha.
-        if (mode !== "home" && mode !== "search") detailScope = "list";
-        else detailScope = (focusedIndex < Math.min(TOP, items.length)) ? "cands" : "grid";
+        detailScope = (mode !== "home" && mode !== "search") ? "list" : "grid";
         openDetail(target);
       };
     })(it), 380);
@@ -2628,58 +2586,59 @@
         else if (bi === 2 && uiMode === "rc") toggleSeen(detailItem);
         return;
       }
-      var topA = Math.min(TOP, items.length);
-      var ha = Math.min(heroIndex, topA - 1); if (ha < 0) ha = 0;
-      var hit = items[ha];
+      var hit = heroItem();
       if (!hit) return;
       if (bi === 0) toggleToday(hit);
       else if (bi === 1) play(hit.id);
       return;
     }
-    // Chevrons ‹ ›: en la ficha pasan de título; en el hero, de candidata.
+    // Chevrons ‹ › (solo en la ficha): pasan de título.
     el = t.closest(".hchev");
     if (el) {
       var goLeft = / l\b|^hchev l/.test(el.className);
-      if (detailItem) { moveFocus(goLeft ? "left" : "right"); return; }
-      var topC = Math.min(TOP, items.length);
-      var nh = Math.min(Math.max(heroIndex + (goLeft ? -1 : 1), 0), topC - 1);
-      if (nh !== heroIndex) {
-        heroIndex = nh; focusedIndex = nh; actionFocus = -1; rowFocus = -1; rowCol = 0;
-        updateFocusClasses(); renderSpot(); emitScreen();
-      }
+      if (detailItem) moveFocus(goLeft ? "left" : "right");
       return;
     }
-    // Tarjetas: tocar una abre su ficha (regla de la app: 1 toque = ficha).
+    // Tarjetas (modo touch): 1er toque = elegirla (el banner pasa a esa
+    // película); 2º toque en la misma = ficha. Mismo criterio para los tiles Top 5.
     el = t.closest(".card");
     if (el) {
       var id = el.id || "";
       var tm = /^toptile-(\d+)-(\d+)$/.exec(id);
       if (tm) {
-        rowFocus = +tm[1]; rowCol = +tm[2]; actionFocus = -1; tabFocus = -1;
-        var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
-        if (rit) { detailScope = "toprow"; openDetail(rit); }
+        var tr = +tm[1], tc = +tm[2];
+        var rit = topRows[tr] && topRows[tr].items[tc];
+        if (!rit) return;
+        if (rowFocus === tr && rowCol === tc) { detailScope = "toprow"; openDetail(rit); return; }
+        rowFocus = tr; rowCol = tc; actionFocus = -1; tabFocus = -1;
+        updateFocusClasses(); scrollFocusIntoView(); emitScreen();
         return;
       }
       if (id.indexOf("card-") === 0) {
         var iid = id.slice(5);
         for (var ci = 0; ci < items.length; ci++) {
           if (String(items[ci].id) === iid) {
+            var wasFocused = (ci === focusedIndex && rowFocus < 0 && actionFocus < 0);
             focusedIndex = ci; rowFocus = -1; rowCol = 0; actionFocus = -1; tabFocus = -1;
-            if (mode !== "home" && mode !== "search") detailScope = "list";
-            else detailScope = (ci < Math.min(TOP, items.length)) ? "cands" : "grid";
-            openDetail(items[ci]);
+            if (wasFocused) {
+              detailScope = (mode !== "home" && mode !== "search") ? "list" : "grid";
+              openDetail(items[ci]);
+            } else {
+              updateFocusClasses(); scrollFocusIntoView(); emitScreen();
+            }
             return;
           }
         }
       }
       return;
     }
-    // Fondo del banner: abre la ficha de la candidata visible.
+    // Fondo del banner: abre la ficha de lo que muestra.
     el = t.closest(".hero");
     if (el && !detailItem) {
-      var topH = Math.min(TOP, items.length);
-      var hh = Math.min(heroIndex, topH - 1); if (hh < 0) hh = 0;
-      if (items[hh]) { focusedIndex = hh; detailScope = "cands"; openDetail(items[hh]); }
+      var hit2 = heroItem();
+      if (!hit2) return;
+      detailScope = rowFocus >= 0 ? "toprow" : ((mode !== "home" && mode !== "search") ? "list" : "grid");
+      openDetail(hit2);
     }
   });
 
