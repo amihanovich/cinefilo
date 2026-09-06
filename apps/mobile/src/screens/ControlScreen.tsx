@@ -18,6 +18,7 @@ import { ControlSearchOverlay } from "../components/ControlSearchOverlay";
 import { detectPlatformMentions } from "../lib/platform-mentions";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { useBackLayer } from "../lib/back";
+import { buttonDirection, swipeDirection, swipeFromDelta, type Dir } from "../lib/dpad";
 
 const LIKED_KEY = "miru:liked";
 const DISLIKED_KEY = "miru:disliked";
@@ -282,11 +283,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   };
 
   // ── D-pad: mueve la selección entre las tarjetas de la TV ───────────────────
-  // Modelo "arrastrás el contenido" (como el scroll del celular): la flecha /
-  // el gesto mueven la LISTA, no el cursor → se envía la dirección opuesta.
-  type Dir = "up" | "down" | "left" | "right";
-  const INVERT: Record<Dir, Dir> = { up: "down", down: "up", left: "right", right: "left" };
-  const nav = (direction: Dir) => send({ type: "NAVIGATE", direction: INVERT[direction] });
+  // Botones = mueven la selección (natural, como el control físico). Swipe =
+  // "arrastrás el contenido" (dirección opuesta). Ver lib/dpad.ts.
+  const navButton = (pressed: Dir) => send({ type: "NAVIGATE", direction: buttonDirection(pressed) });
+  const navSwipe = (swiped: Dir) => send({ type: "NAVIGATE", direction: swipeDirection(swiped) });
   const padStart = useRef<{ x: number; y: number } | null>(null);
   const onPadTouchStart = (e: ReactTouchEvent) => {
     const t = e.touches[0];
@@ -297,11 +297,9 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
     padStart.current = null;
     if (!s) return;
     const t = e.changedTouches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return; // fue un tap: lo maneja el botón
-    if (Math.abs(dx) > Math.abs(dy)) nav(dx > 0 ? "right" : "left");
-    else nav(dy > 0 ? "down" : "up");
+    const swiped = swipeFromDelta(t.clientX - s.x, t.clientY - s.y);
+    if (!swiped) return; // fue un tap: lo maneja el botón
+    navSwipe(swiped);
   };
 
   const play = () => {
@@ -452,11 +450,11 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       >
         <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(64vw, 248px)" }}>
           <div />
-          <button onClick={() => nav("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
+          <button onClick={() => navButton("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
             <ChevronUp className="h-6 w-6" />
           </button>
           <div />
-          <button onClick={() => nav("left")} disabled={!paired} aria-label="Izquierda" className={padBtn}>
+          <button onClick={() => navButton("left")} disabled={!paired} aria-label="Izquierda" className={padBtn}>
             <ChevronLeft className="h-6 w-6" />
           </button>
           <button
@@ -467,17 +465,17 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           >
             OK
           </button>
-          <button onClick={() => nav("right")} disabled={!paired} aria-label="Derecha" className={padBtn}>
+          <button onClick={() => navButton("right")} disabled={!paired} aria-label="Derecha" className={padBtn}>
             <ChevronRight className="h-6 w-6" />
           </button>
           <div />
-          <button onClick={() => nav("down")} disabled={!paired} aria-label="Abajo" className={padBtn}>
+          <button onClick={() => navButton("down")} disabled={!paired} aria-label="Abajo" className={padBtn}>
             <ChevronDown className="h-6 w-6" />
           </button>
           <div />
         </div>
         <p className="text-center text-[11px] text-muted-foreground/60">
-          Movés la selección en la TV · deslizá o tocá las flechas
+          Flechas: mueven la selección · Deslizar: arrastra el contenido
         </p>
 
         {/* Acciones */}
