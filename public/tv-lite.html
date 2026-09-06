@@ -261,6 +261,13 @@
   /* align-items:flex-start: si la enfocada crece, las demás no se estiran. */
   :root { --cols:6; } /* tarjetas por fila — mismo valor que COLS en el JS (navegación ↑/↓) */
   .grid { display:flex; flex-wrap:wrap; align-items:flex-start; margin:-6px; }
+  /* Aire entre el banner y la primera fila. La tarjeta enfocada crece un 8%
+     (transform: scale) y el transform NO ocupa lugar en el layout: con los 6px
+     de siempre, la tarjeta de la fila 0 se metía DENTRO del banner. El margen va
+     en vw porque el excedente del scale crece con el ancho de la tarjeta (~4% de
+     su alto). Solo aplica en búsqueda: en el home, entre medio va el título de
+     sección de las tiras, que ya separa. Sin clamp(): Tizen 4 = Chrome 56. */
+  #herobox + .grid { margin-top:1.8vw; }
   /* Cards cinematográficas: póster de fondo + gradiente + info superpuesta abajo
      (mismo look que el héroe y las tarjetas del móvil). */
   .card { position:relative; width:16.666%; width:calc(100% / var(--cols, 6) - 12px); margin:6px; border:2px solid #2A2A2E; border-radius:13px; overflow:hidden; background:#161619; opacity:.9; transition:all .15s; }
