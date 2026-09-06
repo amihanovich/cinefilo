@@ -152,6 +152,7 @@ function discoverItem(c, kind, platform) {
     posterUrl: c.poster_path ? IMG + c.poster_path : undefined,
     tmdbId: c.id,
     popularity: c.popularity || 0,
+    avail: "confirmed", // viene del catálogo real de TMDB (mismo campo que expone pickAvailable)
   };
 }
 
@@ -389,23 +390,48 @@ export async function validateItems(items, userPlatforms, country) {
 }
 
 /**
+ * Resumen de `_avail` de una tanda (para logs/métricas). Llamar ANTES de
+ * pickAvailable, que borra la marca interna.
+ */
+export function availSummary(items) {
+  const out = { confirmed: 0, corrected: 0, unlisted: 0, none: 0, unknown: 0 };
+  for (const it of items || []) {
+    const a = it._avail === undefined ? "unknown" : it._avail;
+    if (a in out) out[a]++;
+  }
+  return out;
+}
+
+/**
  * Filtra el resultado de validateItems: disponibles primero (confirmed +
  * corrected); descarta "none" y "unlisted". Los "unknown" (no resueltos en
  * TMDB — en la práctica, casi siempre títulos inventados por el LLM) solo
  * rellenan hasta `minFill`: con suficientes verificados, mejor devolver menos
  * ítems y todos reales que una lista larga con fantasmas. Limpia _avail.
+ *
+ * Con `expose` cada ítem devuelto lleva `avail: "confirmed" | "unknown"` para
+ * que el cliente distinga lo verificado en TMDB de lo que solo dijo el LLM
+ * ("Por confirmar en X"). `corrected` se colapsa a "confirmed": la plataforma
+ * ya fue corregida, lo que importa es que está verificada. Sin `expose` se
+ * comporta como siempre (recommend.mjs — los APKs no esperan el campo).
  * @param {number} want - tope de ítems a devolver
  * @param {number} [minFill=want] - piso a completar con "unknown" si faltan verificados
+ * @param {boolean} [expose=false] - anotar `avail` en los ítems devueltos
  */
-export function pickAvailable(items, want, minFill) {
+export function pickAvailable(items, want, minFill, expose) {
   const fill = typeof minFill === "number" ? minFill : want;
   const ok = [];
   const unknown = [];
   for (const it of items || []) {
     const a = it._avail;
     delete it._avail;
-    if (a === "confirmed" || a === "corrected") ok.push(it);
-    else if (a === "unknown" || a === undefined) unknown.push(it);
+    if (a === "confirmed" || a === "corrected") {
+      if (expose) it.avail = "confirmed";
+      ok.push(it);
+    } else if (a === "unknown" || a === undefined) {
+      if (expose) it.avail = "unknown";
+      unknown.push(it);
+    }
   }
   const padded = ok.length >= fill ? ok : ok.concat(unknown.slice(0, fill - ok.length));
   return padded.slice(0, want);

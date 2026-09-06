@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable, discoverPopular, availabilityEnabled, detectPlatformMentions } from "./availability.mjs";
+import { validateItems, pickAvailable, availSummary, discoverPopular, availabilityEnabled, detectPlatformMentions } from "./availability.mjs";
 
 // Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
@@ -33,7 +33,76 @@ async function callAnthropic(prompt, maxTokens) {
   }
   const data = await res.json();
   const text = (data.content && data.content[0] && data.content[0].text) || "";
-  return JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  return parseLooseJson(text);
+}
+
+// Parse defensivo del JSON que escribe la IA. Antes era un JSON.parse a secas:
+// si Haiku se quedaba sin max_tokens a mitad del ítem 14, el request entero
+// moría con 500 y la TV no mostraba nada. Ahora se rescatan los ítems que sí
+// llegaron completos (se corta en el último objeto cerrado y se cierran los
+// corchetes abiertos) y solo se descarta el truncado.
+export function parseLooseJson(text) {
+  const s = String(text || "");
+  const start = s.indexOf("{");
+  if (start < 0) throw new Error("La IA no devolvió JSON");
+  const end = s.lastIndexOf("}");
+  const body = end > start ? s.slice(start, end + 1) : s.slice(start);
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    const rescued = rescueTruncatedJson(s.slice(start));
+    if (rescued) {
+      console.warn("[tv-search] JSON truncado por la IA: se rescató la parte completa");
+      return rescued;
+    }
+    throw new Error("La IA devolvió JSON inválido");
+  }
+}
+
+// Recorre balanceando llaves/corchetes (saltando strings) y recuerda dónde
+// terminó el último objeto completo que vive dentro de un array de primer
+// nivel (un ítem de "items":[...]). Corta ahí, cierra lo que quedó abierto y
+// reintenta el parse. null = no había ningún ítem completo.
+function rescueTruncatedJson(src) {
+  let inStr = false, escaped = false;
+  const stack = [];
+  let lastItemEnd = -1;
+  let stackAtLast = null;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch); continue; }
+    if (ch === "}" || ch === "]") {
+      stack.pop();
+      if (ch === "}" && stack.length === 2 && stack[1] === "[") {
+        lastItemEnd = i;
+        stackAtLast = stack.slice();
+      }
+    }
+  }
+  if (lastItemEnd < 0) return null;
+  let closers = "";
+  for (let k = stackAtLast.length - 1; k >= 0; k--) closers += stackAtLast[k] === "[" ? "]" : "}";
+  try {
+    return JSON.parse(src.slice(0, lastItemEnd + 1) + closers);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Métrica por request (B0 de la revisión con Carlos): una línea JSON por
+// búsqueda en el log de Railway, para tener la línea base antes/después de
+// aligerar la búsqueda. `grep "\[metrics\]"` y listo.
+export function logMetrics(route, fields) {
+  try {
+    console.log("[metrics] " + JSON.stringify({ route, ...fields }));
+  } catch (e) {}
 }
 
 // Nota: los pósters NO se buscan acá. Los trae la TV del lado del cliente vía Cinemeta
@@ -121,12 +190,23 @@ export async function tvSearch(query, exclude, liked, disliked, platforms, count
     '\n- Si un título se aleja del pedido, aclaralo en "reason" (ej "Se aleja un poco, pero...").';
   // Se piden 18 y se devuelven hasta 15: el margen absorbe los que la
   // validación de disponibilidad (TMDB, por país) descarta o no confirma.
+  const t0 = Date.now();
   const parsed = await callAnthropic(prompt, 7000);
+  const llmMs = Date.now() - t0;
   const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
+  const t1 = Date.now();
   await validateItems(items, effectivePlatforms, country);
+  const tmdbMs = Date.now() - t1;
+  const sum = availSummary(items);
   // minFill 8: con 8+ verificados no se rellena con títulos no resueltos
   // (en pedidos nicho Haiku inventa varios y TMDB no los encuentra).
-  return { items: pickAvailable(items, 15, 8) };
+  const out = pickAvailable(items, 15, 8, true);
+  logMetrics("tv-search", {
+    llm_ms: llmMs, tmdb_ms: tmdbMs, asked: items.length, returned: out.length,
+    confirmed: sum.confirmed + sum.corrected, unknown: sum.unknown, dropped: sum.none + sum.unlisted,
+    platforms: (effectivePlatforms || []).length, q: query.trim().slice(0, 80),
+  });
+  return { items: out };
 }
 
 // Póster desde Cinemeta, resuelto EN EL SERVIDOR. Antes cada TV hacía 1 request
@@ -364,7 +444,7 @@ export async function tvHome() {
   );
   await validateItems(rec.concat(latest), null, undefined);
   const items = await attachPosters(
-    pickAvailable(rec, 8, 6).concat(pickAvailable(latest, 8, 6)),
+    pickAvailable(rec, 8, 6, true).concat(pickAvailable(latest, 8, 6, true)),
   );
   homeCache = { items: items, rows: [] };
   homeCacheAt = Date.now();
@@ -394,12 +474,22 @@ export async function tvHomeMore(exclude, platforms, country) {
     ITEM_SHAPE +
     "]}\n\nReglas:\n- EXACTAMENTE 10 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
     itemRules(plats);
+  const t0 = Date.now();
   const parsed = await callAnthropic(prompt, 5500);
+  const llmMs = Date.now() - t0;
   const items = ((parsed && parsed.items) || []).map((r) =>
     normalizeItem(r, "Más recomendadas para vos"),
   );
+  const t1 = Date.now();
   await validateItems(items, platforms && platforms.length ? platforms : null, country);
-  return { items: pickAvailable(items, 8, 5) };
+  const tmdbMs = Date.now() - t1;
+  const sum = availSummary(items);
+  const out = pickAvailable(items, 8, 5, true);
+  logMetrics("tv-home-more", {
+    llm_ms: llmMs, tmdb_ms: tmdbMs, asked: items.length, returned: out.length,
+    confirmed: sum.confirmed + sum.corrected, unknown: sum.unknown, dropped: sum.none + sum.unlisted,
+  });
+  return { items: out };
 }
 
 // Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).
