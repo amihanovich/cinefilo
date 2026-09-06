@@ -15,6 +15,8 @@ export const mediaItemSchema = z.object({
   synopsis: z.string().optional(),
   /** Por qué fue elegida para esta lista (y si se aleja del pedido, lo aclara). */
   reason: z.string().optional(),
+  /** Una frase: de qué va + por qué encaja (la TV la pide bajo demanda; reemplaza a synopsis+reason). */
+  blurb: z.string().optional(),
   /** Sección a la que pertenece (p. ej. "Recomendadas para vos"), para agrupar en la UI. */
   section: z.string().optional(),
 });

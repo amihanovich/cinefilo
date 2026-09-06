@@ -143,7 +143,7 @@
      el panel quedaba corto de alto); sinopsis y porqué son los únicos que ceden
      espacio y su -webkit-box los trunca por línea. */
   .hero .hpanel > * { flex-shrink:0; }
-  .hero .hpanel .hsyn, .hero .hpanel .hreason { flex-shrink:1; min-height:0; }
+  .hero .hpanel .hblurb { flex-shrink:1; min-height:0; }
   /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
   .hero .htitle { font-family:inherit; font-size:27px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -156,14 +156,12 @@
      flexbox la comprimía y le cortaba la tercera línea por la mitad. Sin caja
      ni max-width gana ancho y entra en 3 líneas cómodas. */
   /* (a) Sinopsis y (b) Por qué, en ese orden — igual que la ficha. */
-  .hero .hsyn .hemo { opacity:.85; }
-  .hero .hsyn { margin:1px 0 0; font-size:13px; line-height:1.38; color:#D5D5DC; flex-shrink:0;
-    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
+  /* Un solo texto en el banner: de qué va + por qué te la propongo (blurb). */
+  .hero .hblurb { margin:2px 0 0; font-size:13px; line-height:1.38; color:#EDEDF0; flex-shrink:0;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .hero .hreason { margin:1px 0 0; font-size:13px; line-height:1.38; color:#EDEDF0; flex-shrink:0;
-    text-shadow:0 1px 3px rgba(0,0,0,.85), 0 0 12px rgba(0,0,0,.6);
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .hero .hreason b { color:#A878FF; margin-right:5px; font-weight:600; }
+  .hwait { color:#8A8A93; font-style:italic; }
+  /* Disponibilidad sin verificar en TMDB: pastilla gris, nunca el color de la plataforma. */
+  .pill.unk, .card .cinfo .pl.unk { background:transparent !important; border:1px solid #55555C; color:#B4B4BC; }
   .hero .htitle, .hero .hsub { text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
   /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
   .hero .hactions { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; align-items:center; }
@@ -251,11 +249,7 @@
      bloque de texto se recorta con fade en vez de desbordar la pantalla
      (.detail está centrado verticalmente y sin scroll en TV). */
   .detail .dtext { position:relative; }
-  .detail .dreason { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0;
-    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
-  .detail .dreason b { color:#8852E0; margin-right:6px; }
-  .detail .dsyn { margin:2px 0 0; font-size:14px; line-height:1.4; color:#B4B4BC;
-    display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+  .detail .dblurb { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
   /* En la ficha, "Mi lista" deja de ser un ícono redondo y se vuelve píldora con
      texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
@@ -939,6 +933,38 @@
   function isTopItem(it) {
     return !!(it && it.section && it.section.indexOf("Top 5 en") === 0);
   }
+  // Texto único del banner/ficha: "de qué va + por qué te la propongo" en una
+  // frase (`blurb`, pedido bajo demanda a /api/tv-blurb). Fallback para ítems
+  // que todavía vienen con la forma vieja (home cacheado, listas guardadas):
+  // hook ("de qué va · por qué") → primera frase de reason → synopsis.
+  // Para los tops (están por ranking) solo la mitad "de qué va", sin porqué.
+  function blurbOf(it) {
+    if (!it) return "";
+    if (isTopItem(it)) {
+      var hk = it.hook || "";
+      var ix = hk.indexOf(" · ");
+      return ix > 0 ? hk.slice(0, ix) : (it.synopsis || hk || "");
+    }
+    if (it.blurb) return it.blurb;
+    if (it.hook) return it.hook.replace(" · ", ": ");
+    return shortReason(it.reason) || it.synopsis || "";
+  }
+  function blurbHTML(it) {
+    var t = blurbOf(it);
+    if (t) return esc(t);
+    if (it && (it._bs === "loading" || needsBlurb(it))) return '<span class="hwait">Miru está escribiendo…</span>';
+    if (it && it._bs === "error") return '<span class="hwait">No pude escribir sobre esta · OK abre la ficha</span>';
+    return "";
+  }
+  // Pastilla de plataforma: "Disponible en X" si TMDB lo verificó (o el ítem
+  // no trae `avail`: caché/listas viejas); "Por confirmar en X" si solo lo
+  // dijo la IA — nunca con el color de la plataforma.
+  function pillHTML(it, cls) {
+    if (!it.platform) return "";
+    var unk = it.avail === "unknown" || it.avail === "pending";
+    var label = (unk ? "Por confirmar en " : "Disponible en ") + esc(platLabel(it.platform));
+    return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + '">' + label + "</span>";
+  }
   function detHTML(it) {
     var why = it.hook || shortReason(it.reason);
     if (!why) return "";
@@ -977,7 +1003,10 @@
     if (it.year) sub.push(it.year);
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="csub">' + esc(sub.join(" · ")) + "</span>";
-    if (it.platform) h += '<span class="pl" style="background:' + colorFor(it.platform) + '">' + esc(platLabel(it.platform)) + "</span>";
+    if (it.platform) {
+      var unkP = it.avail === "unknown" || it.avail === "pending";
+      h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
+    }
     h += "</div>";
     return h + detHTML(it);
   }
@@ -998,16 +1027,15 @@
     h += '<div class="info"><div class="hpanel">';
     h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
-    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    h += pillHTML(it, "pill");
     var sub = [];
     if (it.type) sub.push(it.type);
     if (it.year) sub.push(it.year);
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
-    // Orden pedido: (a) Sinopsis y (b) por qué te la propongo.
-    if (it.synopsis) h += '<p class="hsyn"><span class="hemo">🎬</span> ' + esc(it.synopsis) + "</p>";
-    if (it.reason) h += '<p class="hreason">' + esc(it.reason) + "</p>";
+    // Un solo texto: de qué va + por qué te la propongo (ver blurbOf).
+    h += '<p class="hblurb">' + blurbHTML(it) + "</p>";
     // Botones sobre el banner (navegables con el D-pad nativo; foco = actionFocus).
     // Solo 2 acciones: "Mi lista" y "Ver en X". El feedback de gustos (👍/👎)
     // vive únicamente en el control del teléfono — el banner queda limpio.
@@ -1079,7 +1107,7 @@
     if (found >= 0) today.splice(found, 1);
     // Se guarda TAMBIÉN synopsis/hook: la ficha abierta desde la lista los
     // necesita (antes se perdían y la ficha quedaba sin sinopsis).
-    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
+    else today.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook, blurb: item.blurb, avail: item.avail });
     if (todayFocus >= today.length) todayFocus = today.length ? today.length - 1 : -1;
     saveToday(); render(); emitScreen(true);
   }
@@ -1093,7 +1121,7 @@
     var found = -1;
     for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) { found = i; break; }
     if (found >= 0) seen.splice(found, 1);
-    else seen.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook });
+    else seen.unshift({ id: item.id, title: item.title, platform: item.platform, posterUrl: item.posterUrl, type: item.type, reason: item.reason, year: item.year, ageRating: item.ageRating, synopsis: item.synopsis, hook: item.hook, blurb: item.blurb, avail: item.avail });
     saveSeen(); render();
   }
   function showSeen() {
@@ -1101,7 +1129,7 @@
     var li = [];
     for (var i = 0; i < seen.length; i++) {
       var t = seen[i];
-      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: "Ya vistas" });
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, blurb: t.blurb, avail: t.avail, section: "Ya vistas" });
     }
     tabFocus = -1;
     showList(li);
@@ -1184,9 +1212,71 @@
   function openDetail(item) {
     if (!item) return;
     detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true);
+    scheduleBlurb(item, true); // la ficha pide su texto si todavía no lo tiene
     // Prefetch del link exacto al título: cuando el usuario toque "Ver en X",
     // el deeplink de JustWatch ya está resuelto y abre directo (sin espera).
     jwResolve(item);
+  }
+
+  // ── Texto bajo demanda (PERF-02 / COPY-01) ──────────────────────────────────
+  // El backend ya no escribe sinopsis+porqué para los 18 resultados: la TV pide
+  // UNA frase (/api/tv-blurb) solo para lo que está en el banner — el primer
+  // resultado al llegar la lista, y después el título que el usuario enfoca —
+  // y para la ficha que abre. Reglas:
+  //   - el estado vive en el objeto ítem (_bs: loading|ok|error): sobrevive en
+  //     history y nunca se pide dos veces lo mismo;
+  //   - debounce de 250 ms: al pasar rápido por diez tarjetas se pide solo la
+  //     última donde te quedaste;
+  //   - una respuesta tardía escribe en SU ítem y repinta solo si ese ítem sigue
+  //     siendo el del banner / la ficha: nunca pisa la selección actual;
+  //   - un error se reintenta recién al volver a enfocar, pasados 10 s.
+  var blurbTimer = null;
+  function heroItem() { return items[heroIndex] || null; }
+  function needsBlurb(it) {
+    if (!it || isTopItem(it) || blurbOf(it)) return false;
+    if (it._bs === "loading" || it._bs === "ok") return false;
+    if (it._bs === "error" && Date.now() - (it._bsAt || 0) < 10000) return false;
+    return true;
+  }
+  function cancelBlurb() { if (blurbTimer) { clearTimeout(blurbTimer); blurbTimer = null; } }
+  function scheduleBlurb(it, immediate) {
+    cancelBlurb();
+    if (!needsBlurb(it)) return;
+    if (immediate) { fetchBlurb(it); return; }
+    blurbTimer = setTimeout(function () { blurbTimer = null; fetchBlurb(it); }, 250);
+  }
+  function patchBlurb(it) {
+    // Banner: solo si el ítem sigue siendo el que se muestra (id en el nodo).
+    var hero = document.querySelector("#herobox .hero");
+    if (hero && hero.id === "card-" + it.id) {
+      var hb = hero.querySelector(".hblurb");
+      if (hb) { hb.innerHTML = blurbHTML(it); if (it.blurb) mark("first_text"); }
+    }
+    // Ficha abierta de ese mismo ítem.
+    if (detailItem === it) {
+      var db = document.querySelector(".detail .dblurb");
+      if (db) db.innerHTML = blurbHTML(it);
+    }
+  }
+  function fetchBlurb(it) {
+    if (!needsBlurb(it)) return;
+    it._bs = "loading";
+    patchBlurb(it);
+    if (!perf.inputSeen) perf.blurbBeforeInput++;
+    if (DEBUG) paintDebug();
+    var body = { title: it.title, year: it.year, type: it.type, platform: it.platform, q: mode === "search" ? query : "", section: it.section };
+    fetch("/api/tv-blurb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (d) {
+        if (!d || !d.blurb) throw new Error("vacío");
+        it.blurb = d.blurb; it._bs = "ok";
+        patchBlurb(it);
+        emitScreen(); // el control recibe el texto (campo aditivo del protocolo)
+      })
+      .catch(function () {
+        it._bs = "error"; it._bsAt = Date.now();
+        patchBlurb(it);
+      });
   }
   // Ojo: mode puede ser "list", pero "list" NO existe en el enum de TvState.screen
   // (tv-protocol.ts); si se emitiera, el control descartaría el mensaje en silencio
@@ -1206,20 +1296,17 @@
     h += '<div class="dinfo">';
     h += '<h2 class="dtitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
-    if (it.platform) h += '<span class="pill" style="background:' + colorFor(it.platform) + '">Disponible en ' + esc(platLabel(it.platform)) + "</span>";
+    h += pillHTML(it, "pill");
     var sub = [];
     if (it.type) sub.push(it.type);
     if (it.year) sub.push(it.year);
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
-    if (it.synopsis || it.reason) {
-      h += '<div class="dtext">';
-      if (it.synopsis) h += '<h4 class="dsec">🎬 Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
-      // En un top el "porqué" no aplica (está por ranking, no por sugerencia).
-      if (it.reason && !isTopItem(it)) h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
-      h += "</div>";
-    }
+    // Un solo bloque de texto (el mismo blurb del banner, sin recorte). En un
+    // top el "porqué" no aplica (está por ranking): solo "de qué va".
+    h += '<div class="dtext"><h4 class="dsec">' + (isTopItem(it) ? "🎬 De qué va" : "✦ De qué va y por qué te la propongo") + "</h4>" +
+         '<p class="dblurb">' + blurbHTML(it) + "</p></div>";
     var td = isToday(it);
     h += '<div class="hactions">';
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
@@ -1235,7 +1322,8 @@
     h += "</div>";
     h += '<div class="detailhint">←/→ otra película · ↑/↓ elegir botón · OK confirmar · Volver salir</div>';
     // Atribución requerida por TMDB: los watch providers son datos de JustWatch.
-    if (it.platform) h += '<div class="jwattr">Disponibilidad: JustWatch</div>';
+    // Solo si la disponibilidad se verificó (no atribuir lo que dijo la IA).
+    if (it.platform && it.avail !== "unknown" && it.avail !== "pending") h += '<div class="jwattr">Disponibilidad: JustWatch</div>';
     h += "</div></div>";
     return h;
   }
@@ -1665,6 +1753,7 @@
       var hb = document.getElementById("herobox");
       if (!hb) { renderContent(); return; }
       hb.innerHTML = heroBoxHTML();
+      scheduleBlurb(heroItem()); // el banner pide su texto (debounced) si no lo tiene
       // Tabs del modo RC: toggle de clase (mismo patrón que las tarjetas).
       var tabsEl = document.getElementById("tabs");
       if (tabsEl) {
@@ -1730,6 +1819,7 @@
       if (typeof t.year === "number") m.year = t.year;
       if (t.synopsis) m.synopsis = t.synopsis;
       if (t.reason) m.reason = t.reason;
+      if (t.blurb) m.blurb = t.blurb;
       myList.push(m);
     }
     sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles, myList: myList });
@@ -1857,6 +1947,8 @@
       if (r.synopsis) it.synopsis = r.synopsis;
       if (r.hook) it.hook = r.hook;
       if (r.reason) it.reason = r.reason;
+      if (r.blurb) it.blurb = r.blurb;
+      if (r.avail) it.avail = r.avail;
       if (r.section) it.section = r.section;
       out.push(it);
     }
@@ -1934,6 +2026,7 @@
     if (!q) return;
     lastSearchCmd = cmd;
     searchError = false;
+    cancelBlurb();
     markStart();
     pushHistory(); // recordá la pantalla actual antes de mostrar resultados
     // Si estabas en la ficha, cerrarla: si no, render() la seguía mostrando y
@@ -1966,6 +2059,7 @@
         render();
         mark("navigable"); // grilla pintada con foco: ya se puede navegar
         emitScreen(true);
+        scheduleBlurb(items[0], true); // el ÚNICO texto que se pide sin que el usuario haga nada
         loadPosters();
         autoFill();
       })
@@ -2213,6 +2307,7 @@
   function showList(listItems) {
     if (mode !== "list") pushHistory(); // recordá la pantalla actual
     searchError = false;
+    cancelBlurb();
     mode = "list";
     query = "";
     screen = "search";
@@ -2231,7 +2326,7 @@
     var li = [];
     for (var i = 0; i < today.length; i++) {
       var t = today[i];
-      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, section: MYLIST_SECTION });
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, reason: t.reason, ageRating: t.ageRating, synopsis: t.synopsis, hook: t.hook, blurb: t.blurb, avail: t.avail, section: MYLIST_SECTION });
     }
     showList(li);
   }
@@ -2239,6 +2334,7 @@
   // Atajo del control: volver al home de recomendaciones desde cualquier lado.
   function goHome() {
     searchError = false;
+    cancelBlurb();
     detailItem = null;
     history = [];
     query = "";
@@ -2265,6 +2361,7 @@
     todayFocus = -1; rowFocus = -1; rowCol = 0;
     render();
     emitScreen(true);
+    scheduleBlurb(heroItem()); // normalmente ya lo tiene (quedó en el objeto)
   }
 
   // Overlay de apertura de la app de streaming. Se auto-oculta a los 6s, al
