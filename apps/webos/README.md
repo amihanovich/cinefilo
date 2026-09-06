@@ -74,7 +74,7 @@ en el TV, igual que el package ID en Tizen.
 ## Qué probar
 
 - Abrir Miru desde la grilla de apps: fondo violeta un instante → redirige a `tv-lite.html` → home
-  (hero + tiras Top 5 por plataforma).
+  (hero + tiras Top 6 por plataforma).
 - **El botón Volver del control** (el keycode 461 de webOS ya está mapeado en `tv-lite.html`, junto
   al 10009 de Tizen). `appinfo.json` pone `disableBackHistoryAPI: true` justamente para que el Back
   llegue como keydown y lo maneje la app, en vez de que webOS haga `history.back()` por su cuenta.

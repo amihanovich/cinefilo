@@ -106,7 +106,7 @@ Si cambió algo de `apps/tizen/` (el ícono, el nombre, `config.xml`): repetir `
 ## Qué probar
 
 - Abrir Miru desde la pantalla de Apps del Samsung: fondo violeta un instante → redirige a
-  `tv-lite.html` → carga el home (hero + tiras Top 5 por plataforma).
+  `tv-lite.html` → carga el home (hero + tiras Top 6 por plataforma).
 - Navegar todo con el control remoto: flechas, OK, Volver (los keycodes de Tizen ya están mapeados
   en `tv-lite.html` — no debería hacer falta tocar nada ahí).
 - Abrir una ficha y tocar **"Ver ahora"**: confirmar qué pasa exactamente. Es el punto más incierto

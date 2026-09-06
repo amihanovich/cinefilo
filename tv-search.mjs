@@ -393,7 +393,7 @@ export async function tvHome() {
       const latest = pickVaried(pool.recent, 8);
       const all = rec.concat(latest);
 
-      // Tiras "Top 5 en X": el ranking POR plataforma del mismo pool. Copias
+      // Tiras "Top 6 en X": el ranking POR plataforma del mismo pool. Copias
       // propias (un título puede estar en dos tiras con section distinta).
       const tkey = (t) => String(t || "").toLowerCase().trim();
       const inAll = new Set(all.map((it) => tkey(it.title)));
@@ -401,7 +401,7 @@ export async function tvHome() {
       const extras = []; // títulos de tiras que NO están en `all`: van a su propia pasada de Haiku
       const extraSeen = new Set();
       for (const p of (pool.byPlatform || [])) {
-        const rowItems = p.items.slice(0, 5).map((it) => ({ ...it, section: "Top 5 en " + p.platform }));
+        const rowItems = p.items.slice(0, 6).map((it) => ({ ...it, section: "Top 6 en " + p.platform })) // 6 = una fila completa de la grilla de la TV (COLS);
         rows.push({ platform: p.platform, items: rowItems });
         for (const it of rowItems) {
           const k = tkey(it.title);
@@ -476,7 +476,7 @@ export async function tvHome() {
   return homeCache;
 }
 
-// Solo las tiras "Top 5 en X" (para el móvil): mismo caché que el home.
+// Solo las tiras "Top 6 en X" (para el móvil): mismo caché que el home.
 export async function tvTop() {
   const home = await tvHome();
   return { rows: (home && home.rows) || [] };

@@ -189,7 +189,10 @@
   .hero .okhint { position:absolute; left:24px; bottom:6px; z-index:3; margin:0; text-shadow:0 1px 4px rgba(0,0,0,.9); }
   /* Tira "Mi lista" (lista guardada de la TV). */
   .rowwrap { position:relative; }
-  .todayrow { display:flex; gap:10px; overflow:hidden; margin-bottom:3px; }
+  /* Misma geometría que .grid (margen -6px + 6px por tarjeta): los 6 tiles del
+     "Top 6" miden EXACTAMENTE lo mismo que las tarjetas de la grilla y llenan
+     la fila sin hueco. */
+  .todayrow { display:flex; overflow:hidden; margin:0 -6px 3px; }
   /* Cuando hay más tiles fuera de vista: fade en el borde derecho + flecha ›.
      (Antes el overflow era mudo y los tiles extra simplemente "no existían".) */
   .todayrow.fade { -webkit-mask-image:linear-gradient(to right, #000 82%, transparent 100%);
@@ -197,13 +200,13 @@
   .rowmore { position:absolute; right:2px; top:50%; margin-top:-16px; font-size:26px; line-height:1;
     color:rgba(255,255,255,.7); text-shadow:0 2px 8px rgba(0,0,0,.85); pointer-events:none; }
   .ttile { width:76px; height:114px; flex:0 0 auto; border-radius:10px; overflow:hidden; background:#161619; border:1px solid #2A2A2E; transition:all .15s; }
-  /* Tiras "Top 5 en X": misma tarjeta que la grilla "Más opciones" (.card),
+  /* Tiras "Top 6 en X": misma tarjeta que la grilla "Más opciones" (.card),
      en fila horizontal scrolleable. Punto de color de la plataforma en el
      título; las tiras de plataformas fuera del filtro del usuario quedan
      atenuadas (presentes: descubren catálogo). */
   .sec .pdot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:8px; vertical-align:1px; }
   .sec.dim { opacity:.5; }
-  .todayrow .card { flex:0 0 auto; margin:0; }
+  .todayrow .card { flex:0 0 auto; margin:6px; }
   /* Nº de ranking del top (1-10), como en la app móvil. Arriba a la izquierda:
      abajo vive .cinfo (título + pill de plataforma). */
   .card .rank { position:absolute; top:2px; left:9px; z-index:2; font-size:36px; font-weight:800;
@@ -795,7 +798,7 @@
   var today = loadToday(); // ítems en "Mi lista" (lista guardada de la TV; wire-legacy: "today")
   var actionFocus = -1;    // -1 = banner (sin botón); 0 = "Mi lista", 1 = "Ver en X", 2 = "Ya la vi" (RC)
   var todayFocus = -1;     // -1 = fuera de la tira "Mi lista"; 0.. = tile enfocado de la tira
-  // Tiras "Top 5 en X" del home (catálogo por plataforma, /api/tv-home rows).
+  // Tiras "Top 6 en X" del home (catálogo por plataforma, /api/tv-home rows).
   // Mismo patrón que la tira "Mi lista": estado propio, NO entra en `items`,
   // así la grilla, el hero y el scroll infinito quedan idénticos.
   var topRows = [];   // [{platform, items[≤5], dim}] ya ordenadas por orderTopRows
@@ -921,10 +924,10 @@
   // Detalle como overlay sobre la parte baja del póster (solo tarjeta enfocada).
   // Muestra el "hook" (porqué ultra concreto, ej "Porque hay espadas medievales
   // y honor en juego"); si el ítem es viejo y no lo trae, cae a la 1ª frase.
-  // ¿El ítem está por ranking (tira "Top 5 en X") y no por sugerencia de Miru?
+  // ¿El ítem está por ranking (tira "Top 6 en X") y no por sugerencia de Miru?
   // En los tops no va el "porqué te la propongo" — están ahí por ser top.
   function isTopItem(it) {
-    return !!(it && it.section && it.section.indexOf("Top 5 en") === 0);
+    return !!(it && it.section && /^Top \d+ en /.test(it.section)); // "Top 6 en X" (antes Top 5: tolerante)
   }
   // Texto único del banner/ficha: "de qué va + por qué te la propongo" en una
   // frase (`blurb`, pedido bajo demanda a /api/tv-blurb). Fallback para ítems
@@ -1138,7 +1141,7 @@
 
   // Affordance de una tira horizontal: si hay tiles fuera de vista a la
   // derecha, fade en el borde + flecha ›. Se recalcula al renderizar y al
-  // mover el foco. Solo togglea "fade" (las tiras Top 5 llevan más clases).
+  // mover el foco. Solo togglea "fade" (las tiras Top 6 llevan más clases).
   function rowAffordance(rowId, arrId) {
     var row = document.getElementById(rowId);
     var arr = document.getElementById(arrId);
@@ -1152,7 +1155,7 @@
     for (var i = 0; i < topRows.length; i++) rowAffordance("toprow-" + i, "toprowmore-" + i);
   }
 
-  // --- Tiras "Top 5 en X" (catálogo por plataforma del home) ---
+  // --- Tiras "Top 6 en X" (catálogo por plataforma del home) ---
   // El usuario ve primero SUS plataformas (Filtros del modo RC); las demás
   // quedan abajo, atenuadas pero presentes. Sin filtro: orden del backend.
   function orderTopRows(rows) {
@@ -1179,7 +1182,7 @@
     var h = "";
     for (var i = 0; i < topRows.length; i++) {
       var row = topRows[i];
-      h += '<h3 class="sec' + (row.dim ? " dim" : "") + '"><span class="pdot" style="background:' + colorFor(row.platform) + '"></span>Top 5 en ' + esc(platLabel(row.platform)) + "</h3>";
+      h += '<h3 class="sec' + (row.dim ? " dim" : "") + '"><span class="pdot" style="background:' + colorFor(row.platform) + '"></span>Top 6 en ' + esc(platLabel(row.platform)) + "</h3>";
       h += '<div class="rowwrap"><div class="todayrow' + (row.dim ? " dim" : "") + '" id="toprow-' + i + '">';
       // Tarjetas IGUALES a las de "Más opciones" (cardPh completo: carátula,
       // info superpuesta y sinopsis+porqué al enfocar) — solo que en una fila
@@ -1225,7 +1228,7 @@
   //     siendo el del banner / la ficha: nunca pisa la selección actual;
   //   - un error se reintenta recién al volver a enfocar, pasados 10 s.
   var blurbTimer = null;
-  // El banner es la ficha de lo que está enfocado: un tile de "Top 5 en X"
+  // El banner es la ficha de lo que está enfocado: un tile de "Top 6 en X"
   // (home) o la tarjeta de la grilla. Nunca cambia solo: sigue al foco.
   function heroItem() {
     if (rowFocus >= 0 && topRows[rowFocus]) return topRows[rowFocus].items[rowCol] || null;
@@ -1611,7 +1614,7 @@
       // Banner en un contenedor estable: al mover el foco solo se parchea
       // #herobox (ver syncHero), no la grilla entera.
       html += '<div id="herobox">' + heroBoxHTML() + "</div>";
-      // Tiras "Top 5 en X" (solo home; en búsqueda serían ruido).
+      // Tiras "Top 6 en X" (solo home; en búsqueda serían ruido).
       if (mode === "home") html += topRowsHTML();
       // TODOS los ítems en la grilla, desde el primero: el banner es la ficha
       // del enfocado, no un carrusel aparte. En búsqueda sin título de sección
@@ -1748,7 +1751,7 @@
     // Foco en los botones del banner: arriba de todo.
     if (actionFocus >= 0 && rowFocus < 0) { try { window.scrollTo(0, 0); } catch (e) {} return; }
     var el = null;
-    // Foco en una tira "Top 5 en X": centrar el tile (queda lejos del hero).
+    // Foco en una tira "Top 6 en X": centrar el tile (queda lejos del hero).
     if (rowFocus >= 0) el = document.getElementById("toptile-" + rowFocus + "-" + rowCol);
     if (!el) {
       var it = items[focusedIndex];
@@ -1757,7 +1760,7 @@
     }
     if (!el) {
       // Sin tarjeta = el foco volvió al hero o a la tira "Mi lista", que viven
-      // arriba de todo (con las tiras Top 5 la página es alta y se notaba).
+      // arriba de todo (con las tiras Top 6 la página es alta y se notaba).
       if (mode === "home" || mode === "search") { try { window.scrollTo(0, 0); } catch (e) {} }
       return;
     }
@@ -1782,7 +1785,7 @@
         var tEls = tabsEl.getElementsByClassName("tab");
         for (var tb = 0; tb < tEls.length; tb++) tEls[tb].className = "tab" + (tb === tabFocus ? " foc" : "");
       }
-      // SOLO las tarjetas de la grilla (.grid .card): las tiras Top 5 también
+      // SOLO las tarjetas de la grilla (.grid .card): las tiras Top 6 también
       // usan .card y se togglean aparte (abajo) — mezclarlas corría los índices.
       var hcards = elContent.querySelectorAll(".grid .card");
       for (var j = 0; j < hcards.length; j++) {
@@ -1790,7 +1793,7 @@
         // de la grilla queda enfocada.
         hcards[j].className = "card" + (rowFocus < 0 && actionFocus < 0 && j === focusedIndex ? " foc" : "");
       }
-      // Tiras "Top 5 en X": toggle de la tarjeta enfocada + scroll horizontal.
+      // Tiras "Top 6 en X": toggle de la tarjeta enfocada + scroll horizontal.
       for (var tr = 0; tr < topRows.length; tr++) {
         var rowEl = document.getElementById("toprow-" + tr);
         if (!rowEl) continue;
@@ -2022,7 +2025,7 @@
         if (query) return; // si el usuario ya buscó, no piso sus resultados
         homeRetryDelay = 4000;
         if (data && data.items) { items = assignIds(filterByPlatforms(data.items), 0); focusedIndex = 0; actionFocus = -1; todayFocus = -1; }
-        // Tiras "Top 5 en X": si el backend no las manda (fallback sin TMDB),
+        // Tiras "Top 6 en X": si el backend no las manda (fallback sin TMDB),
         // el home queda exactamente como antes.
         topRows = orderTopRows((data && data.rows) || []);
         rowFocus = -1; rowCol = 0;
@@ -2226,7 +2229,7 @@
     var n = focusedIndex, changed = false;
     if (mode === "home" || mode === "search") {
       if (mode === "home" && rowFocus >= 0) {
-        // En una tira "Top 5 en X": ←/→ entre tiles; ↑/↓ tira anterior/
+        // En una tira "Top 6 en X": ←/→ entre tiles; ↑/↓ tira anterior/
         // siguiente. ↑ desde la primera sube a los botones del banner (RC);
         // ↓ desde la última baja a la primera fila de la grilla.
         var rlen = topRows[rowFocus] ? topRows[rowFocus].items.length : 0;
@@ -2261,7 +2264,7 @@
         }
       } else {
         // En la grilla (desde el primer ítem): ←/→ ±1, ↓ +COLS, ↑ −COLS. Desde la
-        // primera fila, ↑ sube a las tiras "Top 5" (home) o a los botones del
+        // primera fila, ↑ sube a las tiras "Top 6" (home) o a los botones del
         // banner (RC); en vinculado sin tiras, no hay nada arriba.
         if (dir === "right") n = Math.min(focusedIndex + 1, items.length - 1);
         else if (dir === "left") n = Math.max(focusedIndex - 1, 0);
@@ -2496,7 +2499,7 @@
       else if (actionFocus === 1) play(it.id); // → deep-link a la app de destino
       return;
     }
-    // Foco en una tira "Top 5 en X": OK abre la ficha (mismo gesto que "Mi lista").
+    // Foco en una tira "Top 6 en X": OK abre la ficha (mismo gesto que "Mi lista").
     if (mode === "home" && rowFocus >= 0 && actionFocus < 0) {
       var rit = topRows[rowFocus] && topRows[rowFocus].items[rowCol];
       if (rit) { detailScope = "toprow"; openDetail(rit); }
@@ -2654,7 +2657,7 @@
       return;
     }
     // Tarjetas (modo touch): 1er toque = elegirla (el banner pasa a esa
-    // película); 2º toque en la misma = ficha. Mismo criterio para los tiles Top 5.
+    // película); 2º toque en la misma = ficha. Mismo criterio para los tiles Top 6.
     el = t.closest(".card");
     if (el) {
       var id = el.id || "";

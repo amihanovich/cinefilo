@@ -106,7 +106,7 @@ memorias viejas o en tu cabeza, ignorarlos:
 8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
    "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
    visto fuera de Miru.
-9. **Home sin búsqueda = banner + tiras "Top 5 en X"** (TV y móvil): catálogo por
+9. **Home sin búsqueda = banner + tiras "Top 6 en X"** (TV y móvil): catálogo por
    plataforma desde `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma
    (`byPlatform` en `availability.mjs` — NO es el top oficial de cada plataforma, no hay API
    pública de eso), numerado 1-10. Las plataformas del usuario van primero, el resto atenuado.

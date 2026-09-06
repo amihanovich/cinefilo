@@ -212,9 +212,9 @@ export async function discoverPopular(country) {
   out.popular.sort((a, b) => b.popularity - a.popularity);
   out.recent.sort((a, b) => b.popularity - a.popularity);
 
-  // Ranking POR plataforma (para las tiras "Top 5 en X"): mismas páginas del
+  // Ranking POR plataforma (para las tiras "Top 6 en X"): mismas páginas del
   // bucket "popular", pero agrupadas por plataforma ANTES del dedupe global.
-  // 8 por plataforma: margen sobre los 5 que se muestran.
+  // 8 por plataforma: margen sobre los 6 que se muestran (una fila de la TV).
   const byPlat = new Map();
   for (const page of pages) {
     if (page.bucket !== "popular") continue;

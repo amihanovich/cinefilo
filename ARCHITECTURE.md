@@ -53,9 +53,9 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
-| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV: `items` (recomendadas + estrenos) **+ `rows`** (tiras "Top 5 en X" por plataforma). Cacheado 6h en memoria. |
+| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV: `items` (recomendadas + estrenos) **+ `rows`** (tiras "Top 6 en X" por plataforma). Cacheado 6h en memoria. |
 | `/api/tv-home-more` | POST | `tv-search.mjs` → `tvHomeMore()` | Carga infinita del home de TV. |
-| `/api/top-platforms` | GET | `tv-search.mjs` → `tvTop()` | Solo las `rows` del home (las tiras "Top 5 en X") — las consume el móvil. Mismo caché de 6h. |
+| `/api/top-platforms` | GET | `tv-search.mjs` → `tvTop()` | Solo las `rows` del home (las tiras "Top 6 en X") — las consume el móvil. Mismo caché de 6h. |
 | `/api/tv-search` | GET/POST | `tv-search.mjs` → `tvSearch()` | Búsqueda para la TV liviana. **Forma liviana** (2026-09): pide a Haiku solo título/plataforma/año/tipo (18 ítems, `max_tokens` 1200), valida en TMDB en la misma respuesta y devuelve ≤15 con `avail: "confirmed" \| "unknown"`. Sin `synopsis/hook/reason`. |
 | `/api/tv-blurb` | POST | `tv-search.mjs` → `tvBlurb()` | **Texto de UN título bajo demanda**: una frase (25-35 palabras) "de qué va + por qué encaja con el pedido" (`{title, year, type, platform, q, section}` → `{blurb, cached}`). La TV lo pide solo para el título del banner/ficha. Caché 24 h por título+pedido, dedupe en vuelo, `max_tokens` 160, timeout 12 s. Cubeta de rate limit propia (60/min/IP, `ratelimit.mjs`). |
 | `/api/tv-ribbons` | GET | `tv-search.mjs` → `tvRibbons()` | Pósters de las cintas de la pantalla del QR (solo Discover cacheado, sin IA). |
@@ -96,8 +96,8 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 - **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
   home de TV vía `discoverPopular(country)` — 6 plataformas × movie/tv × popular/recent = 24 requests
   paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR
-  plataforma (para las tiras "Top 5 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
-  ⚠️ El "Top 5" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
+  plataforma (para las tiras "Top 6 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
+  ⚠️ El "Top 6" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
   tiene API pública). ⚠️ El caché del home no tiene key de región: el top es de `DEFAULT_REGION` (AR)
   para todos.
 - **Pósters:** **Cinemeta (Stremio) primero**, iTunes + Wikipedia de fallback (ver §5).
@@ -143,11 +143,11 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   una fila de tabs (Mic / Buscar con teclado D-pad / Mi lista / Ya vistas / Plataformas / ▶ Abiertos /
   Vincular teléfono); en **modo vinculado** la UI queda limpia y todo se maneja desde el control.
 - **Layout** (2026-09, patrón Prime Video): **un solo banner** que es la ficha de la tarjeta enfocada
-  (`heroItem()`: tile "Top 5" o ítem de la grilla; `syncHero()` parchea solo el banner). Se fue el
+  (`heroItem()`: tile "Top 6" o ítem de la grilla; `syncHero()` parchea solo el banner). Se fue el
   carrusel de 5 (`TOP`/`heroIndex`): **todos** los resultados van en la grilla desde el primero, 6 por
   fila (`COLS` en JS = `--cols` en CSS), tarjetas solo imagen+título+pastilla. El banner mide 32vh (173 px
   a 960×540 —viewport CSS de 1080p con DPR 2—, 220 px a 720p) para que la primera fila quede a la
-  vista. Navegación: grilla ←/→ ±1, ↑/↓ ±COLS; desde la fila 0, ↑ sube a las tiras Top 5 (home) o a los
+  vista. Navegación: grilla ←/→ ±1, ↑/↓ ±COLS; desde la fila 0, ↑ sube a las tiras Top 6 (home) o a los
   botones del banner (RC) y de ahí al menú. OK = ficha, OK doble = Mi lista. Touch: 1er toque elige, 2º
   abre la ficha.
 - **Texto bajo demanda** (2026-09): sinopsis + "por qué" son **una frase** (`blurb`) que la TV pide a

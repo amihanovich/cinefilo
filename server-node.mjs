@@ -158,7 +158,7 @@ http
       sendJson(tvHome(), "public, max-age=300");
       return;
     }
-    // Solo las tiras "Top 5 en X" del home (las consume el móvil): mismo
+    // Solo las tiras "Top 6 en X" del home (las consume el móvil): mismo
     // caché de 6h que /api/tv-home, mismo cacheo de borde.
     if (urlPath === "/api/top-platforms") {
       sendJson(tvTop(), "public, max-age=300");
