@@ -31,18 +31,10 @@
   .pairleft h1 { font-family:inherit; font-size:22px; font-weight:600; margin:2px 0 0; color:#F5F5F7; line-height:1.15; }
   .pairleft .sub { font-size:15px; color:#B4B4BC; margin:0; max-width:340px; line-height:1.35; }
   .sess { margin-top:2px; color:#6A6A72; font-size:13px; }
+  /* Entrada sin selector: el QR está a la vista y el control físico entra directo. */
+  .pairalt { margin-top:8px; padding-top:10px; border-top:1px solid #1E1E22; color:#B4B4BC; font-size:14px; line-height:1.4; max-width:360px; }
+  .pairalt b { color:#F5F5F7; font-weight:600; }
 
-  /* === Pantalla de elección (mecánica Disney): elegir cómo manejar la TV === */
-  .choose { display:flex; align-items:stretch; min-height:calc(100vh - 75px); }
-  .chooseleft { width:54%; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; gap:14px; padding:0 30px; border-right:1px solid #1E1E22; }
-  .chooseleft h1 { font-size:24px; font-weight:600; margin:0; color:#F5F5F7; line-height:1.15; }
-  .chcards { display:flex; gap:14px; }
-  .chcard { flex:1; background:#151518; border:2px solid #26262B; border-radius:16px; padding:18px 16px; }
-  .chcard .chico { font-size:30px; margin-bottom:8px; }
-  .chcard h2 { font-size:17px; font-weight:600; margin:0 0 6px; color:#F5F5F7; }
-  .chcard p { font-size:13px; color:#B4B4BC; margin:0; line-height:1.4; }
-  .chcard.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.28), 0 10px 30px rgba(136,82,224,.18); background:#191722; }
-  .chhint { font-size:12px; color:#6A6A72; }
 
   /* Banner discreto de "control desconectado" (modo vinculado): informa sin
      expulsar al QR — el contenido sigue en pantalla y el D-pad sigue vivo. */
@@ -227,7 +219,7 @@
   .card .rank { position:absolute; top:2px; left:9px; z-index:2; font-size:36px; font-weight:800;
     line-height:1.15; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.8); pointer-events:none; }
   /* === Modo touch (web tablets/laptops, ?touch=1) === */
-  .card, .tab, .key, .fchip, .hbtn, .hchev, .chcard, .ttile { cursor:pointer; }
+  .card, .tab, .key, .fchip, .hbtn, .hchev, .ttile { cursor:pointer; }
   .touch .todayrow { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .tback { position:fixed; left:16px; bottom:16px; z-index:60; padding:12px 22px; border-radius:999px;
     background:rgba(18,18,22,.9); border:1px solid #3A3A40; color:#F5F5F7; font-size:17px; font-weight:600;
@@ -347,38 +339,22 @@
     <div class="badge"><span class="dot wait" id="dot"></span><span id="badge">Conectando…</span></div>
   </div>
 
-  <div id="choose" class="choose">
-    <div class="chooseleft">
-      <h1 class="serif">¿Cómo querés manejar Miru?</h1>
-      <div class="chcards">
-        <div class="chcard foc" id="ch0">
-          <div class="chico">📱</div>
-          <h2>Vincular el teléfono</h2>
-          <p>Escaneá un QR y usá tu celu como control: le hablás a Miru y manejás todo desde ahí.</p>
-        </div>
-        <div class="chcard" id="ch1">
-          <div class="chico">🕹</div>
-          <h2>Usar el control de la TV</h2>
-          <p>Navegá con las flechas del control remoto: búsqueda, tu lista y filtros en pantalla.</p>
-        </div>
-      </div>
-      <div class="chhint">← → elegir · OK confirmar</div>
-    </div>
-    <div class="ribbons" id="chooseribbons"></div>
-  </div>
-
-  <div id="pair" class="pair hidden">
+  <!-- Pantalla de entrada: el QR a la vista desde el arranque (sin selector
+       previo). Cualquier flecha u OK del control físico entra directo al
+       contenido en modo RC; escanear el QR pasa al modo vinculado. -->
+  <div id="pair" class="pair">
     <div class="pairleft">
       <div class="qrbox"><img id="qr" alt="QR"></div>
-      <h1 class="serif">Usá tu teléfono como control</h1>
-      <p class="sub">Escaneá el código con la cámara.</p>
+      <h1 class="serif">Escaneá el código para usar tu teléfono como control</h1>
+      <p class="sub">Le hablás a Miru y manejás todo desde el celu.</p>
       <div class="sess" id="sess">Generando sesión…</div>
+      <div class="pairalt"><b>O navegá con el control remoto:</b> cualquier flecha u OK empieza · 🎙 Hablar está en el menú</div>
       <div class="sess" id="pairhint"></div>
     </div>
     <div class="ribbons" id="pairribbons"></div>
   </div>
 
-  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — tocá una flecha para usar el control de la TV · Volver = elegir modo</div>
+  <div id="dcban" class="dcban hidden"><b>⚠ Control desconectado</b> — tocá una flecha para usar el control de la TV · Volver = mostrar el QR</div>
   <div id="toast" class="toast"></div>
 
   <div id="results" class="wrap hidden">
@@ -824,11 +800,14 @@
   var loadingMore = false;
   var paired = false;
   // uiMode = ELECCIÓN de interfaz; paired = HECHO de red (presencia del control).
-  //   "choose" = pantalla inicial (elegir modo, mecánica Disney)
-  //   "pair"   = pantalla del QR
+  //   "pair"   = pantalla de entrada: el QR a la vista. Es la raíz: flecha/OK del
+  //              control físico → "rc"; un comando del teléfono → "linked".
   //   "rc"     = manejo con el control remoto físico de la TV (tabs y teclado en pantalla)
   //   "linked" = manejo desde el teléfono (UI limpia; los comandos llegan por el canal)
-  var uiMode = "choose";
+  // (Antes había una pantalla previa de elección de modo — mecánica Disney —
+  // que escondía el QR detrás de un clic y no dejaba navegar con las flechas.
+  // Se sacó en la revisión con Carlos, 2026-09.)
+  var uiMode = "pair";
   // Modo touch (web para tablets/laptops): la MISMA UI del modo RC pero
   // tocable. SOLO se activa con ?touch=1 (nada de autodetección: una WebView
   // de TV puede reportar pointer coarse y saltearse la pantalla de elección).
@@ -836,8 +815,10 @@
   // puntero y no molestan; en una laptop cualquiera, la página ya se clickea.
   var TOUCH = false;
   try { TOUCH = (window.location.search || "").indexOf("touch=1") >= 0; } catch (e) {}
-  var chooseFocus = 0; // 0 = vincular teléfono, 1 = usar control de la TV
-  var pairReturn = "choose"; // a dónde vuelve el BACK desde la pantalla del QR
+  // A dónde vuelve el BACK desde la pantalla del QR: "root" = es la entrada
+  // (BACK deja que el sistema cierre la app); "rc" = se abrió desde el tab
+  // "Vincular teléfono" del modo RC (BACK vuelve ahí).
+  var pairReturn = "root";
   // --- Modo RC: fila de accesos, teclado en pantalla y filtros ---
   var tabFocus = -1;   // -1 = fuera de la fila de tabs; 0..N = tab enfocado
   var kbOpen = false, kbBuffer = "", kbRow = 0, kbCol = 0;
@@ -858,7 +839,6 @@
   var homeLoaded = false;
   var channel = null;
 
-  var elChoose = document.getElementById("choose");
   var elDcban = document.getElementById("dcban");
   var elToast = document.getElementById("toast");
   var elPair = document.getElementById("pair");
@@ -1547,22 +1527,23 @@
     }
     html += '<span class="okhint">' + (TOUCH
       ? "Tocá una tarjeta para ver la ficha · + guarda en Mi lista"
-      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = elegir modo") + "</span>";
+      : "OK = ver ficha · OK doble = guardar en Mi lista · Volver = mostrar el QR") + "</span>";
     html += "</div>";
     return html;
   }
 
-  // --- Pantalla de elección + avisos ---
-  function updateChooseFocus() {
-    var c0 = document.getElementById("ch0"), c1 = document.getElementById("ch1");
-    if (c0) c0.className = "chcard" + (chooseFocus === 0 ? " foc" : "");
-    if (c1) c1.className = "chcard" + (chooseFocus === 1 ? " foc" : "");
-  }
-  function chooseSelect() {
-    pairReturn = "choose";
-    uiMode = chooseFocus === 0 ? "pair" : "rc";
+  // --- Entrada (QR) → modo RC + avisos ---
+  // Primera flecha u OK del control físico en la pantalla del QR: arranca el
+  // modo control de la TV. La tecla SOLO entra — no se aplica como movimiento
+  // (sería un salto a ciegas sobre contenido que todavía no se veía).
+  function enterRc() {
+    pairReturn = "root";
+    uiMode = "rc";
+    tabFocus = -1;
     pairBadge();
+    showToast("Modo control de TV — flechas para navegar · OK para elegir");
     render();
+    loadHome(); // no-op si ya se precargó detrás del QR (guard homeLoaded)
   }
   var toastTimer = null;
   function showToast(msg) {
@@ -1577,32 +1558,23 @@
     // Fuera del inicio siempre hay una entrada guard en el historial del
     // navegador: así el Volver físico del APK Android (que llega como
     // history.back(), no como keydown) dispara popstate → backAction().
-    if (uiMode !== "choose") armBackGuard();
+    armBackGuard(); // no-op en la entrada raíz (ahí el Volver físico cierra la app)
     updateTback(); // botón Volver flotante del modo touch
-    if (uiMode === "choose") {
-      elChoose.className = "choose";
-      elPair.className = "pair hidden";
-      elResults.className = "wrap hidden";
-      elDcban.className = "dcban hidden";
-      updateChooseFocus();
-      return;
-    }
     if (uiMode === "pair") {
-      elChoose.className = "choose hidden";
       elPair.className = "pair";
       elResults.className = "wrap hidden";
       elDcban.className = "dcban hidden";
-      // Si hay un control vivo, BACK vuelve al contenido; si no, al inicio.
+      // Si hay un control vivo, BACK vuelve al contenido; si se abrió desde el
+      // tab del modo RC, vuelve ahí; en la entrada raíz no hay "Volver".
       var ph = document.getElementById("pairhint");
       if (ph) {
         ph.textContent = paired
           ? "Volver = seguir viendo en la TV"
-          : (pairReturn === "rc" ? "Volver = seguir con el control de la TV" : "Volver = elegir modo");
+          : (pairReturn === "rc" ? "Volver = seguir con el control de la TV" : "");
       }
       return;
     }
     // uiMode === "rc" | "linked": contenido a pantalla completa.
-    elChoose.className = "choose hidden";
     elPair.className = "pair hidden";
     elResults.className = "wrap";
     // Banner discreto: en modo vinculado sin control presente NO se expulsa al
@@ -2281,13 +2253,12 @@
     else if (cmd.type === "HOME") goHome();
     else if (cmd.type === "SHOW_TODAY") showToday();
     // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si
-    // no hay ficha ni historial, la TV vuelve a la pantalla de elección (desde
-    // ahí se puede re-vincular mostrando el QR).
+    // no hay ficha ni historial, la TV vuelve a la pantalla de entrada (el QR).
     else if (cmd.type === "BACK") {
       if (detailItem) closeDetail();
       else if (history.length) goBack();
       else if (mode !== "home") goHome(); // lista/búsqueda sin historial: al home
-      else { uiMode = "choose"; render(); }
+      else { pairReturn = "root"; uiMode = "pair"; render(); }
     }
     else if (cmd.type === "ADD_TODAY") { var ta = findItem(cmd.mediaId); if (ta) toggleToday(ta); }
     else if (cmd.type === "OPEN_DETAIL") {
@@ -2365,13 +2336,14 @@
   // Devuelve true si lo consumió; false = pantalla de inicio (dejar que el
   // sistema cierre la app).
   function backAction() {
-    if (uiMode === "choose") return false;
     if (uiMode === "pair") {
-      // Con control vivo, BACK vuelve al contenido; si no, al lugar desde el
-      // que se abrió el QR (el modo RC si entraste por el tab, o el inicio).
+      // Con control vivo, BACK vuelve al contenido; si se abrió desde el tab
+      // "Vincular teléfono", al modo RC. En la entrada raíz no se intercepta:
+      // que el sistema cierre la app.
       if (paired) uiMode = "linked";
-      else uiMode = (pairReturn === "rc" && items.length) ? "rc" : "choose";
-      pairReturn = "choose";
+      else if (pairReturn === "rc" && items.length) uiMode = "rc";
+      else return false;
+      pairReturn = "root";
       render();
       return true;
     }
@@ -2387,10 +2359,11 @@
       goHome();
       return true;
     }
-    // Home raíz: BACK vuelve a la pantalla de elección (antes forzaba el
-    // QR, una sorpresa para el que solo quería "salir" de donde estaba).
+    // Home raíz: BACK vuelve a la pantalla de entrada (el QR). Desde ahí,
+    // otro Volver cierra la app; una flecha vuelve a entrar.
     micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
-    uiMode = "choose";
+    pairReturn = "root";
+    uiMode = "pair";
     render();
     return true;
   }
@@ -2404,7 +2377,7 @@
   // re-arma: el próximo Volver cierra la app, como corresponde.
   var backGuardArmed = false;
   function armBackGuard() {
-    if (backGuardArmed || uiMode === "choose") return;
+    if (backGuardArmed || (uiMode === "pair" && pairReturn === "root")) return;
     try { window.history.pushState({ miru: 1 }, ""); backGuardArmed = true; } catch (e) {}
   }
   window.addEventListener("popstate", function () {
@@ -2424,8 +2397,8 @@
   function updateTback() {
     var el = document.getElementById("tback");
     if (!el) return;
-    var show = uiMode !== "choose" &&
-      (detailItem || kbOpen || filtersOpen || mode !== "home" || uiMode === "pair");
+    var show = detailItem || kbOpen || filtersOpen || mode !== "home" ||
+      (uiMode === "pair" && pairReturn === "rc");
     el.className = "tback" + (show ? "" : " hidden");
   }
   function indexIn(el, cls) {
@@ -2437,12 +2410,9 @@
     var t = e.target;
     if (!t || !t.closest) return;
     var el;
-    // Pantalla de elección: tocar una tarjeta la elige.
-    el = t.closest(".chcard");
-    if (el) { chooseFocus = (el.id === "ch1") ? 1 : 0; updateChooseFocus(); chooseSelect(); return; }
     // Botón Volver flotante del modo touch.
     if (t.closest(".tback")) { backAction(); return; }
-    if (uiMode === "choose" || uiMode === "pair") return;
+    if (uiMode === "pair") return;
     // Tab de mic: siempre visible, tocarlo graba/frena sin navegar a ningún lado.
     el = t.closest(".mictab");
     if (el) { tabFocus = 0; updateFocusClasses(); micToggle(); return; }
@@ -2541,15 +2511,8 @@
     var isBack = (k === 10009 || k === 461 || k === 8 || k === 27 || k === 4);
 
     // Dispatcher por modo de UI — las guardas van ANTES del flujo de contenido
-    // para que un OK en la pantalla de elección no caiga en okPress() sobre el
-    // home precargado (invisible).
-    if (uiMode === "choose") {
-      if (k === 37 || k === 39) { chooseFocus = chooseFocus === 0 ? 1 : 0; updateChooseFocus(); }
-      else if (isOk) { chooseSelect(); }
-      else return; // BACK en el inicio: no interceptar (que el sistema salga de la app)
-      e.preventDefault();
-      return;
-    }
+    // para que un OK en la entrada no caiga en okPress() sobre el home
+    // precargado (invisible).
     // Volver, en cualquier estado: UNA sola lógica (backAction — la misma que
     // dispara el popstate en el APK Android). false = inicio: no interceptar,
     // que el sistema cierre la app.
@@ -2557,7 +2520,12 @@
       if (backAction()) e.preventDefault();
       return;
     }
-    if (uiMode === "pair") return; // flechas/OK no operan sobre el DOM oculto
+    if (uiMode === "pair") {
+      // Entrada = QR: la primera flecha u OK del control físico entra al modo
+      // RC sin selector previo (solo entra; no mueve el foco a ciegas).
+      if (isOk || k === 37 || k === 38 || k === 39 || k === 40) { enterRc(); e.preventDefault(); }
+      return;
+    }
 
     // Pantallas propias del modo RC — se evalúan ANTES del flujo de contenido
     // para que OK sobre un tab/tecla no caiga en okPress() (orden de guardas:
@@ -2596,7 +2564,7 @@
     // pestaña): la primera flecha u OK del remoto físico es señal inequívoca de
     // que ahora maneja el RC → pasar al modo RC (tabs + botones en pantalla)
     // conservando contenido y foco. Si el teléfono vuelve, updatePaired ya
-    // devuelve la UI al modo vinculado. BACK conserva su rol (elegir modo).
+    // devuelve la UI al modo vinculado. BACK conserva su rol (mostrar el QR).
     if (uiMode === "linked" && !paired && !isBack) {
       uiMode = "rc";
       pairBadge();
@@ -2712,10 +2680,9 @@
   // translateY(-50%) del CSS cierre el ciclo sin salto visible.
   var RIBBONS_KEY = "miru:tv:ribbons";
   function buildLandingRibbons() {
-    // Las cintas visten DOS pantallas de entrada: la de elección (#choose) y la
-    // del QR (#pair). Un solo fetch pinta ambas.
+    // Las cintas visten la pantalla de entrada (#pair, el QR).
     var boxes = [];
-    var ids = ["chooseribbons", "pairribbons"];
+    var ids = ["pairribbons"];
     for (var b = 0; b < ids.length; b++) {
       var el = document.getElementById(ids[b]);
       if (el) boxes.push(el);
@@ -2802,8 +2769,8 @@
       .catch(function () {});
   }
 
-  // Web touch (?touch=1): directo al contenido en modo RC — la pantalla de
-  // elección es de la TV (acá tocás, no vinculás).
+  // Web touch (?touch=1): directo al contenido en modo RC — el QR es de la TV
+  // (acá tocás, no vinculás).
   if (TOUCH) uiMode = "rc";
   render();
   connect();
