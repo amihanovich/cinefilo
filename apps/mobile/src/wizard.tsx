@@ -319,6 +319,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       console.error("[wizard]", e);
       setLoading(false);
       setSearchInfo(null);
+      // Si falló la PRIMERA búsqueda no hay resultados a los que volver: la
+      // pantalla quedaba en blanco (solo el toast, que se va a los 4 s). Volver
+      // a la bienvenida, con el toast.
+      if (items.length === 0) setScreen("welcome");
       showError("No pudimos buscar. Revisá tu conexión e intentá de nuevo.");
     }
   };
