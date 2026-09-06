@@ -4,13 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
-import { tvSearch, tvHome, tvHomeMore, tvRibbons, tvTop, warmHome } from "./tv-search.mjs";
+import { tvSearch, tvHome, tvHomeMore, tvRibbons, tvTop, tvBlurb, warmHome } from "./tv-search.mjs";
 import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
 import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsStream } from "./tts.mjs";
 import { startSupabaseKeepAlive } from "./keepalive.mjs";
 import { availabilityStatus } from "./availability.mjs";
+import { rateLimited, startRateSweeper } from "./ratelimit.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const clientDir = path.join(__dirname, "dist", "client");
@@ -32,41 +33,8 @@ const MIME = {
 const ssrHandler = toNodeHandler((req) => serverModule.fetch(req, {}, {}));
 const port = parseInt(process.env.PORT || "3000", 10);
 
-// --- Rate limiting simple por IP (en memoria). La API es pública con CORS *
-// y varios endpoints llaman servicios pagos (Anthropic/Groq/ElevenLabs): sin
-// esto, cualquier script podía generar costo ilimitado desde cualquier origen.
-const RATE_WINDOW_MS = 60_000;
-const RATE_MAX_GENERAL = 90; // todo /api/* (menos ping) por IP por minuto
-const RATE_MAX_AI = 20; // endpoints que pagan upstream, por IP por minuto
-const AI_PATHS = new Set([
-  "/api/recommend", "/api/tv-search", "/api/tv-home-more",
-  "/api/transcribe", "/api/tts", "/api/ask", "/api/orb", "/api/intent",
-]);
-const rateHits = new Map(); // ip → { all: number[], ai: number[] }
-function clientIp(req) {
-  const xf = req.headers["x-forwarded-for"];
-  if (typeof xf === "string" && xf.length) return xf.split(",")[0].trim();
-  return req.socket.remoteAddress || "?";
-}
-function rateLimited(req, urlPath) {
-  if (urlPath === "/api/ping" || req.method === "OPTIONS") return false;
-  const now = Date.now();
-  const cut = now - RATE_WINDOW_MS;
-  const ip = clientIp(req);
-  let rec = rateHits.get(ip);
-  if (!rec) { rec = { all: [], ai: [] }; rateHits.set(ip, rec); }
-  rec.all = rec.all.filter((t) => t > cut);
-  rec.ai = rec.ai.filter((t) => t > cut);
-  rec.all.push(now);
-  if (AI_PATHS.has(urlPath)) rec.ai.push(now);
-  return rec.all.length > RATE_MAX_GENERAL || rec.ai.length > RATE_MAX_AI;
-}
-setInterval(() => {
-  const cut = Date.now() - RATE_WINDOW_MS;
-  for (const [ip, rec] of rateHits) {
-    if (!rec.all.some((t) => t > cut)) rateHits.delete(ip);
-  }
-}, 5 * 60_000).unref();
+// Rate limiting por IP: ver ratelimit.mjs (cubetas general / IA / blurb).
+startRateSweeper();
 
 // Lector de body con tope: responde 413 explícito (antes se hacía req.destroy()
 // a secas y el cliente veía un error de red genérico). Resuelve null si cortó.
@@ -201,6 +169,32 @@ http
         if (body === null) return;
         const p = asJson(body);
         sendJson(tvHomeMore(strArr(p.exclude, 60, 120), strArr(p.platforms, 10, 40), str(p.country, 2)));
+      });
+      return;
+    }
+    // Texto de UN título bajo demanda (banner/ficha de la TV): una frase que
+    // dice de qué va y por qué encaja con el pedido. Se pide al enfocar una
+    // tarjeta, no para toda la lista — por eso tiene su propia cubeta de rate
+    // limit (ratelimit.mjs) y caché de 24 h (tv-search.mjs).
+    if (urlPath === "/api/tv-blurb") {
+      if (req.method !== "POST") {
+        res.statusCode = 405;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ error: "POST" }));
+        return;
+      }
+      readBody(req, res, 4096).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
+        const yearNum = parseInt(p.year, 10);
+        sendJson(tvBlurb({
+          title: str(p.title, 200) || "",
+          year: Number.isFinite(yearNum) ? yearNum : undefined,
+          type: str(p.type, 20) || "",
+          platform: str(p.platform, 40) || "",
+          q: str(p.q, 300) || "",
+          section: str(p.section, 60) || "",
+        }));
       });
       return;
     }

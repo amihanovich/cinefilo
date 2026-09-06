@@ -11,7 +11,10 @@ import { validateItems, pickAvailable, availSummary, discoverPopular, availabili
 // que Haiku la asigne y la TV disparaba el deep link de una app que ya no existe.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 
-async function callAnthropic(prompt, maxTokens) {
+// Texto crudo de Haiku (una sola llamada, sin system). `cfg` permite un
+// timeout más corto para pedidos chicos (el blurb por título) sin tocar los
+// 60 s que necesita una búsqueda de 18 ítems.
+async function callAnthropicText(prompt, maxTokens, cfg) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
@@ -26,14 +29,17 @@ async function callAnthropic(prompt, maxTokens) {
       max_tokens: maxTokens || 4500,
       messages: [{ role: "user", content: prompt }],
     }),
-  }, { timeoutMs: 60000 });
+  }, cfg || { timeoutMs: 60000 });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
   }
   const data = await res.json();
-  const text = (data.content && data.content[0] && data.content[0].text) || "";
-  return parseLooseJson(text);
+  return (data.content && data.content[0] && data.content[0].text) || "";
+}
+
+async function callAnthropic(prompt, maxTokens) {
+  return parseLooseJson(await callAnthropicText(prompt, maxTokens));
 }
 
 // Parse defensivo del JSON que escribe la IA. Antes era un JSON.parse a secas:
@@ -490,6 +496,92 @@ export async function tvHomeMore(exclude, platforms, country) {
     confirmed: sum.confirmed + sum.corrected, unknown: sum.unknown, dropped: sum.none + sum.unlisted,
   });
   return { items: out };
+}
+
+// ── Texto por título bajo demanda (banner / ficha de la TV) ──────────────────
+// Reemplaza a synopsis + reason por UNA frase: de qué va + por qué encaja con
+// el pedido. Se genera solo para el título que está en el banner (el primero
+// al llegar los resultados, después el que el usuario enfoca), no para los 18.
+// Caché en memoria 24 h por título+pedido y dedupe de llamadas en vuelo (foco
+// + ficha del mismo título, o dos TVs con el mismo pedido = 1 llamada).
+const BLURB_TTL = 24 * 60 * 60 * 1000;
+const BLURB_MAX = 5000;
+const blurbCache = new Map(); // key → { at, value }
+const blurbInflight = new Map(); // key → Promise<string>
+
+function normKey(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+function blurbCacheGet(key) {
+  const hit = blurbCache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at < BLURB_TTL) return hit.value;
+  blurbCache.delete(key);
+  return undefined;
+}
+function blurbCacheSet(key, value) {
+  if (blurbCache.size >= BLURB_MAX) {
+    const oldest = blurbCache.keys().next().value;
+    if (oldest !== undefined) blurbCache.delete(oldest);
+  }
+  blurbCache.set(key, { at: Date.now(), value });
+}
+// Haiku a veces contesta una respuesta corta sin el JSON pedido: si el texto
+// crudo tiene pinta de frase (10-70 palabras), se usa igual.
+function blurbFromText(text) {
+  try {
+    const parsed = parseLooseJson(text);
+    if (parsed && typeof parsed.blurb === "string" && parsed.blurb.trim()) return parsed.blurb.trim();
+  } catch (e) {}
+  const raw = String(text || "").replace(/```[a-z]*/gi, "").replace(/[{}"]/g, "").replace(/^\s*blurb\s*:\s*/i, "").trim();
+  const words = raw.split(/\s+/).filter(Boolean).length;
+  return words >= 10 && words <= 70 ? raw : "";
+}
+
+/**
+ * @param {{title:string, year?:number, type?:string, platform?:string, q?:string, section?:string}} p
+ * @returns {Promise<{blurb:string, cached:boolean}>} blurb "" si no se pudo generar (el cliente no bloquea)
+ */
+export async function tvBlurb(p) {
+  const title = String((p && p.title) || "").trim();
+  if (!title) return { blurb: "", cached: false };
+  const kind = /serie/i.test(String((p && p.type) || "")) ? "tv" : "movie";
+  const q = String((p && p.q) || "").trim();
+  const key = [normKey(title), p.year || "", kind, normKey(q).slice(0, 120)].join("|");
+  const hit = blurbCacheGet(key);
+  if (hit !== undefined) return { blurb: hit, cached: true };
+  if (blurbInflight.has(key)) return { blurb: await blurbInflight.get(key), cached: true };
+
+  const meta = [kind === "tv" ? "serie" : "película", p.year ? String(p.year) : "", p.platform ? "en " + p.platform : ""].filter(Boolean).join(", ");
+  const context = q
+    ? 'Pedido del usuario: "' + q + '".\n'
+    : "El usuario está mirando la pantalla de inicio" + (p.section ? ' (sección "' + p.section + '")' : "") + ", sin un pedido puntual.\n";
+  const fit = q
+    ? "POR QUÉ encaja con lo que pidió (si se aleja del pedido, decilo con naturalidad: \"Se aleja un poco, pero…\")"
+    : "POR QUÉ vale la pena verla ahora";
+  const prompt =
+    "Sos Miru, el experto del videoclub, en español rioplatense.\n" +
+    'Título: "' + title + '" (' + meta + ").\n" +
+    context +
+    "Escribí UNA sola frase de 25 a 35 palabras que cuente DE QUÉ VA (concreto y visual, sin spoilers) y " + fit + ". " +
+    "Sin elogios vacíos, sin comillas, sin emojis. Si no conocés el título con certeza, describilo con prudencia y sin inventar datos.\n" +
+    'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"blurb":""}';
+
+  const job = (async () => {
+    const t0 = Date.now();
+    const text = await callAnthropicText(prompt, 160, { timeoutMs: 12000, retries: 0 });
+    let blurb = blurbFromText(text);
+    if (blurb.length > 260) blurb = blurb.slice(0, 257).replace(/\s+\S*$/, "") + "…";
+    logMetrics("tv-blurb", { llm_ms: Date.now() - t0, words: blurb ? blurb.split(/\s+/).length : 0, cached: false, home: !q });
+    if (blurb) blurbCacheSet(key, blurb);
+    return blurb;
+  })();
+  blurbInflight.set(key, job);
+  try {
+    return { blurb: await job, cached: false };
+  } finally {
+    blurbInflight.delete(key);
+  }
 }
 
 // Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).
