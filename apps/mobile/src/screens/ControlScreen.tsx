@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as R
 import {
   Search, Play, CornerDownLeft, X, Smartphone, Plus, Check, Mic,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Home as HomeIcon, Bookmark, Eye, ThumbsUp, ThumbsDown, SlidersHorizontal,
+  Home as HomeIcon, Bookmark, Eye, ThumbsUp, ThumbsDown, SlidersHorizontal, History,
 } from "lucide-react";
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
@@ -74,6 +74,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const [text, setText] = useState("");
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [myList, setMyList] = useState<MediaItem[]>([]);
+  const [opened, setOpened] = useState<MediaItem[]>([]); // "Abiertos recientemente" de la TV
   const [tvScreen, setTvScreen] = useState<string>("home");
   const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
 
@@ -107,6 +108,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         if (state.focusedId) setCenteredId(state.focusedId);
         setTodayTitles(state.todayTitles ?? []);
         if (state.myList) setMyList(state.myList);
+        if (state.opened) setOpened(state.opened);
         setTvScreen(state.screen);
         setNowPlaying(null);
         // Llegaron resultados: apagar la rueda de búsqueda.
@@ -356,6 +358,14 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </button>
         <button onClick={showSeen} disabled={!paired || seenCount === 0} className={chipBtn}>
           <Eye className="h-4 w-4" /> Ya vistas
+        </button>
+        <button
+          onClick={() => send({ type: "SHOW_OPENED" })}
+          disabled={!paired || opened.length === 0}
+          className={chipBtn}
+          title="Lo que abriste desde Miru en esta TV"
+        >
+          <History className="h-4 w-4" /> Abiertos
         </button>
       </div>
 

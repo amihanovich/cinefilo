@@ -6,6 +6,7 @@ import { X, ChevronLeft, ChevronDown, ExternalLink, Tv, Download } from "lucide-
 import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { openInApp } from "../lib/justwatch";
 import { fetchPostersClient } from "../lib/posters";
+import { loadOpened, type OpenedItem } from "../lib/opened";
 
 // Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
 const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
@@ -51,7 +52,7 @@ function loadLiked(): LikedItem[] {
   catch { return []; }
 }
 
-type Section = "main" | "watchlist" | "liked";
+type Section = "main" | "watchlist" | "liked" | "opened";
 
 interface AccountSheetProps {
   open: boolean;
@@ -66,6 +67,7 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [liked, setLiked] = useState<LikedItem[]>([]);
+  const [opened, setOpened] = useState<OpenedItem[]>([]);
   const [country, setCountry] = useState<string>(() => localStorage.getItem(COUNTRY_KEY) ?? "AR");
 
   const changeCountry = (code: string) => {
@@ -78,6 +80,7 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
     if (open) {
       setPlatforms(loadPlatforms());
       setWatchlist(loadWatchlist());
+    setOpened(loadOpened());
       setLiked(loadLiked());
       setSection("main");
     }
@@ -115,7 +118,7 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
             <div className="h-8 w-8" />
           )}
           <h2 className="flex-1 text-center text-base font-bold text-foreground">
-            {section === "main" ? "Mi cuenta" : section === "watchlist" ? "Ver luego" : "Me gustó"}
+            {section === "main" ? "Mi cuenta" : section === "watchlist" ? "Ver luego" : section === "liked" ? "Me gustó" : "Abiertos recientemente"}
           </h2>
           <button
             onClick={onClose}
@@ -133,15 +136,23 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
               onToggle={togglePlatform}
               watchlistCount={watchlist.length}
               likedCount={liked.length}
+              openedCount={opened.length}
               country={country}
               onCountryChange={changeCountry}
               onOpenWatchlist={() => setSection("watchlist")}
               onOpenLiked={() => setSection("liked")}
+              onOpenOpened={() => setSection("opened")}
               onOpenTvRemote={onOpenTvRemote ? () => { onClose(); onOpenTvRemote(); } : undefined}
             />
           )}
           {section === "watchlist" && <ItemGallery items={watchlist} emptyText="Nada guardado todavía." />}
           {section === "liked" && <ItemGallery items={liked} emptyText="Todavía no marcaste nada." />}
+          {section === "opened" && (
+            <ItemGallery
+              items={opened.map((o) => ({ title: o.title, platform: o.platform, type: o.type }))}
+              emptyText="Todavía no abriste nada desde Miru."
+            />
+          )}
         </div>
       </div>
     </>
@@ -155,20 +166,24 @@ function MainSection({
   onToggle,
   watchlistCount,
   likedCount,
+  openedCount,
   country,
   onCountryChange,
   onOpenWatchlist,
   onOpenLiked,
+  onOpenOpened,
   onOpenTvRemote,
 }: {
   platforms: string[];
   onToggle: (p: string) => void;
   watchlistCount: number;
   likedCount: number;
+  openedCount: number;
   country: string;
   onCountryChange: (code: string) => void;
   onOpenWatchlist: () => void;
   onOpenLiked: () => void;
+  onOpenOpened: () => void;
   onOpenTvRemote?: () => void;
 }) {
   return (
@@ -226,6 +241,12 @@ function MainSection({
             count={likedCount}
             emoji="👍"
             onClick={onOpenLiked}
+          />
+          <StatCard
+            label="Abiertos"
+            count={openedCount}
+            emoji="▶"
+            onClick={onOpenOpened}
           />
         </div>
       </section>

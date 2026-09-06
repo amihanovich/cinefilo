@@ -835,6 +835,13 @@
   var micStream = null, micRecorder = null, micChunks = [], micMaxTimer = null;
   var RC_PLATFORMS_KEY = "miru:tv:platforms";
   var SEEN_KEY = "miru:tv:seen";
+  // "Abiertos recientemente": lo que se abrió desde Miru EN ESTA TV (registro
+  // local por dispositivo, sin cuenta). Es "abrimos la app para este título",
+  // NO progreso de reproducción — por eso no se llama "Continuar viendo".
+  var OPENED_KEY = "miru:tv:opened";
+  var OPENED_SECTION = "Abiertos recientemente";
+  var OPENED_MAX = 30;
+  var opened = loadOpened();
   var seen = loadSeen(); // "Ya vistas" del modo RC (persistida en el dispositivo)
   // Filtros persistidos del modo RC → alimentan userPlatforms (el mismo
   // pipeline que usa SET_PLATFORMS cuando hay control vinculado).
@@ -1077,6 +1084,33 @@
 
   // --- "Ya vistas" del modo RC (mismo patrón que la lista guardada) ---
   function loadSeen() { try { var v = localStorage.getItem(SEEN_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function loadOpened() { try { var v = localStorage.getItem(OPENED_KEY); return v ? JSON.parse(v) : []; } catch (e) { return []; } }
+  function saveOpened() { try { localStorage.setItem(OPENED_KEY, JSON.stringify(opened.slice(0, OPENED_MAX))); } catch (e) {} }
+  // Registra una apertura ("Ver en X"). Sin duplicados: si ya estaba, sube al
+  // tope con la fecha nueva. `via`: "deeplink" (link exacto de JustWatch) o
+  // "app-search" (búsqueda prellenada en la app).
+  function recordOpened(item, via) {
+    if (!item || !item.title || !item.platform) return;
+    var key = String(item.title).trim().toLowerCase() + "|" + item.platform;
+    var rest = [];
+    for (var i = 0; i < opened.length; i++) {
+      var o = opened[i];
+      if ((String(o.title || "").trim().toLowerCase() + "|" + o.platform) !== key) rest.push(o);
+    }
+    var entry = { title: item.title, platform: item.platform, type: item.type, year: item.year, posterUrl: item.posterUrl, blurb: item.blurb, avail: item.avail, openedAt: new Date().toISOString(), via: via };
+    opened = [entry].concat(rest).slice(0, OPENED_MAX);
+    saveOpened();
+  }
+  function showOpened() {
+    if (!opened.length) { showToast("Todavía no abriste nada desde Miru en esta TV"); return; }
+    var li = [];
+    for (var i = 0; i < opened.length; i++) {
+      var t = opened[i];
+      li.push({ title: t.title, platform: t.platform, posterUrl: t.posterUrl, year: t.year, type: t.type, blurb: t.blurb, avail: t.avail, section: OPENED_SECTION });
+    }
+    tabFocus = -1;
+    showList(li);
+  }
   function saveSeen() { try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) {} }
   function isSeen(item) { if (!item) return false; for (var i = 0; i < seen.length; i++) if (seen[i].title === item.title) return true; return false; }
   function toggleSeen(item) {
@@ -1309,6 +1343,8 @@
       { label: "Mi lista", cnt: today.length },
       { label: "Ya vistas", cnt: seen.length },
       { label: "Plataformas", cnt: (userPlatforms && userPlatforms.length) ? userPlatforms.length : 0 },
+      // Lo que abriste desde Miru en esta TV (registro local de aperturas).
+      { label: "▶ Abiertos", cnt: opened.length },
       // Siempre a mano: pasar a manejar la TV desde el teléfono sin volver al inicio.
       { label: "📱 Vincular teléfono", cnt: 0 }
     ];
@@ -1335,6 +1371,7 @@
     }
     if (i === 3) { showSeen(); return; }
     if (i === 4) { openFilters(); return; }
+    if (i === 5) { showOpened(); return; }
     // Vincular teléfono: muestra el QR y recuerda desde dónde se entró para que
     // BACK devuelva a la pantalla en la que estabas (y no al inicio).
     micCancel(); // no dejar el mic prendido de fondo al salir del modo RC
@@ -1694,7 +1731,9 @@
       var listSec = (items[0] && items[0].section) || "Mi lista";
       var listMsg = listSec === "Ya vistas"
         ? " — películas y series que ya viste."
-        : " — tus películas y series guardadas.";
+        : (listSec === OPENED_SECTION
+          ? " — lo que abriste desde Miru en esta TV. OK = ficha · Ver la vuelve a abrir."
+          : " — tus películas y series guardadas.");
       elTopline.innerHTML = '<span class="hint">' + esc(listSec) + '</span>' + listMsg;
     } else {
       // Home: sin línea extra — el tagline de la barra y el okhint ya cumplen esa función.
@@ -1805,7 +1844,18 @@
       if (t.blurb) m.blurb = t.blurb;
       myList.push(m);
     }
-    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles, myList: myList });
+    // opened: "Abiertos recientemente" de esta TV (aditivo; controles viejos lo ignoran).
+    var openedList = [];
+    for (var o = 0; o < opened.length; o++) {
+      var op = opened[o];
+      var om = { id: "o" + o, title: op.title, section: OPENED_SECTION };
+      if (op.platform) om.platform = op.platform;
+      if (op.posterUrl) om.posterUrl = op.posterUrl;
+      if (typeof op.year === "number") om.year = op.year;
+      if (op.blurb) om.blurb = op.blurb;
+      openedList.push(om);
+    }
+    sendState({ type: "SCREEN", screen: screen, focusedId: fid, items: items, todayTitles: todayTitles, myList: myList, opened: openedList });
   }
   // El SCREEN viaja con items completo (hasta 60 ítems con reason larga) para
   // ser compatible con los controles ya desplegados. En ráfagas de navegación
@@ -2126,6 +2176,7 @@
     var it = itemById(mediaId);
     if (it) return it;
     for (var j = 0; j < today.length; j++) if (today[j].id === mediaId) return today[j];
+    for (var k = 0; k < opened.length; k++) if (opened[k].id === mediaId) return opened[k];
     return null;
   }
 
@@ -2362,6 +2413,8 @@
       showOpening(it);
       var key = it.title + "|" + it.platform;
       var jw = Object.prototype.hasOwnProperty.call(jwCache, key) ? jwCache[key] : undefined;
+      // "Abiertos recientemente": se anota ANTES de salir (después no volvemos).
+      recordOpened(it, (jw && (jw.deeplinkAndroid || jw.standardWebURL)) ? "deeplink" : "app-search");
       if (jw && (jw.deeplinkAndroid || jw.standardWebURL)) {
         // Link exacto: la app de streaming abre EN el título (post-perfil, play).
         openExternal(jw.deeplinkAndroid || jw.standardWebURL, jw.standardWebURL || deepLink(it.platform, it.title));
@@ -2393,6 +2446,7 @@
     else if (cmd.type === "SHOW_LIST") showList(cmd.items);
     else if (cmd.type === "HOME") goHome();
     else if (cmd.type === "SHOW_TODAY") showToday();
+    else if (cmd.type === "SHOW_OPENED") showOpened();
     // "Volver" del teléfono: mismo comportamiento que el BACK del remoto — si
     // no hay ficha ni historial, la TV vuelve a la pantalla de entrada (el QR).
     else if (cmd.type === "BACK") {
