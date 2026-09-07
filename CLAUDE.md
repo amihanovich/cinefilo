@@ -99,9 +99,13 @@ memorias viejas o en tu cabeza, ignorarlos:
    instalado muestra la versión nueva (carga la URL remota).
 7. **TV = un solo banner que sigue al foco + grilla completa** (revisión con Carlos, 2026-09): el
    banner es la ficha de la tarjeta enfocada (no un carrusel); todos los resultados van en la grilla
-   desde el primero, 6 por fila, tarjetas solo imagen. El texto del banner/ficha es **una frase**
-   (`blurb`, sinopsis + porqué) que la TV pide bajo demanda a `/api/tv-blurb` solo para el título en
-   pantalla; la búsqueda (`/api/tv-search`) ya no genera textos para los 18 ítems. Ítems `avail:
+   desde el primero, 6 por fila, tarjetas solo imagen. El **banner manda en la pantalla** (56vh, sin
+   borde ni esquinas, sangra a los bordes y se funde con el fondo por gradiente; usa la imagen
+   HORIZONTAL del título — `backdropUrl`, backdrop de TMDB — y cae al póster acotado a la derecha si
+   no la hay): la primera fila de tarjetas ASOMA abajo, como en Prime. Los textos los pide la TV a
+   `/api/tv-blurb` bajo demanda, nunca la búsqueda: **una frase** (`blurb`) para el título del banner,
+   y **sinopsis + porqué** (`full: true`) al abrir una ficha — como la frase ya está en pantalla, la
+   ficha nunca espera en blanco. Ítems `avail:
    "unknown"` se muestran "Por confirmar en X". Detalle en `ARCHITECTURE.md` §3.B.
 8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
    "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
