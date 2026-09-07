@@ -122,37 +122,52 @@
      chicas y a pantalla completa se pixelaban mucho. === */
   /* Banner ~15% más chico: con el viewport CSS de 540px, el tamaño anterior se
      comía la pantalla y el carrusel de candidatas quedaba cortado abajo. */
-  /* Banner ÚNICO (patrón Prime Video): es la ficha del tile enfocado. Alto
-     acotado para que debajo entre la primera fila completa de tarjetas sin
-     scroll: viewport CSS 960x540 (1080p, DPR 2) → 173px; 1280x720 → 220px. */
-  .hero { position:relative; display:flex; height:32vh; min-height:160px; max-height:220px; margin-bottom:6px; border-radius:20px; overflow:hidden; background:#101013; border:1px solid #26262A; transition:box-shadow .15s, border-color .15s; }
-  .hero.foc { border-color:#8852E0; box-shadow:0 0 0 3px rgba(136,82,224,.55), 0 20px 60px rgba(136,82,224,.30); }
-  /* Columna derecha del póster (acotada). El blend la funde con el panel negro. */
-  /* Póster un poco más angosto (34%→30%): le cede ancho a la columna de texto,
-     así la razón llega más a la derecha y entra en menos líneas. */
-  .hero .hside { position:relative; width:26%; flex:0 0 auto; overflow:hidden; }
-  .hero .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  .hero .hfade { position:absolute; inset:0; background:linear-gradient(to right, #101013 0%, rgba(16,16,19,.55) 40%, rgba(16,16,19,.15) 75%, rgba(16,16,19,0) 100%); }
-  /* padding-left 68px: deja el carril del chevron ‹ libre para que el texto no
-     pase por debajo (antes se montaban). */
-  .hero .info { position:relative; z-index:2; flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:center; padding:10px 22px 22px 24px; }
+  /* Banner ÚNICO (patrón Prime Video): es la ficha del tile enfocado y manda en
+     la pantalla. Sin caja: nada de borde ni esquinas redondeadas — la imagen se
+     disuelve en el fondo por gradiente (a la izquierda para que se lea el texto,
+     hacia abajo para fundirse con la grilla). Sangra hasta los bordes de la
+     pantalla con el margen negativo que anula el padding lateral del .wrap.
+     Alto: manda el banner, y la primera fila de tarjetas ASOMA abajo (invita a
+     bajar, como Prime). A 960x540 (1080p, DPR 2) → 302px; a 1280x720 → 400px. */
+  .hero { position:relative; display:block; height:56vh; min-height:250px; max-height:400px;
+    margin:0 -30px 6px; overflow:hidden; background:#0E0E10; transition:box-shadow .15s; }
+  /* Foco del banner sin caja: un halo por dentro, para no reintroducir el borde. */
+  .hero.foc { box-shadow:inset 0 0 0 3px rgba(136,82,224,.75); }
+  /* La imagen ocupa la mitad derecha larga y se disuelve hacia el texto. */
+  /* Con imagen HORIZONTAL (backdrop de TMDB) la foto va a todo el ancho, como
+     en Prime. Si el título solo tiene póster vertical, se acota a la derecha:
+     estirado a lo ancho se veía un recorte del centro, ampliado y borroso. */
+  .hero .hside { position:absolute; top:0; right:0; bottom:0; left:52%; overflow:hidden; }
+  .hero.wide .hside { left:0; }
+  .hero .bg { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; }
+  .hero .hfade { position:absolute; top:0; left:0; right:0; bottom:0;
+    background:
+      linear-gradient(to bottom, rgba(14,14,16,0) 52%, rgba(14,14,16,.75) 86%, #0E0E10 100%),
+      linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.93) 16%, rgba(14,14,16,.40) 56%, rgba(14,14,16,0) 100%); }
+  /* A todo el ancho la foto llega hasta el texto: el degradé de la izquierda
+     tiene que ser más largo para que el título se lea sobre cualquier imagen. */
+  .hero.wide .hfade {
+    background:
+      linear-gradient(to bottom, rgba(14,14,16,0) 45%, rgba(14,14,16,.75) 84%, #0E0E10 100%),
+      linear-gradient(to right, #0E0E10 0%, rgba(14,14,16,.94) 24%, rgba(14,14,16,.62) 48%, rgba(14,14,16,.12) 82%, rgba(14,14,16,0) 100%); }
+  .hero .info { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; justify-content:flex-end; padding:10px 22px 42px 34px; }
   /* Panel de texto SIN caja: fondo transparente para no tapar el hero (pedido
      de diseño). La legibilidad la dan el degradé del .hfade y el text-shadow de
      cada línea, no un rectángulo negro. */
   .hero .hpanel { align-self:flex-start; max-width:100%; max-height:100%; overflow:hidden;
     background:transparent; padding:2px 0;
-    display:flex; flex-direction:column; gap:5px; }
+    display:flex; flex-direction:column; gap:7px; }
   /* Título, meta y botones NUNCA se comprimen (flexbox los colapsaba a 0 cuando
      el panel quedaba corto de alto); sinopsis y porqué son los únicos que ceden
      espacio y su -webkit-box los trunca por línea. */
   .hero .hpanel > * { flex-shrink:0; }
   .hero .hpanel .hblurb { flex-shrink:1; min-height:0; }
   /* Título + meta en 2 líneas máximo: título clamp 2 + meta en UNA línea. */
-  .hero .htitle { font-family:inherit; font-size:24px; font-weight:600; line-height:1.08; margin:0; color:#F5F5F7;
+  .hero .htitle { font-family:inherit; font-size:34px; font-weight:600; line-height:1.06; margin:0; color:#F5F5F7;
     display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .hero .hmeta { display:flex; flex-wrap:nowrap; align-items:center; gap:12px; overflow:hidden; }
   .hero .hmeta .pill { flex:0 0 auto; }
-  .hero .hsub { font-size:14px; color:#B4B4BC; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hero .hsub { font-size:15px; color:#B4B4BC; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   /* La razón va como TEXTO PELADO sobre el hero (sin caja gris): el degradado
      de la izquierda ya la hace legible y el text-shadow la asegura sobre la
      imagen. flex-shrink:0 es clave: es hija flex de .info (alto fijo) y sin eso
@@ -160,21 +175,22 @@
      ni max-width gana ancho y entra en 3 líneas cómodas. */
   /* (a) Sinopsis y (b) Por qué, en ese orden — igual que la ficha. */
   /* Un solo texto en el banner: de qué va + por qué te la propongo (blurb). */
-  .hero .hblurb { margin:2px 0 0; font-size:13px; line-height:1.38; color:#EDEDF0; flex-shrink:0;
-    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .hero .hblurb { margin:4px 0 0; font-size:15px; line-height:1.45; max-width:46%; color:#EDEDF0; flex-shrink:0;
+    display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+    text-shadow:0 1px 6px rgba(0,0,0,.85); }
   .hwait { color:#8A8A93; font-style:italic; }
   /* Disponibilidad sin verificar en TMDB: pastilla gris, nunca el color de la plataforma. */
   .pill.unk, .card .cinfo .pl.unk { background:transparent !important; border:1px solid #55555C; color:#B4B4BC; }
   .hero .htitle, .hero .hsub { text-shadow:0 1px 4px rgba(0,0,0,.9), 0 0 14px rgba(0,0,0,.6); }
   /* Botones sobre el banner ("Mi lista"/"Ver en X"), navegables con el D-pad. */
-  .hero .hactions { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; align-items:center; }
+  .hero .hactions { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center; }
   /* Ícono sutil (gris minimalista): guardar en lista. "Ver en X" queda prominente. */
   .hbtn { border:none; border-radius:999px; font-weight:600; }
-  .hbtn.ico { width:28px; height:28px; padding:0; font-size:14px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
+  .hbtn.ico { width:34px; height:34px; padding:0; font-size:16px; color:#B4B4BC; background:rgba(255,255,255,.08); display:inline-flex; align-items:center; justify-content:center; }
   .hbtn.ico.on { color:#fff; background:rgba(136,82,224,.32); }
   /* Label del botón "Mi lista": oculto por defecto (banner), visible en la ficha. */
   .blab { display:none; }
-  .hbtn.play { padding:7px 14px; font-size:13px; color:#fff; }
+  .hbtn.play { padding:9px 18px; font-size:15px; color:#fff; }
   .hbtn.bfoc { outline:3px solid #fff; outline-offset:1px; transform:scale(1.06); }
   /* Chevrons ‹ › de la ficha: ←/→ salta al título anterior/siguiente. */
   .hchev { position:absolute; top:50%; margin-top:-24px; z-index:4; width:48px; height:48px;
@@ -186,7 +202,7 @@
   .detail { position:relative; }
   .detail .hchev { position:absolute; top:50%; }
   /* Leyenda de gestos, dentro del banner (abajo a la izquierda): costo vertical cero. */
-  .hero .okhint { position:absolute; left:24px; bottom:6px; z-index:3; margin:0; text-shadow:0 1px 4px rgba(0,0,0,.9); }
+  .hero .okhint { position:absolute; left:34px; bottom:8px; z-index:3; margin:0; text-shadow:0 1px 4px rgba(0,0,0,.9); }
   /* Tira "Mi lista" (lista guardada de la TV). */
   .rowwrap { position:relative; }
   /* Misma geometría que .grid (margen -6px + 6px por tarjeta): los 6 tiles del
@@ -245,6 +261,10 @@
      (.detail está centrado verticalmente y sin scroll en TV). */
   .detail .dtext { position:relative; }
   .detail .dblurb { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0; }
+  /* Ficha completa: sinopsis (apagada, es contexto) + porqué (destacado, es la
+     recomendación). El banner sigue con UNA frase; acá hay espacio de sobra. */
+  .detail .dsyn { margin:2px 0 0; font-size:14px; line-height:1.42; color:#B4B4BC; }
+  .detail .dreason { margin:2px 0 0; font-size:15px; line-height:1.45; color:#EDEDF0; }
   .detail .hbtn.play { padding:8px 16px; font-size:15px; }
   /* En la ficha, "Mi lista" deja de ser un ícono redondo y se vuelve píldora con
      texto (hay espacio de sobra). El gap sube a 22px: el botón enfocado agrega
@@ -1008,7 +1028,10 @@
   function heroHTML(it, foc) {
     // id="hero" + data-id (no "card-<id>": el mismo ítem vive también en la
     // grilla y habría ids duplicados). data-ui: los botones dependen del modo.
-    var h = '<div class="hero' + (foc ? " foc" : "") + '" id="hero" data-id="' + esc(it.id) + '" data-ui="' + uiMode + '">';
+    // Imagen horizontal (backdrop) si el título la tiene: el banner es
+    // panorámico. Si no, el póster vertical acotado a la derecha (clase sin "wide").
+    var heroImg = it.backdropUrl || it.posterUrl || "";
+    var h = '<div class="hero' + (foc ? " foc" : "") + (it.backdropUrl ? " wide" : "") + '" id="hero" data-id="' + esc(it.id) + '" data-ui="' + uiMode + '">';
     h += '<div class="info"><div class="hpanel">';
     h += '<h2 class="htitle">' + esc(it.title) + "</h2>";
     h += '<div class="hmeta">';
@@ -1036,7 +1059,7 @@
     }
     h += "</div></div>"; // cierra .hpanel y .info
     // Columna del póster a la derecha (acotada, con blend hacia el panel negro).
-    h += '<div class="hside"><img class="bg" src="' + (it.posterUrl ? esc(it.posterUrl) : "") + '" alt=""><div class="hfade"></div></div>';
+    h += '<div class="hside"><img class="bg" src="' + (heroImg ? esc(heroImg) : "") + '" alt=""><div class="hfade"></div></div>';
     // Leyenda de gestos, dentro del banner (costo vertical cero).
     h += '<span class="okhint">' + (TOUCH
       ? "Tocá una tarjeta para elegirla · otra vez para ver la ficha · + guarda en Mi lista"
@@ -1216,7 +1239,8 @@
   function openDetail(item) {
     if (!item) return;
     detailItem = item; actionFocus = 1; screen = "detail"; render(); emitScreen(true);
-    scheduleBlurb(item, true); // la ficha pide su texto si todavía no lo tiene
+    scheduleBlurb(item, true); // frase corta (si el banner no la trajo)
+    fetchDetail(item); // y el texto largo de la ficha: sinopsis + porqué
     // Prefetch del link exacto al título: cuando el usuario toque "Ver en X",
     // el deeplink de JustWatch ya está resuelto y abre directo (sin espera).
     jwResolve(item);
@@ -1254,6 +1278,56 @@
     if (immediate) { fetchBlurb(it); return; }
     blurbTimer = setTimeout(function () { blurbTimer = null; fetchBlurb(it); }, 250);
   }
+  // Texto de la FICHA. Con los dos bloques ya resueltos (llegaron de
+  // /api/tv-blurb con full, o el ítem viene del home cacheado que los trae)
+  // muestra sinopsis + porqué; mientras tanto, la frase corta del banner, que
+  // ya está en pantalla. Nunca queda un hueco esperando.
+  // En un top el "porqué" no aplica (está por ranking): solo "de qué va".
+  function detailTextHTML(it) {
+    if (it.synopsis && (it.reason || isTopItem(it))) {
+      var h = '<h4 class="dsec">🎬 Sinopsis</h4><p class="dsyn">' + esc(it.synopsis) + "</p>";
+      if (it.reason && !isTopItem(it)) {
+        h += '<h4 class="dsec dwhy">✦ Por qué te la propongo</h4><p class="dreason">' + esc(it.reason) + "</p>";
+      }
+      return h;
+    }
+    return '<h4 class="dsec">' + (isTopItem(it) ? "🎬 De qué va" : "✦ De qué va y por qué te la propongo") + "</h4>" +
+           '<p class="dblurb">' + blurbHTML(it) + "</p>";
+  }
+  function patchDetailText(it) {
+    if (detailItem !== it) return; // llegó tarde: la ficha ya es otra
+    var dt = document.querySelector(".detail .dtext");
+    if (dt) dt.innerHTML = detailTextHTML(it);
+  }
+  // ¿Hay que pedir el texto largo? No para los tops (no llevan porqué) ni para
+  // los ítems del home cacheado (ya vienen con sinopsis y porqué escritos).
+  function needsDetail(it) {
+    if (!it || isTopItem(it)) return false;
+    if (it.synopsis && it.reason) return false;
+    if (it._ds === "loading" || it._ds === "ok") return false;
+    if (it._ds === "error" && Date.now() - (it._dsAt || 0) < 10000) return false;
+    return true;
+  }
+  // Segunda llamada, SOLO al abrir una ficha (no al navegar entre tarjetas):
+  // ~120 tokens contra los ~50 de la frase del banner. Como el corto ya está en
+  // pantalla, el usuario no espera: el texto se expande cuando llega.
+  function fetchDetail(it) {
+    if (!needsDetail(it)) return;
+    it._ds = "loading";
+    var body = { title: it.title, year: it.year, type: it.type, platform: it.platform,
+                 q: mode === "search" ? query : "", section: it.section, full: true };
+    fetch("/api/tv-blurb", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (d) {
+        if (!d || (!d.synopsis && !d.reason)) throw new Error("vacío");
+        if (d.synopsis) it.synopsis = d.synopsis;
+        if (d.reason) it.reason = d.reason;
+        it._ds = "ok";
+        patchDetailText(it);
+        emitScreen(); // el control recibe los textos (campos ya existentes del protocolo)
+      })
+      .catch(function () { it._ds = "error"; it._dsAt = Date.now(); });
+  }
   function patchBlurb(it) {
     // Banner: solo si el ítem sigue siendo el que se muestra (id en el nodo).
     var hero = document.getElementById("hero");
@@ -1261,11 +1335,8 @@
       var hb = hero.querySelector(".hblurb");
       if (hb) { hb.innerHTML = blurbHTML(it); if (it.blurb) mark("first_text"); }
     }
-    // Ficha abierta de ese mismo ítem.
-    if (detailItem === it) {
-      var db = document.querySelector(".detail .dblurb");
-      if (db) db.innerHTML = blurbHTML(it);
-    }
+    // Ficha abierta de ese mismo ítem (todavía sin el texto largo).
+    patchDetailText(it);
   }
   function fetchBlurb(it) {
     if (!needsBlurb(it)) return;
@@ -1312,10 +1383,7 @@
     if (it.ageRating) sub.push(it.ageRating);
     if (sub.length) h += '<span class="hsub">' + esc(sub.join(" · ")) + "</span>";
     h += "</div>";
-    // Un solo bloque de texto (el mismo blurb del banner, sin recorte). En un
-    // top el "porqué" no aplica (está por ranking): solo "de qué va".
-    h += '<div class="dtext"><h4 class="dsec">' + (isTopItem(it) ? "🎬 De qué va" : "✦ De qué va y por qué te la propongo") + "</h4>" +
-         '<p class="dblurb">' + blurbHTML(it) + "</p></div>";
+    h += '<div class="dtext">' + detailTextHTML(it) + "</div>";
     var td = isToday(it);
     h += '<div class="hactions">';
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
@@ -1655,7 +1723,9 @@
     if (!it) { hb.innerHTML = ""; return; }
     var hero = document.getElementById("hero");
     var foc = actionFocus >= 0 && rowFocus < 0 && tabFocus < 0;
-    if (!hero || hero.getAttribute("data-id") !== String(it.id) || hero.getAttribute("data-ui") !== uiMode) {
+    var wantWide = it.backdropUrl ? "1" : "0";
+    if (!hero || hero.getAttribute("data-id") !== String(it.id) || hero.getAttribute("data-ui") !== uiMode ||
+        (hero.className.indexOf("wide") >= 0 ? "1" : "0") !== wantWide) {
       hb.innerHTML = heroBoxHTML();
       preloadNeighbors();
       return;
@@ -1990,6 +2060,7 @@
       if (r.year) it.year = r.year;
       if (r.type) it.type = r.type;
       if (r.posterUrl) it.posterUrl = r.posterUrl;
+      if (r.backdropUrl) it.backdropUrl = r.backdropUrl;
       if (r.synopsis) it.synopsis = r.synopsis;
       if (r.hook) it.hook = r.hook;
       if (r.reason) it.reason = r.reason;

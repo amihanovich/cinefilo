@@ -194,6 +194,8 @@ http
           platform: str(p.platform, 40) || "",
           q: str(p.q, 300) || "",
           section: str(p.section, 60) || "",
+          // full: los dos bloques de la ficha (sinopsis + porqué) en vez de la frase.
+          full: p.full === true,
         }));
       });
       return;

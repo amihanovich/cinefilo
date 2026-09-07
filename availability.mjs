@@ -14,6 +14,9 @@ import { fetchUpstream } from "./upstream.mjs";
 
 const TMDB = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/w500";
+// Imagen HORIZONTAL del título (backdrop). El banner de la TV es panorámico:
+// con el póster vertical estirado se veía un recorte del centro, ampliado.
+const IMG_WIDE = "https://image.tmdb.org/t/p/w1280";
 
 export const DEFAULT_REGION = (process.env.DEFAULT_REGION || "AR").toUpperCase();
 
@@ -150,6 +153,7 @@ function discoverItem(c, kind, platform) {
     type: kind === "tv" ? "Serie" : "Película",
     year: Number.isFinite(y) ? y : undefined,
     posterUrl: c.poster_path ? IMG + c.poster_path : undefined,
+    backdropUrl: c.backdrop_path ? IMG_WIDE + c.backdrop_path : undefined,
     tmdbId: c.id,
     popularity: c.popularity || 0,
     avail: "confirmed", // viene del catálogo real de TMDB (mismo campo que expone pickAvailable)
@@ -334,6 +338,7 @@ export async function resolveTitle(title, year, type, country) {
       tmdbId: best.id,
       providers,
       posterUrl: best.poster_path ? IMG + best.poster_path : null,
+      backdropUrl: best.backdrop_path ? IMG_WIDE + best.backdrop_path : null,
     };
     cacheSet(key, value);
     return value;
@@ -373,6 +378,7 @@ export async function validateItems(items, userPlatforms, country) {
     const r = await resolveTitle(it.title, it.year, it.type, country);
     if (!r) { it._avail = "unknown"; return; }
     if (r.posterUrl && !it.posterUrl) it.posterUrl = r.posterUrl;
+    if (r.backdropUrl && !it.backdropUrl) it.backdropUrl = r.backdropUrl;
     if (!r.providers.length) { it._avail = "none"; return; }
     if (r.providers.some((p) => norm(p) === norm(it.platform)) && inWanted(it.platform)) {
       it._avail = "confirmed";

@@ -557,19 +557,43 @@ function blurbFromText(text) {
   return words >= 10 && words <= 70 ? raw : "";
 }
 
+// Versión larga (la ficha): sinopsis + porqué separados. Mismos conteos de
+// palabras que tenía el prompt de búsqueda antes de aligerarlo, así la ficha
+// conserva el texto de siempre. Vacíos si el JSON no vino bien: el cliente se
+// queda con la frase corta que ya tiene.
+function detailFromText(text) {
+  try {
+    const parsed = parseLooseJson(text);
+    if (parsed) {
+      const synopsis = typeof parsed.synopsis === "string" ? parsed.synopsis.trim() : "";
+      const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
+      if (synopsis || reason) return { synopsis, reason };
+    }
+  } catch (e) {}
+  return { synopsis: "", reason: "" };
+}
+
+const clip = (t, max) => (t.length > max ? t.slice(0, max - 3).replace(/\s+\S*$/, "") + "…" : t);
+
 /**
- * @param {{title:string, year?:number, type?:string, platform?:string, q?:string, section?:string}} p
- * @returns {Promise<{blurb:string, cached:boolean}>} blurb "" si no se pudo generar (el cliente no bloquea)
+ * Texto de UN título, bajo demanda.
+ *   corto (default) → { blurb } : una frase para el banner.
+ *   `full: true`    → { synopsis, reason } : los dos bloques de la ficha.
+ * Los dos comparten caché (24 h) y dedupe en vuelo, con key propia por modo.
+ * @param {{title:string, year?:number, type?:string, platform?:string, q?:string, section?:string, full?:boolean}} p
+ * @returns {Promise<{blurb?:string, synopsis?:string, reason?:string, cached:boolean}>}
  */
 export async function tvBlurb(p) {
+  const full = !!(p && p.full);
+  const empty = full ? { synopsis: "", reason: "" } : { blurb: "" };
   const title = String((p && p.title) || "").trim();
-  if (!title) return { blurb: "", cached: false };
+  if (!title) return { ...empty, cached: false };
   const kind = /serie/i.test(String((p && p.type) || "")) ? "tv" : "movie";
   const q = String((p && p.q) || "").trim();
-  const key = [normKey(title), p.year || "", kind, normKey(q).slice(0, 120)].join("|");
+  const key = [full ? "full" : "short", normKey(title), p.year || "", kind, normKey(q).slice(0, 120)].join("|");
   const hit = blurbCacheGet(key);
-  if (hit !== undefined) return { blurb: hit, cached: true };
-  if (blurbInflight.has(key)) return { blurb: await blurbInflight.get(key), cached: true };
+  if (hit !== undefined) return { ...hit, cached: true };
+  if (blurbInflight.has(key)) return { ...(await blurbInflight.get(key)), cached: true };
 
   const meta = [kind === "tv" ? "serie" : "película", p.year ? String(p.year) : "", p.platform ? "en " + p.platform : ""].filter(Boolean).join(", ");
   const context = q
@@ -578,26 +602,47 @@ export async function tvBlurb(p) {
   const fit = q
     ? "POR QUÉ encaja con lo que pidió (si se aleja del pedido, decilo con naturalidad: \"Se aleja un poco, pero…\")"
     : "POR QUÉ vale la pena verla ahora";
-  const prompt =
+  const cabecera =
     "Sos Miru, el experto del videoclub, en español rioplatense.\n" +
     'Título: "' + title + '" (' + meta + ").\n" +
-    context +
-    "Escribí UNA sola frase de 25 a 35 palabras que cuente DE QUÉ VA (concreto y visual, sin spoilers) y " + fit + ". " +
-    "Sin elogios vacíos, sin comillas, sin emojis. Si no conocés el título con certeza, describilo con prudencia y sin inventar datos.\n" +
-    'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"blurb":""}';
+    context;
+  const cierre =
+    "Sin elogios vacíos, sin comillas, sin emojis. Si no conocés el título con certeza, " +
+    "describilo con prudencia y sin inventar datos.\n";
+  const prompt = full
+    ? cabecera +
+      "Escribí los dos textos de la ficha:\n" +
+      '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — el planteo y qué está en juego —, sin spoilers.\n' +
+      '- "reason": 1 o 2 frases (25 a 35 palabras) con ' + fit + ". Después del porqué, el tono o clima " +
+      "(tenso, luminoso, melancólico, divertido...) y qué la vuelve memorable: una actuación, la dirección, " +
+      "un giro. Si suma, un dato de cinéfilo breve.\n" +
+      cierre +
+      'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"synopsis":"","reason":""}'
+    : cabecera +
+      "Escribí UNA sola frase de 25 a 35 palabras que cuente DE QUÉ VA (concreto y visual, sin spoilers) y " + fit + ". " +
+      cierre +
+      'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"blurb":""}';
 
   const job = (async () => {
     const t0 = Date.now();
-    const text = await callAnthropicText(prompt, 160, { timeoutMs: 12000, retries: 0 });
-    let blurb = blurbFromText(text);
-    if (blurb.length > 260) blurb = blurb.slice(0, 257).replace(/\s+\S*$/, "") + "…";
-    logMetrics("tv-blurb", { llm_ms: Date.now() - t0, words: blurb ? blurb.split(/\s+/).length : 0, cached: false, home: !q });
-    if (blurb) blurbCacheSet(key, blurb);
-    return blurb;
+    const text = await callAnthropicText(prompt, full ? 400 : 160, { timeoutMs: full ? 20000 : 12000, retries: 0 });
+    let value;
+    let words;
+    if (full) {
+      const d = detailFromText(text);
+      value = { synopsis: clip(d.synopsis, 400), reason: clip(d.reason, 400) };
+      words = (value.synopsis + " " + value.reason).split(/\s+/).filter(Boolean).length;
+    } else {
+      value = { blurb: clip(blurbFromText(text), 260) };
+      words = value.blurb ? value.blurb.split(/\s+/).length : 0;
+    }
+    logMetrics("tv-blurb", { llm_ms: Date.now() - t0, full, words, cached: false, home: !q });
+    if (words) blurbCacheSet(key, value);
+    return value;
   })();
   blurbInflight.set(key, job);
   try {
-    return { blurb: await job, cached: false };
+    return { ...(await job), cached: false };
   } finally {
     blurbInflight.delete(key);
   }
