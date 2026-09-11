@@ -1,0 +1,8 @@
+{
+  "name": "miru-tv-remote-poc",
+  "private": true,
+  "type": "module",
+  "description": "Prueba de concepto: controlar la TV desde afuera (Android TV Remote v2). No se deploya.",
+  "scripts": { "poc": "node poc.mjs" },
+  "dependencies": { "@kud/androidtv-remote": "^0.1.2" }
+}
