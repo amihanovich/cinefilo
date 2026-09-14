@@ -109,4 +109,7 @@ memorias viejas o en tu cabeza, ignorarlos:
    arranca directo en el contenido). Entrada: la URL de la web-control SIN `?session=` redirige
    ahí; con `?session=` sigue siendo el control del QR.
 
+9. **Dispositivos de prueba:** la IP local de la TV Android (`192.168.1.10`, `adb connect ...:5555`) está
+   anotada en `ARCHITECTURE.md` §9. No agregar ahí MACs ni nombres de red — el repo es público.
+
 Detalle completo de arquitectura, endpoints, pairing, deploy y env vars: **`ARCHITECTURE.md`**.

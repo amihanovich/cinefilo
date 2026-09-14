@@ -235,3 +235,19 @@ Un proyecto (PostgreSQL + Auth + Realtime). Migraciones en `supabase/migrations/
   `VITE_CONTROL_BASE_URL` (TV), `VITE_MOBILE_APP_URL`, `VITE_POSTHOG_KEY`.
 - **Landing:** `VITE_MANIFEST_URL`, `VITE_WEB_CONTROL_URL`; publish usa `SUPABASE_SERVICE_ROLE_KEY`, `BUILDS_BUCKET`.
 - ⚠️ Dos convenciones para la key de Supabase: `VITE_SUPABASE_PUBLISHABLE_KEY` (web) vs `VITE_SUPABASE_ANON_KEY` (apps).
+
+---
+
+## 9. Dispositivos de prueba (LAN local)
+
+Aparatos físicos donde se prueban los builds. Son IPs **privadas de la red de casa** (RFC1918): no
+significan nada fuera de esa LAN, pero **no agregar acá MACs, SSIDs ni nada que identifique la red** —
+este repo es público.
+
+| Dispositivo | IP local | Cómo se conecta | Notas |
+|---|---|---|---|
+| **TV Android / Google TV** (la del APK `com.cinefilo.tv`) | `192.168.1.10` | `adb connect 192.168.1.10:5555` | DHCP: la IP puede cambiar al reiniciar el router. Si se corta, mirarla de nuevo en Configuración → Red e Internet → (red conectada), o reservarla por MAC en el router. |
+| **Samsung Smart TV** (Tizen, `.wgt`) | — (todavía sin anotar) | `sdb connect <ip>:26101` | La IP la muestra el panel de **Developer mode** del Samsung (pantalla de Apps → tipear `1 2 3 4 5`), al lado del campo "Host PC IP". Ver `apps/tizen/README.md`. |
+
+Requisito común: la PC que instala y el aparato tienen que estar en la **misma red local**. El puerto
+es distinto según el sistema — `5555` (adb/Android) vs `26101` (sdb/Tizen), no se mezclan.
