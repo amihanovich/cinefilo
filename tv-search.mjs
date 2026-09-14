@@ -1,0 +1,657 @@
+import { fetchUpstream } from "./upstream.mjs";
+import { validateItems, pickAvailable, availSummary, discoverPopular, availabilityEnabled, detectPlatformMentions } from "./availability.mjs";
+
+// Búsqueda y home para la TV liviana (navegadores viejos: Tizen 4.0, etc.).
+// Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs en
+// /api/tv-search y /api/tv-home. Llama directo a la API REST de Anthropic.
+// Los pósters NO se buscan acá (iTunes bloquea la IP del server): los trae la TV
+// del lado del cliente (IP residencial).
+
+// Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm). Estaba dejando
+// que Haiku la asigne y la TV disparaba el deep link de una app que ya no existe.
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+
+// Texto crudo de Haiku (una sola llamada, sin system). `cfg` permite un
+// timeout más corto para pedidos chicos (el blurb por título) sin tocar los
+// 60 s que necesita una búsqueda de 18 ítems.
+async function callAnthropicText(prompt, maxTokens, cfg) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: maxTokens || 4500,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  }, cfg || { timeoutMs: 60000 });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
+  }
+  const data = await res.json();
+  return (data.content && data.content[0] && data.content[0].text) || "";
+}
+
+async function callAnthropic(prompt, maxTokens) {
+  return parseLooseJson(await callAnthropicText(prompt, maxTokens));
+}
+
+// Parse defensivo del JSON que escribe la IA. Antes era un JSON.parse a secas:
+// si Haiku se quedaba sin max_tokens a mitad del ítem 14, el request entero
+// moría con 500 y la TV no mostraba nada. Ahora se rescatan los ítems que sí
+// llegaron completos (se corta en el último objeto cerrado y se cierran los
+// corchetes abiertos) y solo se descarta el truncado.
+export function parseLooseJson(text) {
+  const s = String(text || "");
+  const start = s.indexOf("{");
+  if (start < 0) throw new Error("La IA no devolvió JSON");
+  const end = s.lastIndexOf("}");
+  const body = end > start ? s.slice(start, end + 1) : s.slice(start);
+  try {
+    return JSON.parse(body);
+  } catch (e) {
+    const rescued = rescueTruncatedJson(s.slice(start));
+    if (rescued) {
+      console.warn("[tv-search] JSON truncado por la IA: se rescató la parte completa");
+      return rescued;
+    }
+    throw new Error("La IA devolvió JSON inválido");
+  }
+}
+
+// Recorre balanceando llaves/corchetes (saltando strings) y recuerda dónde
+// terminó el último objeto completo que vive dentro de un array de primer
+// nivel (un ítem de "items":[...]). Corta ahí, cierra lo que quedó abierto y
+// reintenta el parse. null = no había ningún ítem completo.
+function rescueTruncatedJson(src) {
+  let inStr = false, escaped = false;
+  const stack = [];
+  let lastItemEnd = -1;
+  let stackAtLast = null;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{" || ch === "[") { stack.push(ch); continue; }
+    if (ch === "}" || ch === "]") {
+      stack.pop();
+      if (ch === "}" && stack.length === 2 && stack[1] === "[") {
+        lastItemEnd = i;
+        stackAtLast = stack.slice();
+      }
+    }
+  }
+  if (lastItemEnd < 0) return null;
+  let closers = "";
+  for (let k = stackAtLast.length - 1; k >= 0; k--) closers += stackAtLast[k] === "[" ? "]" : "}";
+  try {
+    return JSON.parse(src.slice(0, lastItemEnd + 1) + closers);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Métrica por request (B0 de la revisión con Carlos): una línea JSON por
+// búsqueda en el log de Railway, para tener la línea base antes/después de
+// aligerar la búsqueda. `grep "\[metrics\]"` y listo.
+export function logMetrics(route, fields) {
+  try {
+    console.log("[metrics] " + JSON.stringify({ route, ...fields }));
+  } catch (e) {}
+}
+
+// Nota: los pósters NO se buscan acá. Los trae la TV del lado del cliente vía Cinemeta
+// (catálogo público de Stremio, con CORS y sin clave), llenándose de a poco.
+
+function normalizeItem(r, section) {
+  const yearNum = r.year ? parseInt(r.year, 10) : NaN;
+  const item = {
+    title: String(r.title || ""),
+    platform: String(r.platform || ""),
+    type: String(r.type || ""),
+  };
+  // Textos solo si vienen (la búsqueda liviana ya no los pide; el home sí).
+  if (r.synopsis) item.synopsis = String(r.synopsis);
+  if (r.hook) item.hook = String(r.hook);
+  if (r.reason) item.reason = String(r.reason);
+  if (r.blurb) item.blurb = String(r.blurb);
+  if (Number.isFinite(yearNum)) item.year = yearNum;
+  if (section) item.section = section;
+  return item;
+}
+
+const ITEM_SHAPE =
+  '{"title":"","platform":"","year":"","type":"Película","synopsis":"","hook":"","reason":""}';
+const itemRules = (plats) =>
+  '- "platform" EXACTAMENTE una de: ' +
+  plats.join(", ") +
+  '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
+  '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
+  '- "hook": lo ÚNICO que se lee en la tarjeta chica, así que tiene que contar las DOS cosas ' +
+  'en una sola frase de 16 a 22 palabras: primero DE QUÉ VA (5 a 8 palabras, concreto y visual) ' +
+  'y después POR QUÉ se la recomendás, separados por " · ". Sin punto final. Ejemplos: ' +
+  '"Dos estafadores y una estafa que se les va de las manos · te la propongo por el guion que no falla nunca", ' +
+  '"Un juicio imposible contra las juntas militares · va porque pediste algo real que emocione". ' +
+  "Nada de frases genéricas ni elogios vacíos.\n" +
+  '- "reason": 1 o 2 frases (25 a 35 palabras) que enganchen y den ganas de darle play. ' +
+  "Lo primero y central es EL PORQUÉ: conectá explícitamente con lo que se pidió o con el momento " +
+  "(nada de elogios genéricos tipo 'gran película'). Después el tono/clima (tenso, luminoso, " +
+  "melancólico, divertido...) y qué la vuelve memorable (una actuación, la dirección, el giro emocional); " +
+  "si suma, un dato de cinéfilo breve (director, época, conexión). Cálido y conversacional en rioplatense, " +
+  "como el experto del videoclub que te la recomienda a VOS; sin spoilers ni frases hechas repetidas entre ítems." +
+  "\n- Títulos conocidos con disponibilidad estable." +
+  "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
+  "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida.";
+
+// Forma LIVIANA para la búsqueda y el scroll infinito (revisión con Carlos,
+// 2026-09): solo lo que hace falta para pintar la grilla — título, plataforma,
+// año, tipo. Sin synopsis/hook/reason: eso lo escribía Haiku para los 18 ítems
+// (~3000 tokens de salida) antes de que el cliente viera nada, y el usuario
+// solo lee el texto del título que tiene en el banner. Ahora ese texto lo
+// pide la TV bajo demanda a /api/tv-blurb (tvBlurb). La forma completa
+// (ITEM_SHAPE) sigue para el home cacheado (writeReasons / fallback).
+const ITEM_SHAPE_LITE = '{"title":"","platform":"","year":"","type":"Película"}';
+const itemRulesLite = (plats) =>
+  '- "platform" EXACTAMENTE una de: ' +
+  plats.join(", ") +
+  '.\n- "type" es "Película" o "Serie".\n- "year" año de estreno (ej "2019").\n' +
+  "- Títulos conocidos con disponibilidad estable." +
+  "\n- SOLO títulos que EXISTEN de verdad. JAMÁS inventes una película o serie: " +
+  "si no estás seguro de que existe con ese nombre exacto, elegí otra más conocida." +
+  "\n- Nada de texto extra: solo el JSON con esos cuatro campos.";
+
+export async function tvSearch(query, exclude, liked, disliked, platforms, country, preferRecent) {
+  if (!query || !query.trim()) return { items: [] };
+  // Si el pedido nombra una plataforma explícita ("buscame algo en Netflix"),
+  // eso PISA el preset de plataformas del control para este pedido puntual.
+  // Si no, valen las plataformas del usuario (si las mandó el control) — antes
+  // de esto la TV siempre buscaba en las 7 sin importar el preset.
+  const mentioned = detectPlatformMentions(query);
+  const effectivePlatforms = mentioned.length ? mentioned : (platforms && platforms.length ? platforms : null);
+  const plats = effectivePlatforms || PLATFORMS;
+  const excludeLine =
+    exclude && exclude.length
+      ? "\n\nNO recomiendes estos títulos (ya vistos o mostrados): " + exclude.join(", ")
+      : "";
+  const likedLine =
+    liked && liked.length
+      ? "\n\nAl usuario LE GUSTARON (señal fuerte: buscá en esa línea — mismo tono, género, director, sensibilidad; NO los repitas): " +
+        liked.join(", ")
+      : "";
+  const dislikedLine =
+    disliked && disliked.length
+      ? "\n\nNO le gustaron (señal negativa: evitá títulos similares en tono/género/director): " +
+        disliked.join(", ")
+      : "";
+  const recentLine = preferRecent
+    ? "\n\nFILTRO ACTIVO — PRIORIZAR LO MÁS RECIENTE: ordená la lista privilegiando estrenos y títulos de los últimos 2-3 años (los clásicos solo si encajan perfecto con el pedido). La regla de existencia/disponibilidad sigue mandando: JAMÁS inventes un título por ser nuevo."
+    : "";
+  const prompt =
+    "Sos un experto en cine y series en español rioplatense. Plataformas: " +
+    plats.join(", ") +
+    '.\nEl usuario quiere ver: "' +
+    query.trim() +
+    '".' +
+    excludeLine +
+    likedLine +
+    dislikedLine +
+    recentLine +
+    "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
+    '{"items":[' +
+    ITEM_SHAPE_LITE +
+    "]}\n\nReglas:\n- EXACTAMENTE 18 ítems distintos entre sí, ordenados del que mejor encaja al que menos.\n" +
+    itemRulesLite(plats);
+  // Se piden 18 y se devuelven hasta 15: el margen absorbe los que la
+  // validación de disponibilidad (TMDB, por país) descarta o no confirma.
+  // 18 ítems livianos son ~500-600 tokens; 1200 deja el doble de margen.
+  const t0 = Date.now();
+  const parsed = await callAnthropic(prompt, 1200);
+  const llmMs = Date.now() - t0;
+  const items = ((parsed && parsed.items) || []).map((r) => normalizeItem(r, undefined));
+  const t1 = Date.now();
+  await validateItems(items, effectivePlatforms, country);
+  const tmdbMs = Date.now() - t1;
+  const sum = availSummary(items);
+  // minFill 8: con 8+ verificados no se rellena con títulos no resueltos
+  // (en pedidos nicho Haiku inventa varios y TMDB no los encuentra).
+  const out = pickAvailable(items, 15, 8, true);
+  logMetrics("tv-search", {
+    llm_ms: llmMs, tmdb_ms: tmdbMs, asked: items.length, returned: out.length,
+    confirmed: sum.confirmed + sum.corrected, unknown: sum.unknown, dropped: sum.none + sum.unlisted,
+    platforms: (effectivePlatforms || []).length, q: query.trim().slice(0, 80),
+  });
+  return { items: out };
+}
+
+// Póster desde Cinemeta, resuelto EN EL SERVIDOR. Antes cada TV hacía 1 request
+// por título (12 en la pantalla de pairing) y las tiras tardaban en aparecer.
+// Acá se resuelven en paralelo UNA vez y quedan dentro del caché del home (6 h),
+// así el cliente recibe los pósters ya listos en /api/tv-home.
+async function cinemetaPoster(title, type) {
+  const kind = /serie/i.test(type || "") ? "series" : "movie";
+  const u = "https://v3-cinemeta.strem.io/catalog/" + kind + "/top/search=" +
+    encodeURIComponent(title) + ".json";
+  try {
+    const r = await fetch(u, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const m = j && j.metas && j.metas[0];
+    let poster = m && m.poster ? String(m.poster) : null;
+    // Cinemeta devuelve la variante "medium" (~250px): en 1080p se pixela.
+    if (poster) poster = poster.replace("/poster/medium/", "/poster/big/");
+    return poster;
+  } catch {
+    return null; // sin póster no se rompe nada: el cliente cae a su propio fetch
+  }
+}
+
+async function attachPosters(items) {
+  await Promise.all(
+    items.map(async (it) => {
+      if (it && !it.posterUrl) {
+        const p = await cinemetaPoster(it.title, it.type);
+        if (p) it.posterUrl = p;
+      }
+    }),
+  );
+  return items;
+}
+
+// Caché en memoria del home (mismo para todos; evita la espera de la IA en cada visita).
+let homeCache = null;
+let homeCacheAt = 0;
+const HOME_TTL = 6 * 60 * 60 * 1000;
+
+// Pool de Discover compartido entre el home y las cintas del pairing, con
+// dedupe de llamadas en vuelo (el warm del boot dispara ambos a la vez).
+let poolCache = null;
+let poolCacheAt = 0;
+let poolPromise = null;
+const POOL_TTL = HOME_TTL;
+
+async function getDiscoverPool() {
+  const now = Date.now();
+  if (poolCache && now - poolCacheAt < POOL_TTL) return poolCache;
+  if (!poolPromise) {
+    poolPromise = discoverPopular(undefined)
+      .then((pool) => {
+        poolPromise = null;
+        if (pool.popular.length || pool.recent.length) {
+          poolCache = pool;
+          poolCacheAt = Date.now();
+        }
+        return pool;
+      })
+      .catch((e) => {
+        poolPromise = null;
+        throw e;
+      });
+  }
+  return poolPromise;
+}
+
+// Pósters para las cintas de la pantalla de pairing: SOLO imágenes, sin pasar
+// por Haiku. El QR es la cara de entrada de la TV y no puede esperar a la IA
+// (el home completo puede tardar en frío; esto tarda lo que tarda Discover).
+export async function tvRibbons() {
+  if (homeCache && homeCache.items) {
+    const p = homeCache.items.map((i) => i.posterUrl).filter(Boolean).slice(0, 12);
+    if (p.length >= 6) return { posters: p };
+  }
+  const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [] }));
+  const seen = new Set();
+  const posters = [];
+  for (const it of pool.recent.concat(pool.popular)) {
+    if (it.posterUrl && !seen.has(it.posterUrl)) {
+      seen.add(it.posterUrl);
+      posters.push(it.posterUrl);
+      if (posters.length >= 12) break;
+    }
+  }
+  return { posters };
+}
+
+// Reparte por plataforma (round-robin) para que el home no quede monocolor:
+// toma el más popular de cada plataforma, después el segundo, hasta llenar.
+function pickVaried(list, want) {
+  const byPlat = new Map();
+  for (const it of list) {
+    if (!byPlat.has(it.platform)) byPlat.set(it.platform, []);
+    byPlat.get(it.platform).push(it);
+  }
+  const out = [];
+  const buckets = [...byPlat.values()];
+  for (let round = 0; out.length < want; round++) {
+    let added = false;
+    for (const b of buckets) {
+      if (b[round]) { out.push(b[round]); added = true; if (out.length >= want) break; }
+    }
+    if (!added) break; // no queda nada en ninguna plataforma
+  }
+  return out;
+}
+
+// Miru escribe hook/reason/synopsis para títulos REALES del catálogo
+// (Discover): acá NO inventa títulos, solo pone la voz del experto.
+async function writeReasons(items, maxTokens) {
+  const list = items
+    .map((it, i) => `${i + 1}. "${it.title}" (${it.type}, ${it.year || "s/d"}, en ${it.platform})`)
+    .join("\n");
+  const prompt =
+    "Sos Miru, el experto del videoclub, en español rioplatense. Estos títulos ESTÁN " +
+    "disponibles en las plataformas indicadas (verificado — no lo dudes ni lo cambies):\n\n" +
+    list +
+    "\n\nPara CADA título devolvé synopsis, hook y reason.\n" +
+    "Devolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
+    '{"items":[{"title":"","synopsis":"","hook":"","reason":""}]}\n\nReglas:\n' +
+    '- "title" EXACTAMENTE como te lo di (mismo texto), sin agregar ni sacar títulos.\n' +
+    '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — planteo y qué está en juego —, sin spoilers.\n' +
+    '- "hook": lo ÚNICO que se lee en la tarjeta chica, así que tiene que contar las DOS cosas ' +
+    'en una sola frase de 16 a 22 palabras: primero DE QUÉ VA (5 a 8 palabras, concreto y visual) ' +
+    'y después POR QUÉ verla, separados por " · ". Sin punto final. Ejemplo: ' +
+    '"Dos estafadores y una estafa que se les va de las manos · va porque el guion no falla nunca". ' +
+    "Nada de frases genéricas ni elogios vacíos.\n" +
+    '- "reason": 2 o 3 frases (40 a 60 palabras) que den ganas de darle play: el porqué ' +
+    "central, el tono/clima, qué la vuelve memorable; si suma, un dato de cinéfilo breve. " +
+    "Cálido y conversacional, sin spoilers ni frases hechas repetidas entre ítems.";
+  const parsed = await callAnthropic(prompt, maxTokens || 7500);
+  const byTitle = new Map();
+  for (const r of (parsed && parsed.items) || []) {
+    byTitle.set(String(r.title || "").toLowerCase().trim(), r);
+  }
+  for (const it of items) {
+    const r = byTitle.get(it.title.toLowerCase().trim());
+    if (!r) continue;
+    if (r.synopsis) it.synopsis = String(r.synopsis);
+    if (r.hook) it.hook = String(r.hook);
+    if (r.reason) it.reason = String(r.reason);
+  }
+  return items;
+}
+
+export async function tvHome() {
+  const now = Date.now();
+  if (homeCache && now - homeCacheAt < HOME_TTL) return homeCache;
+
+  // Camino principal: catálogo REAL por Discover (qué hay de verdad en las
+  // plataformas de la región) + Haiku poniendo la voz. Nada inventado.
+  if (availabilityEnabled()) {
+    const pool = await getDiscoverPool().catch(() => ({ popular: [], recent: [], byPlatform: [] }));
+    if (pool.popular.length >= 8 && pool.recent.length >= 8) {
+      const rec = pickVaried(pool.popular, 8);
+      const latest = pickVaried(pool.recent, 8);
+      const all = rec.concat(latest);
+
+      // Tiras "Top 6 en X": el ranking POR plataforma del mismo pool. Copias
+      // propias (un título puede estar en dos tiras con section distinta).
+      const tkey = (t) => String(t || "").toLowerCase().trim();
+      const inAll = new Set(all.map((it) => tkey(it.title)));
+      const rows = [];
+      const extras = []; // títulos de tiras que NO están en `all`: van a su propia pasada de Haiku
+      const extraSeen = new Set();
+      for (const p of (pool.byPlatform || [])) {
+        const rowItems = p.items.slice(0, 6).map((it) => ({ ...it, section: "Top 6 en " + p.platform })) // 6 = una fila completa de la grilla de la TV (COLS);
+        rows.push({ platform: p.platform, items: rowItems });
+        for (const it of rowItems) {
+          const k = tkey(it.title);
+          if (!inAll.has(k) && !extraSeen.has(k)) { extraSeen.add(k); extras.push(it); }
+        }
+      }
+
+      // Llamadas a Haiku EN PARALELO (una vez cada 6h): la de siempre para
+      // `items` + los ~50 títulos que solo están en las tiras, en lotes de 20
+      // (un solo JSON de 50 se trunca/degrada; lotes chicos son fiables).
+      const extraBatches = [];
+      for (let i = 0; i < extras.length; i += 20) extraBatches.push(extras.slice(i, i + 20));
+      await Promise.all([
+        writeReasons(all),
+        ...extraBatches.map((batch) => writeReasons(batch, 10000)),
+      ]);
+
+      // Propagar synopsis/hook/reason a las repeticiones (mismo título en
+      // `all` y en una tira, o en dos tiras a la vez).
+      const enriched = new Map();
+      for (const it of all.concat(extras)) enriched.set(tkey(it.title), it);
+      for (const row of rows) {
+        for (const it of row.items) {
+          const src = enriched.get(tkey(it.title));
+          if (src && src !== it) {
+            if (src.synopsis) it.synopsis = src.synopsis;
+            if (src.hook) it.hook = src.hook;
+            if (src.reason) it.reason = src.reason;
+          }
+          delete it.popularity;
+        }
+      }
+
+      for (const it of all) delete it.popularity;
+      for (const it of rec) it.section = "Recomendadas para vos";
+      for (const it of latest) it.section = "Últimas subidas a las plataformas";
+      homeCache = { items: all, rows: rows };
+      homeCacheAt = Date.now();
+      return homeCache;
+    }
+  }
+
+  // Fallback (sin TMDB_API_KEY o Discover caído): flujo clásico — Haiku
+  // propone de memoria y la validación filtra lo que puede.
+  const prompt =
+    "Sos un experto en cine y series en español rioplatense. Plataformas: " +
+    PLATFORMS.join(", ") +
+    ".\nArmá dos listas para la pantalla de inicio de una app de TV.\n\n" +
+    "Devolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
+    '{"recommended":[' +
+    ITEM_SHAPE +
+    '],"latest":[' +
+    ITEM_SHAPE +
+    "]}\n\nReglas:\n" +
+    '- "recommended": EXACTAMENTE 10 títulos excelentes y variados (distintos géneros y plataformas), atemporales y muy recomendables.\n' +
+    '- "latest": EXACTAMENTE 10 estrenos recientes (2024-2025) populares, variados, repartidos entre las distintas plataformas.\n' +
+    "- Sin repetir títulos entre las dos listas.\n" +
+    itemRules(PLATFORMS);
+  const parsed = await callAnthropic(prompt, 7500);
+  const rec = ((parsed && parsed.recommended) || []).map((r) =>
+    normalizeItem(r, "Recomendadas para vos"),
+  );
+  const latest = ((parsed && parsed.latest) || []).map((r) =>
+    normalizeItem(r, "Últimas subidas a las plataformas"),
+  );
+  await validateItems(rec.concat(latest), null, undefined);
+  const items = await attachPosters(
+    pickAvailable(rec, 8, 6, true).concat(pickAvailable(latest, 8, 6, true)),
+  );
+  homeCache = { items: items, rows: [] };
+  homeCacheAt = Date.now();
+  return homeCache;
+}
+
+// Solo las tiras "Top 6 en X" (para el móvil): mismo caché que el home.
+export async function tvTop() {
+  const home = await tvHome();
+  return { rows: (home && home.rows) || [] };
+}
+
+// Más recomendaciones para la carga infinita del home.
+export async function tvHomeMore(exclude, platforms, country) {
+  const plats = platforms && platforms.length ? platforms : PLATFORMS;
+  const excludeLine =
+    exclude && exclude.length
+      ? "\n\nNO repitas estos (ya se mostraron): " + exclude.slice(0, 50).join(", ")
+      : "";
+  const prompt =
+    "Sos un experto en cine y series en español rioplatense. Plataformas: " +
+    plats.join(", ") +
+    ".\nDevolvé MÁS recomendaciones excelentes y variadas para la pantalla de inicio." +
+    excludeLine +
+    "\n\nDevolvé ÚNICAMENTE JSON válido (sin markdown):\n" +
+    '{"items":[' +
+    ITEM_SHAPE_LITE +
+    "]}\n\nReglas:\n- EXACTAMENTE 10 títulos, variados (distintos géneros y plataformas), distintos entre sí.\n" +
+    itemRulesLite(plats);
+  const t0 = Date.now();
+  const parsed = await callAnthropic(prompt, 900);
+  const llmMs = Date.now() - t0;
+  const items = ((parsed && parsed.items) || []).map((r) =>
+    normalizeItem(r, "Más recomendadas para vos"),
+  );
+  const t1 = Date.now();
+  await validateItems(items, platforms && platforms.length ? platforms : null, country);
+  const tmdbMs = Date.now() - t1;
+  const sum = availSummary(items);
+  const out = pickAvailable(items, 8, 5, true);
+  logMetrics("tv-home-more", {
+    llm_ms: llmMs, tmdb_ms: tmdbMs, asked: items.length, returned: out.length,
+    confirmed: sum.confirmed + sum.corrected, unknown: sum.unknown, dropped: sum.none + sum.unlisted,
+  });
+  return { items: out };
+}
+
+// ── Texto por título bajo demanda (banner / ficha de la TV) ──────────────────
+// Reemplaza a synopsis + reason por UNA frase: de qué va + por qué encaja con
+// el pedido. Se genera solo para el título que está en el banner (el primero
+// al llegar los resultados, después el que el usuario enfoca), no para los 18.
+// Caché en memoria 24 h por título+pedido y dedupe de llamadas en vuelo (foco
+// + ficha del mismo título, o dos TVs con el mismo pedido = 1 llamada).
+const BLURB_TTL = 24 * 60 * 60 * 1000;
+const BLURB_MAX = 5000;
+const blurbCache = new Map(); // key → { at, value }
+const blurbInflight = new Map(); // key → Promise<string>
+
+function normKey(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+function blurbCacheGet(key) {
+  const hit = blurbCache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() - hit.at < BLURB_TTL) return hit.value;
+  blurbCache.delete(key);
+  return undefined;
+}
+function blurbCacheSet(key, value) {
+  if (blurbCache.size >= BLURB_MAX) {
+    const oldest = blurbCache.keys().next().value;
+    if (oldest !== undefined) blurbCache.delete(oldest);
+  }
+  blurbCache.set(key, { at: Date.now(), value });
+}
+// Haiku a veces contesta una respuesta corta sin el JSON pedido: si el texto
+// crudo tiene pinta de frase (10-70 palabras), se usa igual.
+function blurbFromText(text) {
+  try {
+    const parsed = parseLooseJson(text);
+    if (parsed && typeof parsed.blurb === "string" && parsed.blurb.trim()) return parsed.blurb.trim();
+  } catch (e) {}
+  const raw = String(text || "").replace(/```[a-z]*/gi, "").replace(/[{}"]/g, "").replace(/^\s*blurb\s*:\s*/i, "").trim();
+  const words = raw.split(/\s+/).filter(Boolean).length;
+  return words >= 10 && words <= 70 ? raw : "";
+}
+
+// Versión larga (la ficha): sinopsis + porqué separados. Mismos conteos de
+// palabras que tenía el prompt de búsqueda antes de aligerarlo, así la ficha
+// conserva el texto de siempre. Vacíos si el JSON no vino bien: el cliente se
+// queda con la frase corta que ya tiene.
+function detailFromText(text) {
+  try {
+    const parsed = parseLooseJson(text);
+    if (parsed) {
+      const synopsis = typeof parsed.synopsis === "string" ? parsed.synopsis.trim() : "";
+      const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
+      if (synopsis || reason) return { synopsis, reason };
+    }
+  } catch (e) {}
+  return { synopsis: "", reason: "" };
+}
+
+const clip = (t, max) => (t.length > max ? t.slice(0, max - 3).replace(/\s+\S*$/, "") + "…" : t);
+
+/**
+ * Texto de UN título, bajo demanda.
+ *   corto (default) → { blurb } : una frase para el banner.
+ *   `full: true`    → { synopsis, reason } : los dos bloques de la ficha.
+ * Los dos comparten caché (24 h) y dedupe en vuelo, con key propia por modo.
+ * @param {{title:string, year?:number, type?:string, platform?:string, q?:string, section?:string, full?:boolean}} p
+ * @returns {Promise<{blurb?:string, synopsis?:string, reason?:string, cached:boolean}>}
+ */
+export async function tvBlurb(p) {
+  const full = !!(p && p.full);
+  const empty = full ? { synopsis: "", reason: "" } : { blurb: "" };
+  const title = String((p && p.title) || "").trim();
+  if (!title) return { ...empty, cached: false };
+  const kind = /serie/i.test(String((p && p.type) || "")) ? "tv" : "movie";
+  const q = String((p && p.q) || "").trim();
+  const key = [full ? "full" : "short", normKey(title), p.year || "", kind, normKey(q).slice(0, 120)].join("|");
+  const hit = blurbCacheGet(key);
+  if (hit !== undefined) return { ...hit, cached: true };
+  if (blurbInflight.has(key)) return { ...(await blurbInflight.get(key)), cached: true };
+
+  const meta = [kind === "tv" ? "serie" : "película", p.year ? String(p.year) : "", p.platform ? "en " + p.platform : ""].filter(Boolean).join(", ");
+  const context = q
+    ? 'Pedido del usuario: "' + q + '".\n'
+    : "El usuario está mirando la pantalla de inicio" + (p.section ? ' (sección "' + p.section + '")' : "") + ", sin un pedido puntual.\n";
+  const fit = q
+    ? "POR QUÉ encaja con lo que pidió (si se aleja del pedido, decilo con naturalidad: \"Se aleja un poco, pero…\")"
+    : "POR QUÉ vale la pena verla ahora";
+  const cabecera =
+    "Sos Miru, el experto del videoclub, en español rioplatense.\n" +
+    'Título: "' + title + '" (' + meta + ").\n" +
+    context;
+  const cierre =
+    "Sin elogios vacíos, sin comillas, sin emojis. Si no conocés el título con certeza, " +
+    "describilo con prudencia y sin inventar datos.\n";
+  const prompt = full
+    ? cabecera +
+      "Escribí los dos textos de la ficha:\n" +
+      '- "synopsis": 2 frases (30 a 40 palabras) de qué trata — el planteo y qué está en juego —, sin spoilers.\n' +
+      '- "reason": 1 o 2 frases (25 a 35 palabras) con ' + fit + ". Después del porqué, el tono o clima " +
+      "(tenso, luminoso, melancólico, divertido...) y qué la vuelve memorable: una actuación, la dirección, " +
+      "un giro. Si suma, un dato de cinéfilo breve.\n" +
+      cierre +
+      'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"synopsis":"","reason":""}'
+    : cabecera +
+      "Escribí UNA sola frase de 25 a 35 palabras que cuente DE QUÉ VA (concreto y visual, sin spoilers) y " + fit + ". " +
+      cierre +
+      'Devolvé ÚNICAMENTE JSON válido (sin markdown): {"blurb":""}';
+
+  const job = (async () => {
+    const t0 = Date.now();
+    const text = await callAnthropicText(prompt, full ? 400 : 160, { timeoutMs: full ? 20000 : 12000, retries: 0 });
+    let value;
+    let words;
+    if (full) {
+      const d = detailFromText(text);
+      value = { synopsis: clip(d.synopsis, 400), reason: clip(d.reason, 400) };
+      words = (value.synopsis + " " + value.reason).split(/\s+/).filter(Boolean).length;
+    } else {
+      value = { blurb: clip(blurbFromText(text), 260) };
+      words = value.blurb ? value.blurb.split(/\s+/).length : 0;
+    }
+    logMetrics("tv-blurb", { llm_ms: Date.now() - t0, full, words, cached: false, home: !q });
+    if (words) blurbCacheSet(key, value);
+    return value;
+  })();
+  blurbInflight.set(key, job);
+  try {
+    return { ...(await job), cached: false };
+  } finally {
+    blurbInflight.delete(key);
+  }
+}
+
+// Pre-cargar el home al arrancar el server (para que el primer usuario no espere a la IA).
+export function warmHome() {
+  // Cintas primero (Discover solo, ~2 s) — la pantalla del QR es lo primero
+  // que se ve; el home completo (con Haiku) se calienta en paralelo.
+  tvRibbons().catch(function () {});
+  tvHome().catch(function () {});
+}

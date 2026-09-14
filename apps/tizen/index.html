@@ -1,0 +1,26 @@
+<!doctype html>
+<!--
+  Cáscara de la app de Samsung Tizen: NO tiene lógica propia, solo redirige
+  de inmediato a la TV liviana remota (tv-lite.html), servida por el backend
+  en Railway. Es el mismo patrón que usa la app de Android (apps/tv,
+  server.url en capacitor.config.ts) — la diferencia es que un widget Tizen
+  no tiene un campo de config equivalente para "cargar esta URL remota", así
+  que acá el redirect se hace a mano con JS. Ver apps/tizen/README.md.
+-->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080, user-scalable=no">
+<title>Miru</title>
+<style>
+  /* Fondo violeta de marca (mismo #2A0F5C que capacitor.config.ts de la app
+     de Android): tapa el instante negro antes de que dispare el redirect. */
+  html, body { margin: 0; height: 100%; background: #2A0F5C; }
+</style>
+</head>
+<body>
+<script>
+  location.replace("https://miru-ai.up.railway.app/tv-lite.html");
+</script>
+</body>
+</html>

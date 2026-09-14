@@ -1,87 +1,46 @@
-# 🚀 Guía de Deployment: QueVeo en Railway
+# Deployment — Miru en Railway
 
-## Descripción General
+Detalle de arquitectura completo en **`ARCHITECTURE.md`**; resumen de producto en `CLAUDE.md`. Este archivo
+es solo el checklist de deploy.
 
-QueVeo es una aplicación fullstack construida con:
-- **Frontend/Backend:** TanStack Start (fullstack React framework)
-- **Build tool:** Vite
-- **Runtime:** Node.js 22
-- **Database:** Supabase
-- **Build system:** NIXPACKS
+## Servicios (Railway, NIXPACKS, Node 22)
 
-## Requisitos Previos
+Son **servicios independientes**, todos con `npm install --legacy-peer-deps` + build Vite:
 
-1. **GitHub:** El repositorio conectado a Railway
-2. **Supabase:** Una instancia configurada con:
-   - URL del proyecto
-   - Anon key (publishable)
-   - Project ID
-3. **Railway:** Cuenta creada en https://railway.app
+| Servicio | Config | Build | Start | Dominio |
+|---|---|---|---|---|
+| **Backend + web** | raíz `railway.json` / `nixpacks.toml` | `npm run build` (Vite → `dist/`) | **`node server-node.mjs`** | `miru-ai.up.railway.app` |
+| **web-control** | `apps/web-control/` | `npm run build` | `node server.mjs` | `mirutv-touch.up.railway.app` |
+| **landing** | `apps/landing/` | `npm run build` | `node server.mjs` | (servicio propio) |
 
-## Paso 1: Preparar Variables de Entorno
+- **Branch conectado: `dev`** — deploy automático al push. Restart `ON_FAILURE`, máx 3 reintentos.
+- Las apps **Capacitor (móvil, TV) NO se deployan en Railway**: se compilan a APK (`npm run apk`) y se
+  distribuyen por la landing/manifest.
+- ⚠️ El start real del backend es **`server-node.mjs`** (servidor Node nativo), NO `.output/server/index.mjs`.
 
-El proyecto requiere estas variables en Supabase:
+## Variables de entorno (servicio backend + web)
 
 ```
-# Variables de Supabase (obtener de https://supabase.com/dashboard)
-SUPABASE_URL=https://<tu-proyecto>.supabase.co
+# AI + voz
+ANTHROPIC_API_KEY=<clave>
+ELEVENLABS_API_KEY=<clave>        # TTS (opcional ELEVENLABS_VOICE_ID)
+GROQ_API_KEY=<clave>              # STT (Whisper)
+
+# Supabase
+SUPABASE_URL=https://<proyecto>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=<anon-key>
-VITE_SUPABASE_URL=https://<tu-proyecto>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role>   # solo server
+VITE_SUPABASE_URL=https://<proyecto>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<anon-key>
-VITE_SUPABASE_PROJECT_ID=<tu-project-id>
+VITE_SUPABASE_PROJECT_ID=<project-id>
 ```
 
-**Nota sobre Railway:** El puerto se inyecta automáticamente como `PORT`, no necesita configurarlo manualmente.
+`PORT` lo inyecta Railway. Env vars de web-control / landing / apps: ver `ARCHITECTURE.md` §8.
 
-## Paso 2: Crear Proyecto en Railway
+## Troubleshooting
 
-1. Ir a https://railway.app
-2. Click en "New Project" → "Deploy from GitHub repo"
-3. Seleccionar el repositorio `amihanovich/que_veo`
-4. Railway detectará automáticamente la configuración con `nixpacks.toml`
-
-## Paso 3: Configurar Variables de Entorno en Railway
-
-1. En el dashboard de Railway, ir a "Variables"
-2. Agregar las variables de Supabase:
-   - `SUPABASE_URL`
-   - `SUPABASE_PUBLISHABLE_KEY`
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_PUBLISHABLE_KEY`
-   - `VITE_SUPABASE_PROJECT_ID`
-
-## Paso 4: Deploy Automático
-
-Railway está configurado para:
-- **Build:** `npm run build` (genera `.output/server/index.mjs`)
-- **Start:** `node .output/server/index.mjs`
-- **Restart policy:** ON_FAILURE con máximo 3 reintentos
-
-El deploy se ejecutará automáticamente al hacer push a la rama principal o cuando se actualice la rama conectada.
-
-## Monitoreo
-
-- **Logs:** Ver en tiempo real en Railway dashboard
-- **Health:** Railway verificará que el servidor responda en el puerto asignado
-- **Rollback:** Railway permite revertir a deployments anteriores
-
-## Solución de Problemas
-
-### Build falla
-- Verificar que `npm install --legacy-peer-deps` funciona localmente
-- Revisar logs en Railway dashboard
-
-### Servidor no inicia
-- Verificar variables de entorno están configuradas
-- Revisar logs: `node .output/server/index.mjs`
-
-### Problemas con Supabase
-- Verificar que las claves de Supabase son correctas
-- Verificar CORS en Supabase para el dominio de Railway
-
-## Links Útiles
-
-- [Railway Docs](https://docs.railway.app/)
-- [TanStack Start Docs](https://tanstack.com/start/latest)
-- [Supabase Docs](https://supabase.com/docs)
-- [Vite Docs](https://vitejs.dev/)
+- **Build falla:** verificar que `npm install --legacy-peer-deps && npm run build` corre localmente; ver logs.
+- **Server no inicia:** confirmar env vars; el start es `node server-node.mjs`.
+- **Sin pósters:** Cinemeta (Stremio) es la fuente principal; ver §5 de `ARCHITECTURE.md`.
+- **TV desactualizada:** editar `public/tv-lite.html` + redeploy → el APK de TV (cáscara) muestra la nueva
+  versión sin rebuild.

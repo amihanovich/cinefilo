@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Manifiesto del widget Tizen (W3C Widget + extensiones Tizen). Ver
+  apps/tizen/README.md para el setup completo (Tizen Studio, certificado,
+  modo desarrollador, instalación).
+
+  ⚠️ "MiruTV0001" es el package ID: 10 caracteres alfanuméricos que identifican
+  la app en el TV. Para sideload en modo desarrollador es un valor libre (lo
+  elegimos nosotros; Tizen Studio lo generaría al crear el proyecto desde la
+  GUI). NO cambiarlo nunca: es la identidad de actualización — si cambia, el TV
+  lo trata como una app distinta en vez de actualizar la instalada.
+-->
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="https://miru-ai.up.railway.app/tizen"
+        version="0.1.0"
+        viewmodes="fullscreen">
+  <tizen:application id="MiruTV0001.MiruTV"
+                      package="MiruTV0001"
+                      required_version="4.0"/>
+  <name>Miru</name>
+  <icon src="icon.png"/>
+  <content src="index.html"/>
+  <tizen:profile name="tv-samsung"/>
+  <!-- Sin esto, la política de origen de Tizen bloquea la navegación hacia
+       el dominio de Railway — es el equivalente Tizen de lo que en Android
+       resuelve directamente el campo server.url de Capacitor. -->
+  <access origin="*" subdomains="true"/>
+  <tizen:setting screen-orientation="landscape"
+                 context-menu="disable"
+                 background-support="disable"
+                 encryption="disable"
+                 install-location="auto"
+                 hwkey-event="enable"/>
+</widget>

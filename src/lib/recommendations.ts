@@ -37,6 +37,8 @@ export type Recommendation = {
   platform: string;
   duration: string;
   type: string;
+  year?: string;       // ej: "2019"
+  ageRating?: string;  // "ATP" | "PG" | "+13" | "+16" | "+18"
   reason: string;
 };
 
@@ -52,6 +54,7 @@ export type RecommendationsResult = {
   main: Recommendation;
   alternatives: Recommendation[];
   clarification_needed?: string | null;
+  cinephile_note?: string | null;
 };
 
 export const TIME_OPTIONS: TimeOption[] = ["30 min", "1 hora", "1.5 horas", "Noche entera"];
@@ -95,26 +98,23 @@ export const PLATFORM_COLORS: Record<Platform, string> = {
 
 export function deepLinkFor(platform: string, title: string): string {
   const t = encodeURIComponent(title);
-  // Google site-search es más confiable que los buscadores internos
-  // (muchos requieren sesión activa y rompen si los abrís desde otro sitio).
-  const googleSite = (domain: string) =>
-    `https://www.google.com/search?q=${t}+site%3A${domain}&btnI=1`;
+  // Universal Links: iOS y Android interceptan estas URLs HTTPS y abren
+  // la app nativa automáticamente si está instalada. Si no está, abre el browser.
+  // Star+ fue absorbido por Disney+ en LatAm en 2024.
   switch (platform) {
     case "Netflix":
-      return googleSite("netflix.com");
+      return `https://www.netflix.com/search?q=${t}`;
     case "Disney+":
-      return googleSite("disneyplus.com");
-    case "Max":
-      return googleSite("max.com");
-    case "Prime Video":
-      return googleSite("primevideo.com");
-    case "Apple TV+":
-      return googleSite("tv.apple.com");
-    case "Paramount+":
-      return googleSite("paramountplus.com");
     case "Star+":
-      // Star+ se integró en Disney+ (LatAm, 2024)
-      return googleSite("disneyplus.com");
+      return `https://www.disneyplus.com/search`;
+    case "Max":
+      return `https://play.max.com/search?q=${t}`;
+    case "Prime Video":
+      return `https://www.primevideo.com/search/?phrase=${t}`;
+    case "Apple TV+":
+      return `https://tv.apple.com/search?term=${t}`;
+    case "Paramount+":
+      return `https://www.paramountplus.com/search/${t}/`;
     default:
       return `https://www.google.com/search?q=${t}+ver+online`;
   }
