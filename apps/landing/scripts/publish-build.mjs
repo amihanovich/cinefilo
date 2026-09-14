@@ -1,12 +1,18 @@
 #!/usr/bin/env node
-// Publica un build (APK) de una app de Miru en Supabase Storage y actualiza
-// el manifest.json que lee la landing. Se corre desde la terminal:
+// Publica el build de una app de Miru en Supabase Storage y actualiza el
+// manifest.json que lee la landing. Se corre desde la terminal:
 //
 //   SUPABASE_URL=https://<proj>.supabase.co \
 //   SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
 //   node scripts/publish-build.mjs --app=tv --version=1.2.0 ./miru-tv.apk
 //
-// Apps válidas: tv | mobile-android
+// Apps válidas (con su formato): mobile-android/.apk | tv/.apk (Android TV) |
+// tizen/.wgt (Samsung) | webos/.ipk (LG)
+//
+// ⚠️ tizen y webos NO se pueden instalar desde el paquete descargado: los TVs
+// no tienen sideload para el usuario final (hace falta una PC con el SDK y el
+// TV en modo desarrollador). Se publican para tenerlos en una URL estable, NO
+// como un "descargá e instalá" — la landing los muestra en consecuencia.
 //
 // El service role key NO se commitea y NO se usa en el build de la landing:
 // solo lo necesita este script para subir archivos (bypassa RLS del bucket).
@@ -15,7 +21,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
-const VALID_APPS = ["tv", "mobile-android"];
+// Cada app tiene su formato de paquete propio. El MIME importa: si servimos un
+// .wgt/.ipk como APK, el navegador del que descarga puede renombrarlo solo.
+const APPS = {
+  "mobile-android": { ext: "apk", mime: "application/vnd.android.package-archive" },
+  tv: { ext: "apk", mime: "application/vnd.android.package-archive" },
+  tizen: { ext: "wgt", mime: "application/octet-stream" },
+  webos: { ext: "ipk", mime: "application/octet-stream" },
+};
+const VALID_APPS = Object.keys(APPS);
 const MANIFEST_PATH = "manifest.json";
 
 function fail(msg) {
@@ -136,7 +150,7 @@ async function updateManifest(app, entry) {
 async function main() {
   const fileBuffer = fs.readFileSync(filePath);
   const size = fileBuffer.byteLength;
-  const objectPath = `${app}/miru-${app}-${version}.apk`;
+  const objectPath = `${app}/miru-${app}-${version}.${APPS[app].ext}`;
 
   // 0. Asegurar que el bucket público exista.
   await ensureBucket();
@@ -145,7 +159,7 @@ async function main() {
   console.log(`↑ Subiendo ${filePath} → ${BUCKET}/${objectPath} (${(size / 1048576).toFixed(1)} MB)…`);
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(objectPath, fileBuffer, {
     upsert: true,
-    contentType: "application/vnd.android.package-archive",
+    contentType: APPS[app].mime,
   });
   if (upErr) fail(`No se pudo subir el APK: ${upErr.message}`);
 

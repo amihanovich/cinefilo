@@ -20,9 +20,9 @@ Recomendador conversacional de pelis/series. El foco es la **app móvil**:
    remoto** (la experiencia visual pasa a la TV).
 3. Si llega a una TV con Miru y no quiere instalar la móvil, **escanea el QR** y la maneja desde la
    **web-control**.
-4. Y si no quiere vincular nada: al abrir, la TV ofrece **"Usar el control de la TV"** (mecánica
-   Disney+) — home navegable con el D-pad físico, búsqueda con teclado en pantalla, Mi lista,
-   Ya vistas y filtros de plataformas, todo local a la TV.
+4. Y si no quiere vincular nada: la TV abre **directo en el QR** y **cualquier flecha u OK del control
+   físico entra al home** (sin selector previo) — home navegable con el D-pad, búsqueda con teclado en
+   pantalla, Mi lista, Ya vistas, Abiertos y filtros de plataformas, todo local a la TV.
 
 El AI es **Claude Haiku** (`claude-haiku-4-5-20251001`) vía un backend Node en Railway. Devuelve 1
 recomendación principal + N alternativas, con refinamiento conversacional, feedback de gustos y voz (STT/TTS).
@@ -33,7 +33,8 @@ recomendación principal + N alternativas, con refinamiento conversacional, feed
 |---|---|---|
 | **`apps/mobile`** | La app principal (recomendador por voz/texto + control de TV) | APK Capacitor, bundlea el front, `com.cinefilo.app` |
 | **`apps/tv`** | App de TV = **cáscara WebView** que carga `public/tv-lite.html` (remoto) | APK Capacitor, `server.url`, `com.cinefilo.tv` |
-| **`apps/tizen`** | App de Samsung Smart TV = **cáscara** que redirige a `public/tv-lite.html` (remoto). v1 sin deep-link nativo (fallback web) | `.wgt`, sin build/npm, solo modo desarrollador (sin tienda Samsung) |
+| **`apps/tizen`** | App de Samsung Smart TV = **cáscara** que redirige a `public/tv-lite.html` (remoto). v1 sin deep-link nativo (fallback web) | `.wgt` FIRMADO (`build-wgt.ps1`), solo modo desarrollador (sin tienda Samsung) |
+| **`apps/webos`** | App de LG webOS = **cáscara** gemela de la de Tizen (mismo redirect). Cubre LG + webOS Hub | `.ipk` SIN firma (`build-ipk.ps1`, CLI `@webosose/ares-cli`), modo desarrollador (expira a las ~50 h) |
 | **`apps/web-control`** | Control web (D-pad) que abre el QR de la TV — **réplica del control remoto de la móvil**. Es el único control web vivo | Servicio Railway propio |
 | **`src/` (web)** | Recomendador web (TanStack Start). **Legacy/secundaria** (incluido su `/control` viejo, que ya no abre el QR) | Sirve la web + el backend `/api/*` |
 | **`apps/landing`** | Landing de descargas (QRs desde un manifest en Supabase) | Servicio Railway propio |
@@ -96,7 +97,20 @@ memorias viejas o en tu cabeza, ignorarlos:
    se migran al boot de cada cliente), no DB.
 6. **Actualizar la TV sin rebuild:** editar `public/tv-lite.html` + redeployar el backend → el APK de TV ya
    instalado muestra la versión nueva (carga la URL remota).
-7. **Home sin búsqueda = banner grande + tiras "Top 5 en X"** (TV y móvil): catálogo por
+7. **TV = un solo banner que sigue al foco + grilla completa** (revisión con Carlos, 2026-09): el
+   banner es la ficha de la tarjeta enfocada (no un carrusel); todos los resultados van en la grilla
+   desde el primero, 6 por fila, tarjetas solo imagen. El **banner manda en la pantalla** (56vh, sin
+   borde ni esquinas, sangra a los bordes y se funde con el fondo por gradiente; usa la imagen
+   HORIZONTAL del título — `backdropUrl`, backdrop de TMDB — y cae al póster acotado a la derecha si
+   no la hay): la primera fila de tarjetas ASOMA abajo, como en Prime. Los textos los pide la TV a
+   `/api/tv-blurb` bajo demanda, nunca la búsqueda: **una frase** (`blurb`) para el título del banner,
+   y **sinopsis + porqué** (`full: true`) al abrir una ficha — como la frase ya está en pantalla, la
+   ficha nunca espera en blanco. Ítems `avail:
+   "unknown"` se muestran "Por confirmar en X". Detalle en `ARCHITECTURE.md` §3.B.
+8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
+   "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
+   visto fuera de Miru.
+9. **Home sin búsqueda = banner + tiras "Top 6 en X"** (TV y móvil): catálogo por
    plataforma desde `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma
    (`byPlatform` en `availability.mjs` — NO es el top oficial de cada plataforma, no hay API
    pública de eso), numerado 1-10. Las plataformas del usuario van primero, el resto atenuado.
@@ -104,7 +118,7 @@ memorias viejas o en tu cabeza, ignorarlos:
    son estado propio (`topRows`/`rowFocus`), aditivo sobre `items` — "Más opciones para vos" y el
    scroll infinito siguen igual debajo. La tira "Mi lista" NO vive en el home (acceso: tab del
    menú en RC, botón del control en vinculado, desplegable comprimido en el móvil).
-8. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
+10. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
    clickeable (listener de click delegado + botón ‹ Volver flotante + scroll táctil de tiras;
    arranca directo en el contenido). Entrada: la URL de la web-control SIN `?session=` redirige
    ahí; con `?session=` sigue siendo el control del QR.

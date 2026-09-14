@@ -20,6 +20,8 @@ export const mediaItemSchema = z.object({
   synopsis: z.string().optional(),
   /** Por qué fue elegida para esta lista (y si se aleja del pedido, lo aclara). */
   reason: z.string().optional(),
+  /** Una frase: de qué va + por qué encaja (la TV la pide bajo demanda; reemplaza a synopsis+reason). */
+  blurb: z.string().optional(),
   /** Sección a la que pertenece (p. ej. "Recomendadas para vos"), para agrupar en la UI. */
   section: z.string().optional(),
 });
@@ -64,6 +66,8 @@ export const ControlCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("HOME") }),
   // SHOW_TODAY: mostrar el carrito "Para hoy" de la TV como lista ("Candidatas").
   z.object({ type: z.literal("SHOW_TODAY") }),
+  // SHOW_OPENED: mostrar en la TV "Abiertos recientemente" (lo que se abrió desde la TV).
+  z.object({ type: z.literal("SHOW_OPENED") }),
 ]);
 export type ControlCommandMessage = z.infer<typeof ControlCommand>;
 
@@ -78,6 +82,8 @@ export const TvState = z.discriminatedUnion("type", [
     todayTitles: z.array(z.string()).optional(),
     // Ítems completos de "Mi lista" (aditivo; los clientes viejos lo ignoran).
     myList: z.array(mediaItemSchema).optional(),
+    // "Abiertos recientemente" de la TV (aditivo): lo que se abrió desde Miru en esa TV.
+    opened: z.array(mediaItemSchema).optional(),
   }),
   z.object({ type: z.literal("NOW_PLAYING"), media: mediaItemSchema }),
 ]);

@@ -9,6 +9,8 @@ import { Sparkles, Send, Loader2, Shuffle, QrCode } from "lucide-react";
 import { Orb } from "./Orb";
 import { VoicePill } from "./VoicePill";
 import { TopPlatformRows } from "./TopPlatformRows";
+import { RecentOpened } from "./RecentOpened";
+import type { OpenedItem } from "../lib/opened";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 
@@ -23,11 +25,13 @@ interface WelcomeScreenProps {
   onSubmit: (text: string) => void; // pedido del usuario → 1ª búsqueda
   onSurprise: () => void; // reco automática ("lo mejor para vos")
   onConnectTv?: () => void; // ir directo a escanear el QR de la TV (sin buscar antes)
+  recentOpened?: OpenedItem[]; // "Abiertos recientemente" (registro local de aperturas)
+  onReopen?: (item: OpenedItem) => void;
 }
 
 const SPLASH_MSG = "Rastrillando las plataformas para encontrar lo tuyo…";
 
-export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, onConnectTv }: WelcomeScreenProps) {
+export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, onConnectTv, recentOpened, onReopen }: WelcomeScreenProps) {
   // Congelamos firstTime en el mount: si el padre lo cambia (al marcar la key)
   // no queremos que el efecto del splash se vuelva a disparar.
   const firstTimeRef = useRef(firstTime);
@@ -154,7 +158,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
   };
 
   // La bienvenida ya no es una pantalla fija: el bloque del mic ocupa casi todo
-  // el alto y debajo asoman las tiras "Top 5 en X" (catálogo sin buscar) — el
+  // el alto y debajo asoman las tiras "Top 6 en X" (catálogo sin buscar) — el
   // borde visible de la primera tira ES la affordance de scroll.
   return (
     <div className="relative h-[100dvh] overflow-y-auto bg-background safe-top safe-bottom">
@@ -260,7 +264,14 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
       </div>
       </div>
 
-      {/* Catálogo por defecto sin búsqueda: el Top 5 de cada plataforma. */}
+      {/* Abiertos recientemente: retomar lo que abriste desde Miru, antes del catálogo. */}
+      {recentOpened && recentOpened.length > 0 && onReopen && (
+        <div className="px-8">
+          <RecentOpened items={recentOpened} onOpen={onReopen} defaultOpen />
+        </div>
+      )}
+
+      {/* Catálogo por defecto sin búsqueda: el Top 6 de cada plataforma. */}
       <div className="flex flex-col items-center px-8">
         <TopPlatformRows />
       </div>

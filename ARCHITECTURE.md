@@ -53,14 +53,34 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
-| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV: `items` (recomendadas + estrenos) **+ `rows`** (tiras "Top 5 en X" por plataforma). Cacheado 6h en memoria. |
+| `/api/tv-home` | GET | `tv-search.mjs` → `tvHome()` | Home de TV: `items` (recomendadas + estrenos) **+ `rows`** (tiras "Top 6 en X" por plataforma). Cacheado 6h en memoria. |
 | `/api/tv-home-more` | POST | `tv-search.mjs` → `tvHomeMore()` | Carga infinita del home de TV. |
-| `/api/top-platforms` | GET | `tv-search.mjs` → `tvTop()` | Solo las `rows` del home (las tiras "Top 5 en X") — las consume el móvil. Mismo caché de 6h. |
-| `/api/tv-search` | GET/POST | `tv-search.mjs` → `tvSearch()` | Búsqueda para la TV liviana. |
+| `/api/top-platforms` | GET | `tv-search.mjs` → `tvTop()` | Solo las `rows` del home (las tiras "Top 6 en X") — las consume el móvil. Mismo caché de 6h. |
+| `/api/tv-search` | GET/POST | `tv-search.mjs` → `tvSearch()` | Búsqueda para la TV liviana. **Forma liviana** (2026-09): pide a Haiku solo título/plataforma/año/tipo (18 ítems, `max_tokens` 1200), valida en TMDB en la misma respuesta y devuelve ≤15 con `avail: "confirmed" \| "unknown"`. Sin `synopsis/hook/reason`. |
+| `/api/tv-blurb` | POST | `tv-search.mjs` → `tvBlurb()` | **Texto de UN título bajo demanda**, en dos tamaños. Default: una frase (25-35 palabras) "de qué va + por qué encaja con el pedido" → `{blurb}`, para el banner (`max_tokens` 160, timeout 12 s). Con **`full: true`**: los dos bloques de la ficha, `synopsis` (30-40 palabras) + `reason` (25-35) → `{synopsis, reason}` (`max_tokens` 400, timeout 20 s), solo al ABRIR una ficha. Body `{title, year, type, platform, q, section, full}`. Caché 24 h y dedupe en vuelo, con key propia por modo. Cubeta de rate limit propia (60/min/IP, `ratelimit.mjs`). |
+| `/api/tv-ribbons` | GET | `tv-search.mjs` → `tvRibbons()` | Pósters de las cintas de la pantalla del QR (solo Discover cacheado, sin IA). |
+| `/api/availability-status` | GET | `availability.mjs` → `availabilityStatus()` | Diagnóstico de TMDB (¿ve la key? ¿responde?). |
 | `/api/transcribe` | POST | `transcribe.mjs` → `transcribeAudio()` | STT (audio → texto). |
-| `/api/tts` | POST | `tts.mjs` → `ttsAudio()` | TTS (texto → `audio/mpeg`). |
+| `/api/tts` | POST/GET | `tts.mjs` → `ttsStream()` | TTS (texto → `audio/mpeg`, streaming). |
 | `/api/ping` | GET | inline | Warmup barato (cold start de Railway). |
+| `/tv` | — | inline | 302 → `/tv-lite.html` (para tipear con el control remoto). |
 | resto | — | `dist/server/server.js` | SSR de la web app. |
+
+**Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20
+(recommend, tv-search, tv-home-more, transcribe, tts, ask, orb, intent) y **blurb 60 en cubeta aparte** (navegar
+tarjetas en la TV no bloquea las búsquedas).
+
+**Métricas** (2026-09): cada búsqueda/blurb loguea una línea `[metrics] {...}` (llm_ms, tmdb_ms, asked, returned,
+confirmed, unknown, dropped, cached) para comparar antes/después. La TV loguea `[metrics-tv]` (submit → rueda →
+respuesta → navegable → primera carátula → primer texto; con `?debug=1` se ve en un overlay). El móvil manda
+`search_timing` a PostHog.
+
+**Parse defensivo** (`parseLooseJson`): si Haiku trunca el JSON, se rescatan los ítems completos en vez de 500.
+
+**Disponibilidad expuesta**: `pickAvailable(..., expose=true)` deja `avail` en cada ítem de `/api/tv-search`,
+`/api/tv-home-more` y el home (`confirmed` = verificado en TMDB, incluida corrección de plataforma; `unknown` = solo
+lo dijo la IA). `none`/`unlisted` nunca viajan. La TV pinta `unknown` como "Por confirmar en X" (pastilla gris, sin
+atribución JustWatch). `/api/recommend` (APK móvil) NO expone el campo.
 
 Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); replican la lógica de
 `src/lib/recommendations.functions.ts`.
@@ -76,8 +96,8 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 - **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
   home de TV vía `discoverPopular(country)` — 6 plataformas × movie/tv × popular/recent = 24 requests
   paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR
-  plataforma (para las tiras "Top 5 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
-  ⚠️ El "Top 5" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
+  plataforma (para las tiras "Top 6 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
+  ⚠️ El "Top 6" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
   tiene API pública). ⚠️ El caché del home no tiene key de región: el top es de `DEFAULT_REGION` (AR)
   para todos.
 - **Pósters:** **Cinemeta (Stremio) primero**, iTunes + Wikipedia de fallback (ver §5).
@@ -97,7 +117,14 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 - **Modo control de TV:** `src/screens/ControlScreen.tsx` + `src/hooks/use-tv-channel.ts` + `src/lib/tv-remote.ts`.
   Escanea el QR de la TV (`@capacitor-mlkit/barcode-scanning`) y se conecta como rol "control".
 - Backend: `src/lib/api.ts` → `VITE_API_BASE_URL ?? https://miru-ai.up.railway.app`.
-- Build APK: `npm run apk` (Gradle `assembleDebug`). NO se deploya en Railway.
+- Build APK: `npm run apk` (Gradle `assembleDebug`). **Además** se sirve como web (`apps/mobile/server.mjs` +
+  `railway.json`/`nixpacks.toml`, root `apps/mobile`) en `webapp-miru-production.up.railway.app` — "Miru en la
+  compu" para quien no tiene Android; la landing la linkea. Es la web que sigue (decisión 2026-09); la legacy
+  `src/` se retira más adelante.
+- **"Abiertos recientemente"** (`src/lib/opened.ts`, `miru:opened`, 2026-09): registro local de cada "Ver en X"
+  (título, plataforma, fecha, `via`: deeplink / app-search / web / google, `confirmed`). Tira en la bienvenida
+  y en los resultados (`RecentOpened.tsx`; tocar vuelve a abrir re-consultando JustWatch) + contador en Mi
+  cuenta. NO es progreso de reproducción (no inventa episodio/minuto; no captura lo visto fuera de Miru).
 
 ### B. `apps/tv` — app de TV Android (CÁSCARA / WebView)
 - `appId com.cinefilo.tv`. Es una **cáscara**: `server.url` en `apps/tv/capacitor.config.ts` apunta a
@@ -107,11 +134,36 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   el APK**. Solo hace falta rebuild si cambia la URL, el manifest, el icono/banner o los `<queries>`.
 - `public/tv-lite.html` (+ `public/tv-supabase.js`, `/api/tv-*`) es la TV real. `public/tv-lite.html` es
   self-contained; `tv-supabase.js` (bundle de Supabase) lo carga para el pairing Realtime.
-- **Modos de UI de la TV** (rebranding Miru, 2026-08): al abrir muestra una **pantalla de elección**
-  (mecánica Disney+) — "Vincular el teléfono" (QR) o "Usar el control de la TV". Estado `uiMode`
-  (`choose|pair|rc|linked`). En **modo RC** la home suma una fila de tabs (Buscar con teclado en
-  pantalla D-pad / Mi lista / Ya vistas / Plataformas); en **modo vinculado** la UI queda limpia y
-  todo se maneja desde el control. Si el control pierde presencia ya NO se expulsa al QR: banner
+- **Modos de UI de la TV** (revisión con Carlos, 2026-09): al abrir muestra **directamente el QR**
+  (`uiMode = "pair"`, la raíz) con la indicación "cualquier flecha u OK empieza": la primera tecla del
+  control físico entra al **modo RC** (`enterRc()`, solo entra, no mueve el foco); un comando del
+  teléfono pasa a **vinculado**. Ya no hay pantalla previa de elección. Estado `uiMode` (`pair|rc|linked`);
+  `pairReturn` (`root|rc`) dice a dónde vuelve BACK desde el QR (raíz = el sistema cierra la app; desde el
+  tab "Vincular teléfono" vuelve a RC). BACK en la raíz del home muestra el QR. En **modo RC** la home suma
+  una fila de tabs (Mic / Buscar con teclado D-pad / Mi lista / Ya vistas / Plataformas / ▶ Abiertos /
+  Vincular teléfono); en **modo vinculado** la UI queda limpia y todo se maneja desde el control.
+- **Layout** (2026-09, patrón Prime Video): **un solo banner** que es la ficha de la tarjeta enfocada
+  (`heroItem()`: tile "Top 6" o ítem de la grilla; `syncHero()` parchea solo el banner). Se fue el
+  carrusel de 5 (`TOP`/`heroIndex`): **todos** los resultados van en la grilla desde el primero, 6 por
+  fila (`COLS` en JS = `--cols` en CSS), tarjetas solo imagen+título+pastilla. El banner mide 56vh (302 px
+  a 960×540 —viewport CSS de 1080p con DPR 2—, 220 px a 720p) para que la primera fila quede a la
+  vista. Navegación: grilla ←/→ ±1, ↑/↓ ±COLS; desde la fila 0, ↑ sube a las tiras Top 6 (home) o a los
+  botones del banner (RC) y de ahí al menú. OK = ficha, OK doble = Mi lista. Touch: 1er toque elige, 2º
+  abre la ficha.
+- **Texto bajo demanda** (2026-09): la búsqueda ya no escribe textos. La TV los pide a
+  `/api/tv-blurb`, con dos tamaños y en dos momentos distintos:
+  1. **una frase** (`blurb`) para el título del BANNER — el primero al llegar resultados, después el
+     que se enfoca, con debounce de 250 ms;
+  2. **sinopsis + porqué** (`full: true`) al ABRIR una ficha. Como la frase corta ya está en pantalla,
+     la ficha nunca espera en blanco: se expande cuando llega y si falla queda la frase.
+  El estado vive en el objeto ítem (`_bs` para la frase, `_ds` para el detalle) y una respuesta tardía
+  solo repinta si ese ítem SIGUE siendo el del banner / la ficha. Los ítems del home cacheado, las
+  tiras "Top 6" y las listas guardadas ya traen `hook`/`synopsis`/`reason`, así que no piden nada
+  (`blurbOf()` / `needsDetail()`).
+- **Estados de búsqueda**: rueda inmediata; "No encontré nada para «q»" (vacío) y "No pudimos buscar" +
+  **Reintentar** (error; OK / control / click repiten el pedido).
+- **"Abiertos recientemente"** (`miru:tv:opened`): `play()` registra cada "Ver en X" (título, plataforma,
+  fecha, `via`); tab "▶ Abiertos" en RC, comando `SHOW_OPENED` desde el control y `SCREEN.opened`. Si el control pierde presencia ya NO se expulsa al QR: banner
   discreto y el contenido sigue navegable. La **sesión de pairing persiste 30 días** en
   `miru:tv:session` (QR estable entre recargas). El "carrito Para hoy" pasó a ser **"Mi lista"**
   (`miru:tv:mylist`, wire-legacy `ADD_TODAY`/`todayTitles`); "Ya vistas" del modo RC en `miru:tv:seen`;
@@ -134,6 +186,28 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 - Instalación **solo en modo desarrollador** (certificado de autor gratis vía Tizen Studio + modo
   desarrollador en el TV + `sdb`/`tizen install`), sin pasar por Samsung Seller Office (tienda
   oficial) — fuera de alcance por ahora. Detalle completo del setup en `apps/tizen/README.md`.
+- El empaquetado se hace con `apps/tizen/build-wgt.ps1` (empaqueta desde un staging y verifica que
+  el `.wgt` salga firmado). ⚠️ **La identidad de firma vive fuera del repo**: `miru-author.p12` +
+  su contraseña. Tizen exige la MISMA firma de autor y el MISMO package ID (`MiruTV0001`) para
+  actualizar una app ya instalada — si se pierde el `.p12`, cada copia instalada hay que
+  desinstalarla y reinstalarla (se pierde Mi lista y la sesión del QR).
+
+### C-bis. `apps/webos` — app de LG webOS (CÁSCARA)
+- Gemela de `apps/tizen`, mismo redirect JS a `tv-lite.html` desde un `index.html` sin lógica.
+  Cubre LG y las marcas que licencian webOS Hub (Hyundai, RCA, Konka). Manifiesto = `appinfo.json`
+  (en vez de `config.xml`), paquete = `.ipk` (en vez de `.wgt`), CLI = `@webosose/ares-cli` (un
+  paquete npm, no un SDK aparte).
+- **Bastante menos trabajoso que Tizen**: el `.ipk` de modo desarrollador **NO se firma** — no hay
+  certificados ni perfiles. Se empaqueta con `apps/webos/build-ipk.ps1`, que además verifica que
+  adentro viajen solo los 4 archivos de la app.
+- `appinfo.json` pone **`disableBackHistoryAPI: true`**: el botón Volver llega como keydown
+  (**keycode 461**, mapeado en `tv-lite.html` junto al 10009 de Tizen) en vez de que webOS haga
+  `history.back()` por su cuenta — así el back tiene UN solo camino, el mismo `backAction()`.
+- ⚠️ **El modo desarrollador de LG expira a las ~50 horas** y hay que renovarlo desde la app
+  Developer Mode; si vence, el TV desactiva las apps sideloadeadas. Necesita además una cuenta de
+  desarrollador LG (gratis). Detalle en `apps/webos/README.md`.
+- **No cambiar el `id`** (`com.miru.tv`): es la identidad de actualización, igual que el package ID
+  en Tizen.
 
 ### D. `apps/web-control` — control web standalone (D-pad)
 - SPA Vite servida por su propio `server.mjs` en un **servicio Railway aparte**. `src/ControlScreen.tsx` +
@@ -141,8 +215,12 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   y es la **réplica del control remoto de la app móvil**: mic vivo integrado (tap = grabar, tap =
   buscar), input de texto, filtros (plataformas + "Priorizar los más recientes", persistidos y
   re-emitidos con `SET_PLATFORMS` en cada cambio), atajos Mi lista (sheet con carátulas desde
-  `SCREEN.myList`) / Ya vistas, D-pad + OK contextual, y rueda de búsqueda propia (además de la de
-  la TV). Ambos controles se mantienen espejados a mano.
+  `SCREEN.myList`) / Ya vistas / Abiertos (`SHOW_OPENED`), D-pad + OK contextual, y rueda de búsqueda
+  propia (además de la de la TV). Ambos controles se mantienen espejados a mano.
+- **D-pad** (2026-09, `lib/dpad.ts`): los **botones** mandan la dirección natural (◀ = foco a la izquierda,
+  como el control físico); el **swipe** sobre el pad conserva el modelo "arrastrás el contenido" (dirección
+  opuesta). La TV no distingue el origen (recibe `NAVIGATE` + dirección); por eso ↑/↓ en la ficha siguen
+  ciclando entre botones en vez de mapear absoluto.
 - **Sin `?session=`** (URL pelada, sin escanear el QR): redirige a la **web touch** —
   `tv-lite.html?touch=1` en el backend principal, la misma UI de la TV en modo control tradicional
   pero clickeable/tocable (tablets y laptops). Con `?session=` el control funciona como siempre.
@@ -170,9 +248,11 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 - **Roles / presence:** `"tv"` y `"control"`; `broadcast.self=false`; el pairing se detecta por presencia.
 - **Eventos:** `"command"` (control→TV) y `"state"` (TV→control). Validados con Zod (`discriminatedUnion`).
   - Control→TV: `SEARCH` (+ `preferRecent` opcional), `FOCUS`, `LOAD_MORE`, `REMOVE`, `SET_PLATFORMS`
-    (lista vacía = todas), `SHOW_LIST`, `NAVIGATE`, `SELECT`, `BACK`, `PLAY`, `ADD_TODAY`, `OPEN_DETAIL`.
+    (lista vacía = todas), `SHOW_LIST`, `NAVIGATE`, `SELECT`, `BACK`, `PLAY`, `ADD_TODAY`, `OPEN_DETAIL`,
+    `HOME`, `SHOW_TODAY`, `SHOW_OPENED`.
   - TV→Control: `PAIRED`, `SCREEN` (home/search/detail/player + items + focusedId + todayTitles +
-    `myList` opcional con los ítems completos de "Mi lista"), `NOW_PLAYING`.
+    `myList` opcional con los ítems completos de "Mi lista" + `opened` opcional con "Abiertos
+    recientemente"), `NOW_PLAYING`. `MediaItem` suma `blurb` (una frase: de qué va + por qué).
   - Wire-legacy: `ADD_TODAY`/`SHOW_TODAY`/`todayTitles` conservan su nombre aunque la UI diga
     "Mi lista" (ver tabla de identificadores legacy arriba). Los campos nuevos son aditivos:
     los clientes viejos los ignoran (Zod no-strict).
@@ -181,9 +261,12 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
   dev: abrir tv-lite con `?control=<base-url>`). ⚠️ NO usar el origin del backend: ahí vive el `/control`
   viejo. Ese QR lo abre la web-control, o lo escanea la app móvil (`parseSession()` saca el `session` de
   cualquier URL, así que el host no le importa).
-- **⚠️ Deuda:** `tv-protocol.ts`, `use-tv-channel.ts` y `stt.ts` están **copiados a mano** en `src/lib/`,
-  `apps/web-control/src/lib/` y `apps/mobile/src/lib/`, y **ya divergieron**. Cualquier drift rompe el pairing
-  en silencio. Candidato a paquete compartido (pendiente).
+- **⚠️ Deuda:** `tv-protocol.ts`, `use-tv-channel.ts`, `stt.ts`, `tts.ts`, `Orb.tsx`, `dpad.ts` y
+  `platform-mentions.ts` están **copiados a mano** en `src/lib/`, `apps/web-control/src/` y `apps/mobile/src/`
+  (hoy semánticamente iguales — verificado 2026-09). Los que **sí divergieron**: `ControlScreen.tsx` ×2,
+  `deeplink.ts` (web-control sin `deepLinkFor`), `api.ts`, `storage.ts`. La detección de plataforma en texto
+  existe 4 veces (backend `availability.mjs`, móvil, web-control, ES5 en `tv-lite.html`). Cualquier drift
+  rompe el pairing en silencio. Candidato a paquete compartido (pendiente).
 
 ---
 
@@ -205,10 +288,12 @@ Transporte: **Supabase Realtime broadcast**. Protocolo en `tv-protocol.ts`.
 |---|---|---|---|
 | Backend + web | raíz `railway.json`/`nixpacks.toml` | `node server-node.mjs` | `miru-ai.up.railway.app` |
 | web-control | `apps/web-control/` | `node server.mjs` | `mirutv-touch.up.railway.app` |
-| landing | `apps/landing/` | `node server.mjs` | (servicio propio) |
+| landing | `apps/landing/` | `node server.mjs` | `landing-page-miru.up.railway.app` |
+| web-app móvil | `apps/mobile/` (root dir) | `node server.mjs` | `webapp-miru-production.up.railway.app` |
 
 - Branch conectado: **`dev`** (deploy automático al push). Restart `ON_FAILURE`, max 3.
-- Apps Capacitor (móvil, TV): NO se deployan; se compilan a APK y se distribuyen por la landing/manifest.
+- Apps Capacitor (móvil, TV): los APKs se compilan a mano y se distribuyen por la landing/manifest. La
+  **app móvil además se deploya como web** (mismo bundle, sin plugins nativos) — ver §3.A.
 
 ---
 

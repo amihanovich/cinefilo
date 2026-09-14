@@ -14,6 +14,9 @@ import { fetchUpstream } from "./upstream.mjs";
 
 const TMDB = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/w500";
+// Imagen HORIZONTAL del título (backdrop). El banner de la TV es panorámico:
+// con el póster vertical estirado se veía un recorte del centro, ampliado.
+const IMG_WIDE = "https://image.tmdb.org/t/p/w1280";
 
 export const DEFAULT_REGION = (process.env.DEFAULT_REGION || "AR").toUpperCase();
 
@@ -39,6 +42,55 @@ function canonicalProvider(p) {
     if (m.re.test(String(p.provider_name || ""))) return m.canonical;
   }
   return null;
+}
+
+// Detección de "pedido explícito de plataforma" en texto libre ("buscame algo
+// en Netflix", "fijate qué hay en Netflix o Disney"): un pedido así debe PISAR
+// el filtro de plataformas del perfil/control para ESA búsqueda puntual.
+// Reglas propias (no PROVIDER_MAP, que matchea provider_name de TMDB) porque
+// acá hay que evitar falsos positivos con títulos que contienen el nombre de
+// una plataforma (ej. "Mad Max"): se exige que la PRIMERA plataforma esté
+// precedida de "en/de/para" — el patrón natural al pedir algo — y recién ahí
+// se permite extender a una lista completa encadenada con coma/"y"/"o" (con
+// o sin repetir la preposición: "Netflix o Disney" y "Netflix o en Disney"
+// valen igual), así "en Netflix o Disney" agarra las dos.
+const ANY_PLATFORM_NAME =
+  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+const PREP = "(?:en|de|para)";
+const PLATFORM_LIST_RE = new RegExp(
+  `\\b${PREP}\\s+${ANY_PLATFORM_NAME}(?:\\s*(?:,|y|o|u)\\s*(?:${PREP}\\s+)?${ANY_PLATFORM_NAME})*`,
+  "i",
+);
+// Para clasificar CADA plataforma dentro del tramo ya confirmado como pedido
+// explícito por PLATFORM_LIST_RE — acá sí sin exigir preposición, porque el
+// contexto (venir de esa lista) ya descartó el falso positivo de un título.
+const PLATFORM_NAME_RULES = [
+  { canonical: "Netflix", re: /\bnetflix\b/i },
+  { canonical: "Prime Video", re: /\b(?:amazon\s+)?prime(?:\s+video)?\b/i },
+  { canonical: "Disney+", re: /\bdisney\s*\+?\b/i },
+  { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
+  { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
+  { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
+];
+
+/**
+ * Si el usuario nombró una o más plataformas explícitas en el pedido
+ * ("buscame algo en Netflix", "qué hay en Netflix o Disney"), ese pedido
+ * puntual debe buscar SOLO ahí, pisando el preset de plataformas del
+ * perfil/control. Devuelve [] si no hay mención explícita.
+ * @param {string} text
+ * @returns {string[]} nombres canónicos sin duplicados, en orden de aparición
+ */
+export function detectPlatformMentions(text) {
+  const t = String(text || "");
+  const m = PLATFORM_LIST_RE.exec(t);
+  if (!m) return [];
+  const clause = m[0];
+  const found = [];
+  for (const rule of PLATFORM_NAME_RULES) {
+    if (rule.re.test(clause) && !found.includes(rule.canonical)) found.push(rule.canonical);
+  }
+  return found;
 }
 
 function tmdbAuth() {
@@ -101,8 +153,10 @@ function discoverItem(c, kind, platform) {
     type: kind === "tv" ? "Serie" : "Película",
     year: Number.isFinite(y) ? y : undefined,
     posterUrl: c.poster_path ? IMG + c.poster_path : undefined,
+    backdropUrl: c.backdrop_path ? IMG_WIDE + c.backdrop_path : undefined,
     tmdbId: c.id,
     popularity: c.popularity || 0,
+    avail: "confirmed", // viene del catálogo real de TMDB (mismo campo que expone pickAvailable)
   };
 }
 
@@ -162,9 +216,9 @@ export async function discoverPopular(country) {
   out.popular.sort((a, b) => b.popularity - a.popularity);
   out.recent.sort((a, b) => b.popularity - a.popularity);
 
-  // Ranking POR plataforma (para las tiras "Top 5 en X"): mismas páginas del
+  // Ranking POR plataforma (para las tiras "Top 6 en X"): mismas páginas del
   // bucket "popular", pero agrupadas por plataforma ANTES del dedupe global.
-  // 8 por plataforma: margen sobre los 5 que se muestran.
+  // 8 por plataforma: margen sobre los 6 que se muestran (una fila de la TV).
   const byPlat = new Map();
   for (const page of pages) {
     if (page.bucket !== "popular") continue;
@@ -284,6 +338,7 @@ export async function resolveTitle(title, year, type, country) {
       tmdbId: best.id,
       providers,
       posterUrl: best.poster_path ? IMG + best.poster_path : null,
+      backdropUrl: best.backdrop_path ? IMG_WIDE + best.backdrop_path : null,
     };
     cacheSet(key, value);
     return value;
@@ -323,6 +378,7 @@ export async function validateItems(items, userPlatforms, country) {
     const r = await resolveTitle(it.title, it.year, it.type, country);
     if (!r) { it._avail = "unknown"; return; }
     if (r.posterUrl && !it.posterUrl) it.posterUrl = r.posterUrl;
+    if (r.backdropUrl && !it.backdropUrl) it.backdropUrl = r.backdropUrl;
     if (!r.providers.length) { it._avail = "none"; return; }
     if (r.providers.some((p) => norm(p) === norm(it.platform)) && inWanted(it.platform)) {
       it._avail = "confirmed";
@@ -340,23 +396,48 @@ export async function validateItems(items, userPlatforms, country) {
 }
 
 /**
+ * Resumen de `_avail` de una tanda (para logs/métricas). Llamar ANTES de
+ * pickAvailable, que borra la marca interna.
+ */
+export function availSummary(items) {
+  const out = { confirmed: 0, corrected: 0, unlisted: 0, none: 0, unknown: 0 };
+  for (const it of items || []) {
+    const a = it._avail === undefined ? "unknown" : it._avail;
+    if (a in out) out[a]++;
+  }
+  return out;
+}
+
+/**
  * Filtra el resultado de validateItems: disponibles primero (confirmed +
  * corrected); descarta "none" y "unlisted". Los "unknown" (no resueltos en
  * TMDB — en la práctica, casi siempre títulos inventados por el LLM) solo
  * rellenan hasta `minFill`: con suficientes verificados, mejor devolver menos
  * ítems y todos reales que una lista larga con fantasmas. Limpia _avail.
+ *
+ * Con `expose` cada ítem devuelto lleva `avail: "confirmed" | "unknown"` para
+ * que el cliente distinga lo verificado en TMDB de lo que solo dijo el LLM
+ * ("Por confirmar en X"). `corrected` se colapsa a "confirmed": la plataforma
+ * ya fue corregida, lo que importa es que está verificada. Sin `expose` se
+ * comporta como siempre (recommend.mjs — los APKs no esperan el campo).
  * @param {number} want - tope de ítems a devolver
  * @param {number} [minFill=want] - piso a completar con "unknown" si faltan verificados
+ * @param {boolean} [expose=false] - anotar `avail` en los ítems devueltos
  */
-export function pickAvailable(items, want, minFill) {
+export function pickAvailable(items, want, minFill, expose) {
   const fill = typeof minFill === "number" ? minFill : want;
   const ok = [];
   const unknown = [];
   for (const it of items || []) {
     const a = it._avail;
     delete it._avail;
-    if (a === "confirmed" || a === "corrected") ok.push(it);
-    else if (a === "unknown" || a === undefined) unknown.push(it);
+    if (a === "confirmed" || a === "corrected") {
+      if (expose) it.avail = "confirmed";
+      ok.push(it);
+    } else if (a === "unknown" || a === undefined) {
+      if (expose) it.avail = "unknown";
+      unknown.push(it);
+    }
   }
   const padded = ok.length >= fill ? ok : ok.concat(unknown.slice(0, fill - ok.length));
   return padded.slice(0, want);

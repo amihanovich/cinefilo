@@ -4,19 +4,21 @@
 // por texto + filtros que te acompañan + Mi lista / Ya vistas + D-pad y
 // acciones, por el mismo canal Realtime (lado "control").
 
-import { useCallback, useEffect, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import {
   Search, Play, CornerDownLeft, X, Smartphone, Plus, Check, Mic,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Home as HomeIcon, Bookmark, Eye, ThumbsUp, ThumbsDown, SlidersHorizontal,
+  Home as HomeIcon, Bookmark, Eye, ThumbsUp, ThumbsDown, SlidersHorizontal, History,
 } from "lucide-react";
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
 import { colorForPlatform, PLATFORM_COLORS } from "../lib/deeplink";
 import { Orb, type OrbPhase } from "../components/Orb";
 import { ControlSearchOverlay } from "../components/ControlSearchOverlay";
+import { detectPlatformMentions } from "../lib/platform-mentions";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { useBackLayer } from "../lib/back";
+import { buttonDirection, swipeDirection, swipeFromDelta, type Dir } from "../lib/dpad";
 
 const LIKED_KEY = "miru:liked";
 const DISLIKED_KEY = "miru:disliked";
@@ -72,6 +74,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   const [text, setText] = useState("");
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [myList, setMyList] = useState<MediaItem[]>([]);
+  const [opened, setOpened] = useState<MediaItem[]>([]); // "Abiertos recientemente" de la TV
   const [tvScreen, setTvScreen] = useState<string>("home");
   const [pendingSeen, setPendingSeen] = useState<MediaItem | null>(null);
 
@@ -83,6 +86,15 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
 
   // Feedback de actividad: rueda de búsqueda / rueda de "Abriendo X…"
   const [searching, setSearching] = useState<string | null>(null);
+  // Si el pedido en curso nombró una plataforma explícita ("en Netflix"), la
+  // rueda debe mostrar SOLO esa, pisando el filtro de plataformas del control.
+  const wheelPlatforms = useMemo(
+    () => {
+      const mentioned = detectPlatformMentions(searching ?? "");
+      return mentioned.length ? mentioned : platforms;
+    },
+    [searching, platforms],
+  );
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [opening, setOpening] = useState<MediaItem | null>(null);
 
@@ -96,6 +108,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         if (state.focusedId) setCenteredId(state.focusedId);
         setTodayTitles(state.todayTitles ?? []);
         if (state.myList) setMyList(state.myList);
+        if (state.opened) setOpened(state.opened);
         setTvScreen(state.screen);
         setNowPlaying(null);
         // Llegaron resultados: apagar la rueda de búsqueda.
@@ -272,11 +285,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
   };
 
   // ── D-pad: mueve la selección entre las tarjetas de la TV ───────────────────
-  // Modelo "arrastrás el contenido" (como el scroll del celular): la flecha /
-  // el gesto mueven la LISTA, no el cursor → se envía la dirección opuesta.
-  type Dir = "up" | "down" | "left" | "right";
-  const INVERT: Record<Dir, Dir> = { up: "down", down: "up", left: "right", right: "left" };
-  const nav = (direction: Dir) => send({ type: "NAVIGATE", direction: INVERT[direction] });
+  // Botones = mueven la selección (natural, como el control físico). Swipe =
+  // "arrastrás el contenido" (dirección opuesta). Ver lib/dpad.ts.
+  const navButton = (pressed: Dir) => send({ type: "NAVIGATE", direction: buttonDirection(pressed) });
+  const navSwipe = (swiped: Dir) => send({ type: "NAVIGATE", direction: swipeDirection(swiped) });
   const padStart = useRef<{ x: number; y: number } | null>(null);
   const onPadTouchStart = (e: ReactTouchEvent) => {
     const t = e.touches[0];
@@ -287,11 +299,9 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
     padStart.current = null;
     if (!s) return;
     const t = e.changedTouches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < 30) return; // fue un tap: lo maneja el botón
-    if (Math.abs(dx) > Math.abs(dy)) nav(dx > 0 ? "right" : "left");
-    else nav(dy > 0 ? "down" : "up");
+    const swiped = swipeFromDelta(t.clientX - s.x, t.clientY - s.y);
+    if (!swiped) return; // fue un tap: lo maneja el botón
+    navSwipe(swiped);
   };
 
   const play = () => {
@@ -348,6 +358,14 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </button>
         <button onClick={showSeen} disabled={!paired || seenCount === 0} className={chipBtn}>
           <Eye className="h-4 w-4" /> Ya vistas
+        </button>
+        <button
+          onClick={() => send({ type: "SHOW_OPENED" })}
+          disabled={!paired || opened.length === 0}
+          className={chipBtn}
+          title="Lo que abriste desde Miru en esta TV"
+        >
+          <History className="h-4 w-4" /> Abiertos
         </button>
       </div>
 
@@ -442,11 +460,11 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
       >
         <div className="grid grid-cols-3 grid-rows-3 gap-2" style={{ width: "min(64vw, 248px)" }}>
           <div />
-          <button onClick={() => nav("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
+          <button onClick={() => navButton("up")} disabled={!paired} aria-label="Arriba" className={padBtn}>
             <ChevronUp className="h-6 w-6" />
           </button>
           <div />
-          <button onClick={() => nav("left")} disabled={!paired} aria-label="Izquierda" className={padBtn}>
+          <button onClick={() => navButton("left")} disabled={!paired} aria-label="Izquierda" className={padBtn}>
             <ChevronLeft className="h-6 w-6" />
           </button>
           <button
@@ -457,17 +475,17 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
           >
             OK
           </button>
-          <button onClick={() => nav("right")} disabled={!paired} aria-label="Derecha" className={padBtn}>
+          <button onClick={() => navButton("right")} disabled={!paired} aria-label="Derecha" className={padBtn}>
             <ChevronRight className="h-6 w-6" />
           </button>
           <div />
-          <button onClick={() => nav("down")} disabled={!paired} aria-label="Abajo" className={padBtn}>
+          <button onClick={() => navButton("down")} disabled={!paired} aria-label="Abajo" className={padBtn}>
             <ChevronDown className="h-6 w-6" />
           </button>
           <div />
         </div>
         <p className="text-center text-[11px] text-muted-foreground/60">
-          Movés la selección en la TV · deslizá o tocá las flechas
+          Flechas: mueven la selección · Deslizar: arrastra el contenido
         </p>
 
         {/* Acciones */}
@@ -502,8 +520,10 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
         </div>
       </div>
 
-      {/* Rueda de búsqueda (overlay): también acá, no solo en la TV */}
-      {searching !== null && <ControlSearchOverlay query={searching} platforms={platforms} />}
+      {/* Rueda de búsqueda (overlay): también acá, no solo en la TV. Si el
+          pedido nombró una plataforma explícita ("en Netflix"), la rueda
+          muestra SOLO esa en vez del filtro de plataformas del control. */}
+      {searching !== null && <ControlSearchOverlay query={searching} platforms={wheelPlatforms} />}
 
       {/* Rueda "Abriendo <plataforma>…" al dar Play */}
       {opening?.platform && (

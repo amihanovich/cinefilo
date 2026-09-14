@@ -4,18 +4,19 @@
   apps/tizen/README.md para el setup completo (Tizen Studio, certificado,
   modo desarrollador, instalación).
 
-  ⚠️ El prefijo "XXXXXXXXXX" del id de abajo es un placeholder: Tizen Studio
-  lo genera de verdad al crear el certificado de autor (Certificate Manager)
-  y hay que reemplazarlo por el real ANTES de empaquetar — no es un valor
-  que se pueda inventar, cada certificado tiene el suyo.
+  ⚠️ "MiruTV0001" es el package ID: 10 caracteres alfanuméricos que identifican
+  la app en el TV. Para sideload en modo desarrollador es un valor libre (lo
+  elegimos nosotros; Tizen Studio lo generaría al crear el proyecto desde la
+  GUI). NO cambiarlo nunca: es la identidad de actualización — si cambia, el TV
+  lo trata como una app distinta en vez de actualizar la instalada.
 -->
 <widget xmlns="http://www.w3.org/ns/widgets"
         xmlns:tizen="http://tizen.org/ns/widgets"
         id="https://miru-ai.up.railway.app/tizen"
         version="0.1.0"
         viewmodes="fullscreen">
-  <tizen:application id="XXXXXXXXXX.MiruTV"
-                      package="XXXXXXXXXX"
+  <tizen:application id="MiruTV0001.MiruTV"
+                      package="MiruTV0001"
                       required_version="4.0"/>
   <name>Miru</name>
   <icon src="icon.png"/>

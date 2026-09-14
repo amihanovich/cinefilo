@@ -19,8 +19,11 @@ import { ControlScreen } from "./screens/ControlScreen";
 import { scanTvQr, recentSession, saveSession, parseSession } from "./lib/tv-remote";
 import { track } from "./lib/analytics";
 import { useBackLayer } from "./lib/back";
+import { detectPlatformMentions } from "./lib/platform-mentions";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
+import { loadOpened, recordOpened, removeOpened, type OpenedItem } from "./lib/opened";
+import { RecentOpened } from "./components/RecentOpened";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "miru:watchlist";
@@ -134,6 +137,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     }
   });
   const [cartOpen, setCartOpen] = useState(false); // lista discreta expandible
+  // "Abiertos recientemente": lo que abriste desde Miru (registro local, ver lib/opened.ts).
+  const [opened, setOpened] = useState<OpenedItem[]>(loadOpened);
   useEffect(() => {
     try {
       localStorage.setItem(MYLIST_ITEMS_KEY, JSON.stringify(cart.slice(0, 60)));
@@ -260,7 +265,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     const effectivePlatforms = platforms.length > 0 ? platforms : PLATFORMS;
     // Feedback inmediato (≤100ms): plataformas activas + eco literal del pedido.
     // (Sin inferencia: era una llamada extra que agregaba latencia; el literal alcanza.)
-    setSearchInfo({ query: userQuery, platforms: effectivePlatforms, type: queryType });
+    // Si el pedido nombra una plataforma explícita ("en Netflix"), la rueda
+    // muestra SOLO esa (mismo criterio que el override real del backend).
+    const mentioned = detectPlatformMentions(userQuery);
+    setSearchInfo({ query: userQuery, platforms: mentioned.length ? mentioned : effectivePlatforms, type: queryType });
+    const tSubmit = performance.now(); // métricas de la búsqueda (B0)
     const ctx = inferContext();
     const newMessages: Message[] = [...messages, { role: "user", content: userQuery }];
 
@@ -293,12 +302,17 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       setSearchInfo(null);
 
       track("recommendation_received", { query_type: queryType, platforms: effectivePlatforms });
+      const tResults = Math.round(performance.now() - tSubmit);
 
       // MVP de voz: hablarle a Miru = buscar. Los resultados hablan solos —
       // ya no se reproduce la intro (cinephile_note sigue viniendo del backend,
       // dormida, por si se retoma el modo asesor).
 
-      void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then(setPosters);
+      void fetchPosters(allItems.map((i) => ({ title: i.title, type: i.type, year: i.year }))).then((p) => {
+        setPosters(p);
+        // Tiempos desde el envío: resultados navegables y carátulas resueltas.
+        track("search_timing", { query_type: queryType, results_ms: tResults, posters_ms: Math.round(performance.now() - tSubmit), items: allItems.length });
+      });
       void loadAvailability(allItems);
       // "Más opciones": ESCALONADO. Antes se disparaba en paralelo con la reco
       // principal (2 llamadas pesadas a la vez) y saturaba red/backend, colgando la
@@ -315,6 +329,10 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
       console.error("[wizard]", e);
       setLoading(false);
       setSearchInfo(null);
+      // Si falló la PRIMERA búsqueda no hay resultados a los que volver: la
+      // pantalla quedaba en blanco (solo el toast, que se va a los 4 s). Volver
+      // a la bienvenida, con el toast.
+      if (items.length === 0) setScreen("welcome");
       showError("No pudimos buscar. Revisá tu conexión e intentá de nuevo.");
     }
   };
@@ -520,16 +538,29 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     });
   };
 
-  const openStreaming = async (current: Recommendation, avail: JwResult | undefined) => {
+  const openStreaming = async (
+    current: Pick<Recommendation, "title" | "platform" | "type" | "year">,
+    avail: JwResult | undefined,
+  ) => {
     track("watch_now_tapped", {
       title: current.title,
       platform: current.platform,
       availability_confirmed: !!avail?.confirmed,
     });
+    // Registro local de la apertura ("Abiertos recientemente"): qué, dónde y
+    // por qué vía. Se anota ANTES de salir de la app (después ya no volvemos).
+    const remember = (via: "deeplink" | "app-search" | "web" | "google") =>
+      setOpened(recordOpened(
+        { title: current.title, platform: current.platform, type: current.type, year: current.year, posterUrl: posters[current.title] ?? galleryPosters[current.title] ?? undefined },
+        { via, confirmed: !!avail?.confirmed },
+      ));
     // Si hay disponibilidad confirmada, intentamos abrir la app/URL exacta. Si eso
     // no logra abrir NADA (p.ej. sin standardWebURL ni deeplink), caemos al fallback
     // web de la plataforma para que el botón nunca quede sin reaccionar.
-    if (avail?.confirmed && (await openNative(avail))) return;
+    if (avail?.confirmed) {
+      remember("deeplink");
+      if (await openNative(avail)) return;
+    }
 
     const q = encodeURIComponent(current.title);
 
@@ -539,9 +570,11 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     // el scheme nativo de esa misma app equivocada. (avail === undefined =
     // sin verificar: se abre la plataforma como siempre.)
     if (avail && !avail.confirmed) {
+      remember("google");
       window.open(`https://www.google.com/search?q=${q}+ver+online`, "_system");
       return;
     }
+    if (!avail) remember("app-search");
     const urls: Record<string, string> = {
       Netflix: `https://www.netflix.com/search?q=${q}`,
       "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
@@ -555,6 +588,14 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
     void openInApp(current.platform, webUrl, current.title);
   };
+
+  // Volver a abrir algo de "Abiertos recientemente": se re-consulta JustWatch
+  // (el link exacto puede haber cambiado) y se abre por la misma vía de siempre.
+  const reopen = async (o: OpenedItem) => {
+    const avail = await jwSearch(o.title, o.platform, o.type ?? "Película", getCountry()).catch(() => undefined);
+    await openStreaming({ title: o.title, platform: o.platform, type: o.type ?? "Película", year: o.year != null ? String(o.year) : undefined }, avail);
+  };
+  const forgetOpened = (o: OpenedItem) => setOpened(removeOpened(o.title, o.platform));
 
   // ── "Mi lista" + long-press de la grilla ──────────────────────────────────
   const inCart = (title: string) => cart.some((c) => c.title === title);
@@ -688,6 +729,8 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
         onSubmit={(text) => { localStorage.setItem(OPENED_KEY, "1"); void getReco(text, "text"); }}
         onSurprise={() => { localStorage.setItem(OPENED_KEY, "1"); handleStartReco(); }}
         onConnectTv={() => void openTvRemote()}
+        recentOpened={opened}
+        onReopen={(o) => void reopen(o)}
       />
     );
   }
@@ -1102,6 +1145,9 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
 
           {/* "Mi lista" — discreta y expandible, debajo del héroe y arriba
               de la grilla. No invade las recomendaciones. */}
+          {/* Abiertos recientemente: volver a lo que abriste desde Miru (registro local). */}
+          <RecentOpened items={opened} onOpen={(o) => void reopen(o)} onRemove={forgetOpened} />
+
           {cart.length > 0 && (
             <div className="mt-4">
               <button
