@@ -27,11 +27,29 @@ Recomendador conversacional de pelis/series. El foco es la **app móvil**:
 El AI es **Claude Haiku** (`claude-haiku-4-5-20251001`) vía un backend Node en Railway. Devuelve 1
 recomendación principal + N alternativas, con refinamiento conversacional, feedback de gustos y voz (STT/TTS).
 
+## La app móvil hoy: una conversación (decisión 2026-09)
+
+Miru avanzó fuerte en producto (TV, control, grilla, tops) **sin validar el núcleo**. La app móvil vuelve
+entonces a lo que era la idea: **hablarle y que te dé UNA película, bien justificada**, como el especialista
+del videoclub. Todo lo demás **queda en el repo como capas** que se van a ir sumando si esto tracciona —
+no se borró nada.
+
+- Pantalla: **`apps/mobile/src/screens/ChatScreen.tsx`** (el hilo). `App.tsx` la renderiza por defecto;
+  **`?full=1`** sigue levantando el `wizard.tsx` completo (grilla, galería, tops, Mi lista).
+- Pide **`alternativesCount: 0`** a `/api/recommend` = modo conversación del motor: UNA película y
+  `reason` largo (2-4 oraciones). Ver "Notas de desarrollo".
+- Usa lo que el backend ya devolvía y la app tiraba: **`cinephile_note`** (intro hablada) y
+  **`clarification_needed`** (repregunta cálida cuando dudás).
+- **Regla de voz: "habla si le hablaste"** — pedido por voz → Miru contesta hablado (TTS); pedido escrito →
+  contesta escrito. La nota se muestra siempre.
+- Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
+- La TV no desapareció: "Conectar TV" vive en **Mi cuenta** (`AccountSheet` → `ControlScreen`).
+
 ## Los clientes (resumen — detalle en ARCHITECTURE.md)
 
 | App | Qué es | Packaging |
 |---|---|---|
-| **`apps/mobile`** | La app principal (recomendador por voz/texto + control de TV) | APK Capacitor, bundlea el front, `com.cinefilo.app` |
+| **`apps/mobile`** | La app principal. Hoy es **conversacional**: le pedís y te da UNA película (`ChatScreen`). El resto (grilla, tops, Mi lista, control de TV) sigue entero en `wizard.tsx`, detrás de `?full=1` | APK Capacitor, bundlea el front, `com.cinefilo.app` |
 | **`apps/tv`** | App de TV = **cáscara WebView** que carga `public/tv-lite.html` (remoto) | APK Capacitor, `server.url`, `com.cinefilo.tv` |
 | **`apps/tizen`** | App de Samsung Smart TV = **cáscara** que redirige a `public/tv-lite.html` (remoto). v1 sin deep-link nativo (fallback web) | `.wgt` FIRMADO (`build-wgt.ps1`), solo modo desarrollador (sin tienda Samsung) |
 | **`apps/webos`** | App de LG webOS = **cáscara** gemela de la de Tizen (mismo redirect). Cubre LG + webOS Hub | `.ipk` SIN firma (`build-ipk.ps1`, CLI `@webosose/ares-cli`), modo desarrollador (expira a las ~50 h) |
@@ -110,7 +128,13 @@ memorias viejas o en tu cabeza, ignorarlos:
 8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
    "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
    visto fuera de Miru.
-9. **Home sin búsqueda = banner + tiras "Top 6 en X"** (TV y móvil): catálogo por
+9. **Modo "una sola" del motor** (`recommend.mjs`): `alternativesCount: 0` = la app conversacional.
+   `reason` pasa a 2-4 oraciones (45-75 palabras) y no se piden `hook` ni `filters`; el modelo igual
+   devuelve 3 títulos de **respaldo interno** que NO se muestran — existen para que la validación de
+   disponibilidad tenga a quién promover. Si promueve, `redoMainText()` regenera el porqué largo y la
+   intro hablada (el respaldo venía con textos de una línea). `alternativesCount >= 1` sigue exactamente
+   como siempre: de eso viven la TV y `?full=1`.
+10. **Home sin búsqueda = banner + tiras "Top 6 en X"** (TV y móvil): catálogo por
    plataforma desde `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma
    (`byPlatform` en `availability.mjs` — NO es el top oficial de cada plataforma, no hay API
    pública de eso), numerado 1-10. Las plataformas del usuario van primero, el resto atenuado.
@@ -118,7 +142,7 @@ memorias viejas o en tu cabeza, ignorarlos:
    son estado propio (`topRows`/`rowFocus`), aditivo sobre `items` — "Más opciones para vos" y el
    scroll infinito siguen igual debajo. La tira "Mi lista" NO vive en el home (acceso: tab del
    menú en RC, botón del control en vinculado, desplegable comprimido en el móvil).
-10. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
+11. **Web touch (tablets/laptops):** `tv-lite.html?touch=1` = la misma UI del modo RC pero
    clickeable (listener de click delegado + botón ‹ Volver flotante + scroll táctil de tiras;
    arranca directo en el contenido). Entrada: la URL de la web-control SIN `?session=` redirige
    ahí; con `?session=` sigue siendo el control del QR.

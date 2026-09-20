@@ -49,7 +49,7 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 
 | Ruta | Método | Módulo → función | Qué hace |
 |---|---|---|---|
-| `/api/recommend` | POST | `recommend.mjs` → `recommend()` | Recomendación conversacional (1 main + N alternativas). Móvil + TV. |
+| `/api/recommend` | POST | `recommend.mjs` → `recommend()` | Recomendación conversacional (1 main + N alternativas). Móvil + TV. **`alternativesCount: 0` = modo "una sola"** (ver abajo). |
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
@@ -65,6 +65,16 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/api/ping` | GET | inline | Warmup barato (cold start de Railway). |
 | `/tv` | — | inline | 302 → `/tv-lite.html` (para tipear con el control remoto). |
 | resto | — | `dist/server/server.js` | SSR de la web app. |
+
+**Modo "una sola"** de `/api/recommend` (2026-09, lo usa la app conversacional): con `alternativesCount: 0`,
+`buildSystem()` suma un bloque `SINGLE_OVERRIDE` que pisa las reglas de formato: `reason` pasa de 12-18
+palabras a **2-4 oraciones (45-75 palabras)** —el porqué es el producto, ya no tiene que entrar en una
+tarjeta chica— y se caen `hook` y `filters` del JSON. Igual se le piden **3 títulos de respaldo** al modelo,
+con textos de una línea: **nunca se muestran** (`alternatives` vuelve `[]`), existen para que la validación
+de TMDB tenga a quién promover si el principal no está en el país. Cuando promueve, `redoMainText()`
+regenera de una sola llamada el `reason` largo y el `cinephile_note` (el respaldo traía textos cortos).
+`max_tokens` 1200 contra 2600 del camino multi: sale **más barato y más rápido** que una búsqueda normal.
+`alternativesCount >= 1` no cambió en nada.
 
 **Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20
 (recommend, tv-search, tv-home-more, transcribe, tts, ask, orb, intent) y **blurb 60 en cubeta aparte** (navegar
@@ -109,11 +119,22 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 ### A. `apps/mobile` — app Android Capacitor (LA principal)
 - `appId com.cinefilo.app`, `webDir dist`, **sin `server.url`** → bundlea el front (SPA React + Vite) dentro
   del APK. `capacitor.config.ts` solo setea `androidScheme: "https"`.
-- Entrada: `src/main.tsx` → `src/App.tsx` → **`src/wizard.tsx`** (todo el flujo). Screens:
-  `"welcome" | "magic" | "gallery"`.
-- Flujo: **welcome** (`WelcomeScreen.tsx`, saludo por voz) → búsqueda por **voz** (`VoiceAgent.tsx` + `Orb.tsx`,
-  STT `/api/transcribe`, TTS `/api/tts`) **o texto** → **resultados** (`/api/recommend`), con estado de carga
-  `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos.
+- Entrada: `src/main.tsx` → `src/App.tsx` → **`src/screens/ChatScreen.tsx`** (la conversación, default desde
+  2026-09) o **`src/wizard.tsx`** con **`?full=1`** (la app completa de antes: welcome / magic / gallery).
+- **Conversación (`ChatScreen`)**: un hilo de turnos (`miru` / `user` / `reco` / `thinking`). Cada pedido —voz
+  (orbe press-to-speak → `/api/transcribe`) o texto— llama a `/api/recommend` con **`alternativesCount: 0`** y
+  el historial acumulado, y devuelve UNA película: intro (`cinephile_note`), ficha con el porqué entero y un
+  solo botón "Ver en X". Si vino `clarification_needed`, Miru repregunta DESPUÉS de la ficha. **Voz: "habla si
+  le hablaste"** (TTS solo si el pedido entró por voz y no está muteado). Chip "Dame otra" = descarte seco
+  (suma el título a `excludeTitles`). Sin grilla, sin tops, sin Mi lista: son las capas guardadas.
+- **App completa (`wizard.tsx`, `?full=1`)**: **welcome** (`WelcomeScreen.tsx`, saludo por voz) → búsqueda por
+  **voz** (`VoiceAgent.tsx` + `Orb.tsx`) **o texto** → **resultados** (`/api/recommend`), con estado de carga
+  `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos (y la entrada a la
+  TV, que en la conversación es la única puerta al control).
+- **Compartido entre las dos pantallas**: `lib/watch.ts` (la cascada de apertura: deeplink confirmado →
+  búsqueda en la app → Google si JustWatch dice que NO está, + registro en "Abiertos recientemente"),
+  `lib/prefs.ts` (plataformas y país del dispositivo), `components/BrandSplash.tsx`, `lib/tv-remote.ts`
+  (`pickTvSession()`: QR con fallback a código tipeado).
 - **Modo control de TV:** `src/screens/ControlScreen.tsx` + `src/hooks/use-tv-channel.ts` + `src/lib/tv-remote.ts`.
   Escanea el QR de la TV (`@capacitor-mlkit/barcode-scanning`) y se conecta como rol "control".
 - Backend: `src/lib/api.ts` → `VITE_API_BASE_URL ?? https://miru-ai.up.railway.app`.
