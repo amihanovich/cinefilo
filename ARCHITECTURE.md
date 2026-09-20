@@ -104,12 +104,17 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   voz nativa del dispositivo (`speechSynthesis`).
 - **Groq Whisper** STT (`transcribe.mjs`): `whisper-large-v3`, idioma `es`, `GROQ_API_KEY`.
 - **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
-  home de TV vía `discoverPopular(country)` — 6 plataformas × movie/tv × popular/recent = 24 requests
+  home de TV vía `discoverPopular(country)` — 7 plataformas × movie/tv × popular/recent = 28 requests
   paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR
   plataforma (para las tiras "Top 6 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
   ⚠️ El "Top 6" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
   tiene API pública). ⚠️ El caché del home no tiene key de región: el top es de `DEFAULT_REGION` (AR)
-  para todos.
+  para todos. **Ids de proveedor:** `PROVIDER_MAP` los trae fijos salvo los que no tenemos verificados
+  (hoy Universal+, `ids: []`); esos los resuelve `resolveProviderIds()` contra
+  `/watch/providers/{movie,tv}` de TMDB matcheando por el mismo regex del mapa (cacheado por región,
+  incluye variantes tipo "… Amazon Channel"). Si TMDB no lista la plataforma en esa región se saltean
+  sus Discover —se pierde su tira "Top 6", nada más— con un `console.warn`. La validación de
+  disponibilidad NO depende de esto: `canonicalProvider()` matchea por nombre.
 - **Pósters:** **Cinemeta (Stremio) primero**, iTunes + Wikipedia de fallback (ver §5).
 
 ---

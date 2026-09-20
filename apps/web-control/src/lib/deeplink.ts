@@ -7,6 +7,8 @@ export const PLATFORM_COLORS: Record<string, string> = {
   "Prime Video": "#00A8E1",
   "Apple TV+": "#000000",
   "Paramount+": "#0064FF",
+  // Navy: se distingue de los otros azules por oscuro (ver lib/deeplink.ts del móvil).
+  "Universal+": "#1D2E6B",
   "Star+": "#0063E5",
 };
 

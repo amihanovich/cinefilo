@@ -7,7 +7,7 @@ import { validateItems, pickAvailable, detectPlatformMentions } from "./availabi
 
 // Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm); dejarla acá hacía
 // que Haiku siguiera asignándola y los clientes abrieran una app inexistente.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+"];
 
 const SYSTEM_BASE = `Sos Miru: el experto de tu videoclub de confianza — un cinéfilo apasionado con décadas de inmersión en el cine de todos los géneros y épocas. Tu conocimiento abarca desde el Hollywood clásico hasta el Neorrealismo italiano, la Nouvelle Vague francesa, el New Hollywood de los 70, el cine latinoamericano y el cine asiático contemporáneo. Sos como esos críticos y comunicadores de los programas de televisión de los años 60, 70 y 80 que con una sola frase abrían una puerta a un mundo cinematográfico desconocido — apasionados, directos, con criterio propio.
 

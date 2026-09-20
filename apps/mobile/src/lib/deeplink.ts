@@ -7,6 +7,9 @@ export const PLATFORM_COLORS: Record<string, string> = {
   "Prime Video": "#00A8E1",
   "Apple TV+": "#000000",
   "Paramount+": "#0064FF",
+  // Navy: los otros azules de la paleta son vivos (Disney+, Max, Paramount+),
+  // así que Universal+ se distingue por oscuro sin pisar el negro de Apple TV+.
+  "Universal+": "#1D2E6B",
   "Star+": "#0063E5", // absorbido por Disney+ en LatAm
 };
 

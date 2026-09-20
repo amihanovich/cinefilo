@@ -4,7 +4,7 @@
 
 // Star+ se fusionó con Disney+ en LatAm (2024): ya no es seleccionable, pero los
 // mapeos internos (color, label, deeplink) se mantienen para datos viejos.
-export const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+export const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+"];
 
 export const PLATFORMS_KEY = "miru:platforms";
 export const COUNTRY_KEY = "miru:country";

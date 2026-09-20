@@ -7,9 +7,9 @@ import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { openInApp } from "../lib/justwatch";
 import { fetchPostersClient } from "../lib/posters";
 import { loadOpened, type OpenedItem } from "../lib/opened";
+// La lista canónica vive en lib/prefs.ts (una sola, para todas las pantallas).
+import { PLATFORMS } from "../lib/prefs";
 
-// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 // Landing de descargas (muestra cómo instalar la app en el Android TV).
 const LANDING_URL = "https://landing-page-miru.up.railway.app/";
 const PLATFORMS_KEY = "miru:platforms";

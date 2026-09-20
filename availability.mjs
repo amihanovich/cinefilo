@@ -34,6 +34,12 @@ const PROVIDER_MAP = [
   { canonical: "Max", ids: [1899, 384, 616], re: /^max\b|hbo/i },
   { canonical: "Apple TV+", ids: [350], re: /apple tv\+|apple tv plus/i },
   { canonical: "Paramount+", ids: [531, 582], re: /paramount/i },
+  // Universal+ (NBCUniversal LatAm). Sin ids fijos: se resuelven contra TMDB en
+  // runtime (ver resolveProviderIds). El "+"/"plus" es OBLIGATORIO en el regex —
+  // /universal/i a secas se comería "Universal Pictures"—, y de paso hace que
+  // "Universal+ Amazon Channel" (el canal dentro de Prime) cuente como Universal+
+  // y no como Prime, que su regex no lo matchea.
+  { canonical: "Universal+", ids: [], re: /universal\s*(?:\+|plus)/i },
 ];
 
 function canonicalProvider(p) {
@@ -55,7 +61,7 @@ function canonicalProvider(p) {
 // o sin repetir la preposición: "Netflix o Disney" y "Netflix o en Disney"
 // valen igual), así "en Netflix o Disney" agarra las dos.
 const ANY_PLATFORM_NAME =
-  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?|universal\\s*(?:\\+|plus))";
 const PREP = "(?:en|de|para)";
 const PLATFORM_LIST_RE = new RegExp(
   `\\b${PREP}\\s+${ANY_PLATFORM_NAME}(?:\\s*(?:,|y|o|u)\\s*(?:${PREP}\\s+)?${ANY_PLATFORM_NAME})*`,
@@ -71,6 +77,9 @@ const PLATFORM_NAME_RULES = [
   { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
   { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
   { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
+  // Acá el "+"/"plus" también es obligatorio: "una peli DE UNIVERSAL" (el
+  // estudio) no puede filtrar la búsqueda a la plataforma.
+  { canonical: "Universal+", re: /\buniversal\s*(?:\+|plus)/i },
 ];
 
 /**
@@ -171,6 +180,44 @@ function discoverItem(c, kind, platform) {
  *   de requests: cero costo extra. Vacías si está deshabilitado o TMDB falla
  *   (el caller debe tener fallback).
  */
+/**
+ * Ids numéricos de TMDB por plataforma, para las que no los tienen fijos.
+ * Discover necesita el número (`with_watch_providers`), no el nombre — pero
+ * hardcodear ids de una plataforma nueva a ciegas es peor que preguntárselos a
+ * TMDB: se resuelven UNA vez por región contra su catálogo de proveedores,
+ * matcheando con el MISMO regex del PROVIDER_MAP (así entran también las
+ * variantes tipo "… Amazon Channel"). Cacheado como todo lo demás del módulo.
+ * @returns {Promise<Record<string, number[]>>} canonical → ids (solo los que faltaban)
+ */
+async function resolveProviderIds(region) {
+  const pending = PROVIDER_MAP.filter((p) => !p.ids.length);
+  if (!pending.length) return {};
+  const key = `providers|${region}`;
+  const cached = cacheGet(key, false);
+  if (cached !== undefined) return cached;
+  try {
+    const [mv, tv] = await Promise.all([
+      tmdbGet("/watch/providers/movie", `watch_region=${region}`),
+      tmdbGet("/watch/providers/tv", `watch_region=${region}`),
+    ]);
+    const all = [...(mv.results || []), ...(tv.results || [])];
+    const out = {};
+    for (const prov of pending) {
+      const ids = [...new Set(
+        all.filter((p) => prov.re.test(String(p.provider_name || ""))).map((p) => p.provider_id),
+      )];
+      if (ids.length) out[prov.canonical] = ids;
+      else console.warn(`[availability] TMDB no lista "${prov.canonical}" en ${region}: sin tira de catálogo`);
+    }
+    cacheSet(key, out);
+    return out;
+  } catch (e) {
+    console.warn(`[availability] no se pudieron resolver los ids de proveedores en ${region}: ${e.message}`);
+    const stale = cacheGet(key, true);
+    return stale !== undefined ? stale : {};
+  }
+}
+
 export async function discoverPopular(country) {
   if (!availabilityEnabled()) return { popular: [], recent: [], byPlatform: [] };
   const region = String(country || DEFAULT_REGION).toUpperCase().slice(0, 2) || DEFAULT_REGION;
@@ -179,9 +226,15 @@ export async function discoverPopular(country) {
     `language=es-AR&watch_region=${region}&with_watch_monetization_types=flatrate|ads` +
     "&sort_by=popularity.desc&include_adult=false&vote_count.gte=20";
 
+  // Las plataformas sin ids fijos los piden a TMDB (una vez por región); si no
+  // aparecen en su catálogo, se saltean acá: pierden su tira de "Top 6" y nada
+  // más — la validación de disponibilidad sigue funcionando por nombre.
+  const resolved = await resolveProviderIds(region);
   const jobs = [];
   for (const prov of PROVIDER_MAP) {
-    const ids = prov.ids.join("|");
+    const idList = prov.ids.length ? prov.ids : (resolved[prov.canonical] || []);
+    if (!idList.length) continue;
+    const ids = idList.join("|");
     for (const kind of ["movie", "tv"]) {
       const dateField = kind === "movie" ? "primary_release_date" : "first_air_date";
       jobs.push(

@@ -68,6 +68,16 @@ no se borró nada.
 `/api/tv-home*`, `/api/tv-search`, `/api/transcribe`, `/api/tts`, `/api/ping`, y sirve la web SSR. Módulos
 autónomos: `recommend.mjs`, `tv-search.mjs`, `transcribe.mjs`, `tts.mjs`.
 
+**Plataformas (7):** Netflix, Disney+, Max, Prime Video, Apple TV+, Paramount+ y **Universal+**
+(NBCUniversal LatAm: suscripción directa y app propia, y también como canal dentro de Prime — TMDB lo
+lista aparte como "Universal+ Amazon Channel" y cuenta como Universal+). La lista está copiada en
+varios lados: backend (`recommend.mjs`, `tv-search.mjs`, `PROVIDER_MAP` de `availability.mjs`), móvil
+(`lib/prefs.ts`, que ahora es la ÚNICA del cliente), `public/tv-lite.html` y `apps/web-control`. De
+Universal+ no tenemos verificados ni el `provider_id` de TMDB ni el `technicalName` de JustWatch: los
+dos se resuelven **por nombre** en runtime (detalle en `ARCHITECTURE.md`). Ojo con las menciones en
+texto libre: el "+"/"plus" es OBLIGATORIO en el regex — si no, "una peli de Universal" (el estudio)
+filtraría la búsqueda a la plataforma.
+
 **Pósters:** Cinemeta (Stremio) primero, iTunes + Wikipedia de fallback — en TODOS los clientes.
 
 **Pairing TV↔control:** Supabase Realtime, canal `cinefilo:<sessionId>` (wire-legacy: NO renombrar

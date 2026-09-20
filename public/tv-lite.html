@@ -451,7 +451,7 @@
   var SUPABASE_URL = "https://gyxooovdwputhznnlqhi.supabase.co";
   var SUPABASE_KEY = "sb_publishable_Rr1Xw4no3qdm2uFSI1kVYg_4asF5n6o";
 
-  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+", "Star+"];
   var userPlatforms = null; // plataformas heredadas del control (SET_PLATFORMS); null = todas
   var queryPlatforms = null; // mención explícita del PEDIDO en curso ("en Netflix"); pisa userPlatforms
 
@@ -460,7 +460,7 @@
   // Mantener en sync a mano: misma lista de plataformas, misma regla (la
   // primera precedida de "en/de/para" para evitar el falso positivo de un
   // título como "Mad Max"; de ahí se puede extender a una lista con coma/y/o).
-  var PLATFORM_MENTION_NAME = "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+  var PLATFORM_MENTION_NAME = "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?|universal\\s*(?:\\+|plus))";
   var PLATFORM_MENTION_PREP = "(?:en|de|para)";
   var PLATFORM_MENTION_LIST_RE = new RegExp(
     "\\b" + PLATFORM_MENTION_PREP + "\\s+" + PLATFORM_MENTION_NAME +
@@ -473,7 +473,9 @@
     { canonical: "Disney+", re: /\bdisney\s*\+?\b/i },
     { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
     { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
-    { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i }
+    { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
+    // El "+"/"plus" es obligatorio: "algo de Universal" (el estudio) no filtra.
+    { canonical: "Universal+", re: /\buniversal\s*(?:\+|plus)/i }
   ];
   function detectPlatformMentions(text) {
     var t = String(text || "");
@@ -493,7 +495,7 @@
   }
   var COLORS = {
     "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
-    "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
+    "Apple TV+": "#444", "Paramount+": "#0064FF", "Universal+": "#1D2E6B", "Star+": "#1CB47A"
   };
   function colorFor(p) { return COLORS[p] || "#2563EB"; }
   // Star+ fue absorbido por Disney+ en LatAm (2024).
@@ -629,13 +631,18 @@
     "query GetTitleOffers($searchQuery: String!, $country: Country!, $language: Language!, $objectTypes: [ObjectType!]) {" +
     " popularTitles(country: $country, first: 5, filter: { searchQuery: $searchQuery, objectTypes: $objectTypes }) {" +
     " edges { node { objectType" +
-    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
-    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName clearName } } }" +
+    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName clearName } } }" +
     " } } } }";
   var JW_PACKAGES = {
     "Netflix": ["nfx"], "Prime Video": ["amp", "prv"], "Disney+": ["dnp"],
-    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"]
+    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"],
+    "Universal+": []
   };
+  // Fallback por NOMBRE del package (JustWatch manda `clearName`): para las
+  // plataformas sin technicalName confirmado y para variantes tipo
+  // "Universal+ Amazon Channel". Mismo criterio que la app móvil.
+  var JW_NAMES = { "Universal+": /universal\s*(?:\+|plus)/i };
   var jwCache = {}; // "titulo|plataforma" → {deeplinkAndroid, standardWebURL} | null (resuelto sin match)
 
   function jwNorm(s) {
@@ -657,7 +664,8 @@
     var key = it.title + "|" + it.platform;
     if (Object.prototype.hasOwnProperty.call(jwCache, key)) return Promise.resolve(jwCache[key]);
     var wanted = JW_PACKAGES[it.platform] || [];
-    if (!wanted.length) { jwCache[key] = null; return Promise.resolve(null); }
+    var wantedName = JW_NAMES[it.platform] || null;
+    if (!wanted.length && !wantedName) { jwCache[key] = null; return Promise.resolve(null); }
     return fetch("https://apis.justwatch.com/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json", "App-Version": "3.8.2" },
@@ -680,7 +688,9 @@
         var match = null;
         for (var j = 0; j < offers.length; j++) {
           var o = offers[j];
-          if (o && o.monetizationType === "FLATRATE" && o["package"] && wanted.indexOf(o["package"].technicalName) >= 0) { match = o; break; }
+          if (o && o.monetizationType === "FLATRATE" && o["package"] &&
+              (wanted.indexOf(o["package"].technicalName) >= 0 ||
+               (wantedName && wantedName.test(o["package"].clearName || "")))) { match = o; break; }
         }
         if (!match) continue;
         // La búsqueda devuelve títulos "populares" que matchean el texto — el
