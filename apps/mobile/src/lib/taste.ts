@@ -155,7 +155,7 @@ export function profileBlock(): string | null {
   if (opened.length) lines.push(`Abrió desde Miru (tocó "Ver en X"; NO sabemos si la vio): ${opened.map((o) => `${o.title} (${o.platform}, ${timeAgo(o.openedAt)})`).join("; ")}.`);
   const verdicts = t.verdicts.slice(-4);
   if (verdicts.length) {
-    lines.push(`Opiniones: ${verdicts.map((v) => `${v.title}: ${v.verdict === "liked" ? (v.stage === "card" ? "le cerró la propuesta" : "le gustó") : v.verdict === "meh" ? (v.stage === "card" ? "no era para esa persona" : "no tanto") : "no la vio"}`).join("; ")}.`);
+    lines.push(`Opiniones: ${verdicts.map((v) => `${v.title}: ${v.verdict === "liked" ? (v.stage === "card" ? "le gustó la propuesta (👍)" : "la vio y le gustó") : v.verdict === "meh" ? (v.stage === "card" ? "no era para esa persona (👎)" : "la vio y no tanto") : "no la vio"}`).join("; ")}.`);
   }
   const rejected = t.rejected.filter((r) => r.reason).slice(-3);
   if (rejected.length) lines.push(`Descartes con motivo: ${rejected.map((r) => `${r.title} ("${r.reason}")`).join("; ")}.`);
