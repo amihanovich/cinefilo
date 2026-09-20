@@ -5,9 +5,14 @@
 //
 // Regla de voz: "habla si le hablaste". Si el pedido entró por voz, Miru
 // contesta hablado; si lo escribiste, contesta escrito.
+//
+// La memoria (lib/taste.ts): cada pedido, cada apertura, cada descarte con lo
+// que dijiste, las manitos y el "¿qué tal estuvo?" al volver son señales; el
+// backend las sintetiza en un perfil de gusto que viaja con cada pedido. Es lo
+// que permite que la carta diga "como la última vez te fuiste con X…".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Send, User, Volume2, VolumeX, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, Send, User, Volume2, VolumeX, RefreshCw, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Orb } from "../components/Orb";
 import { VoicePill, type VoicePillState } from "../components/VoicePill";
 import { BrandSplash } from "../components/BrandSplash";
@@ -24,8 +29,14 @@ import { PLATFORMS, loadPlatforms, seedPlatforms, detectCountry, getCountry } fr
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
+import {
+  recordSession, recordRequest, recordRejection, recordVerdict, recordShown, cardVerdict,
+  pendingVerdict, markAsked, excludeTitles as tasteExclude, profileBlock, hasProfile, maybeRefreshProfile,
+  type Verdict,
+} from "../lib/taste";
 
 const GREETING = "Hola, soy Miru. Decime qué tenés ganas de ver y te elijo una.";
+const GREETING_BACK = "Hola de nuevo. ¿Qué tenés ganas de ver hoy?";
 const SPLASH_MSG = "Rastrillando las plataformas para encontrar lo tuyo…";
 // Ejemplos tocables (anti-parálisis): muestran QUÉ se le puede pedir.
 const EXAMPLES = ["Algo de terror liviano", "Una comedia para reír", "Algo corto y bueno"];
@@ -34,7 +45,23 @@ type Turn =
   | { kind: "miru"; id: string; text: string; tone?: "question" | "error" }
   | { kind: "user"; id: string; text: string }
   | { kind: "reco"; id: string; item: Recommendation }
-  | { kind: "thinking"; id: string };
+  | { kind: "thinking"; id: string }
+  /** "¿Qué tal estuvo X?" al volver: tres chips, una sola vez por título. */
+  | { kind: "verdict"; id: string; title: string };
+
+// Cómo arranca el hilo: si en otra sesión abriste algo, Miru pregunta qué tal
+// estuvo (es la señal que más afina el perfil); si ya te conoce, saluda como
+// tal; si no, se presenta.
+function openingTurns(): Turn[] {
+  const pending = pendingVerdict();
+  if (pending) {
+    return [
+      { kind: "miru", id: uid(), text: `Hola de nuevo. La última vez te llevaste ${pending.title}. ¿Qué tal estuvo?` },
+      { kind: "verdict", id: uid(), title: pending.title },
+    ];
+  }
+  return [{ kind: "miru", id: uid(), text: hasProfile() ? GREETING_BACK : GREETING }];
+}
 
 let seq = 0;
 const uid = () => `t${++seq}`;
@@ -45,7 +72,7 @@ function cn(...classes: (string | boolean | undefined | null)[]): string {
 
 export function ChatScreen() {
   const [phase, setPhase] = useState<"splash" | "chat">("splash");
-  const [turns, setTurns] = useState<Turn[]>([{ kind: "miru", id: uid(), text: GREETING }]);
+  const [turns, setTurns] = useState<Turn[]>(openingTurns);
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
@@ -63,12 +90,17 @@ export function ChatScreen() {
   // un ref: no se renderiza, y así ningún callback lo lee desactualizado.
   const historyRef = useRef<Message[]>([]);
   const shownRef = useRef<Set<string>>(new Set()); // títulos ya propuestos → excludeTitles
+  const openedRef = useRef<Set<string>>(new Set()); // los que abriste en esta charla (no cuentan como descarte)
+  // Descartes de ESTA charla, con lo que dijiste como motivo: viajan al backend
+  // (restricción dura para el próximo pick) y a la memoria.
+  const rejectedRef = useRef<{ title: string; reason: string | null }[]>([]);
   const busyRef = useRef(false);
   const micRef = useRef<VoiceRecorder | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   // Turno al que saltar cuando llega la respuesta: con la ficha larga, ir al
   // final del hilo dejaba al usuario mirando el botón en vez del título.
   const anchorRef = useRef<string | null>(null);
+  const lastRecoRef = useRef<Recommendation | null>(null);
 
   const lastReco = [...turns].reverse().find((t): t is Extract<Turn, { kind: "reco" }> => t.kind === "reco");
 
@@ -77,6 +109,11 @@ export function ChatScreen() {
     seedPlatforms();
     void detectCountry();
     warmupBackend();
+    recordSession();
+    // Si Miru va a preguntar por la última apertura, ya queda marcado: se
+    // pregunta una sola vez, conteste o no.
+    const pending = pendingVerdict();
+    if (pending) markAsked(pending.title);
     const t = setTimeout(() => setPhase("chat"), 1200);
     return () => clearTimeout(t);
   }, []);
@@ -98,7 +135,7 @@ export function ChatScreen() {
     setTurns((prev) => [...prev, { kind: "miru", id: uid(), text, tone }]);
 
   // ── Un turno de conversación ───────────────────────────────────────────────
-  const askMiru = useCallback(async (raw: string, source: "text" | "voice") => {
+  const askMiru = useCallback(async (raw: string, source: "text" | "voice", opts?: { dry?: boolean }) => {
     const q = raw.trim();
     if (!q || busyRef.current) return;
     busyRef.current = true;
@@ -108,6 +145,18 @@ export function ChatScreen() {
 
     const turnNumber = historyRef.current.filter((m) => m.role === "user").length + 1;
     track("chat_turn", { source, turn_number: turnNumber });
+
+    // Pedir otra cosa con una película en pantalla que no abriste ES un
+    // descarte, y lo que dijiste es el motivo ("muy larga", "algo más liviano").
+    // "Dame otra" a secas es un descarte sin motivo. Si le pusiste 👍, no cuenta.
+    const prev = lastRecoRef.current;
+    if (prev && !openedRef.current.has(prev.title) && cardVerdict(prev.title) !== "liked" &&
+        !rejectedRef.current.some((r) => r.title === prev.title)) {
+      const reason = opts?.dry ? null : q;
+      rejectedRef.current = [...rejectedRef.current, { title: prev.title, reason }];
+      recordRejection(prev.title, reason);
+    }
+    recordRequest(q, source);
 
     const history: Message[] = [...historyRef.current, { role: "user", content: q }];
     setTurns((prev) => [...prev, { kind: "user", id: uid(), text: q }, { kind: "thinking", id: uid() }]);
@@ -121,14 +170,19 @@ export function ChatScreen() {
         contextHint: contextToPromptHint(ctx),
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
-        excludeTitles: [...shownRef.current].slice(-40), // cap: no inflar el prompt
+        // Lo de esta charla + lo visto/abierto en 30 días: nunca "ya me la sugeriste".
+        excludeTitles: [...new Set([...tasteExclude(), ...shownRef.current])].slice(-60),
         alternativesCount: 0, // modo "una sola": el porqué largo es el producto
         country: getCountry(),
+        tasteProfile: profileBlock(),
+        rejected: rejectedRef.current.slice(-8),
       });
       const main = data?.main;
       if (!main?.title) throw new Error("sin resultado");
 
       shownRef.current.add(main.title);
+      lastRecoRef.current = main;
+      recordShown(main.title);
       historyRef.current = [
         ...history,
         { role: "assistant", content: `Recomendé: ${main.title} (${main.platform}). ${main.reason}` },
@@ -176,6 +230,8 @@ export function ChatScreen() {
     } finally {
       busyRef.current = false;
       setBusy(false);
+      // La memoria se re-sintetiza en segundo plano cuando juntó señales.
+      void maybeRefreshProfile();
     }
   }, [platforms]);
 
@@ -188,7 +244,26 @@ export function ChatScreen() {
 
   const another = () => {
     track("another_requested");
-    void askMiru("Esa no me convence, dame otra", "text");
+    void askMiru("Esa no me convence, dame otra", "text", { dry: true });
+  };
+
+  // "¿Qué tal estuvo X?": la respuesta reemplaza los chips por un acuse corto.
+  const answerVerdict = (turnId: string, title: string, verdict: Verdict) => {
+    recordVerdict(title, verdict, "return");
+    track("verdict_given", { verdict, stage: "return" });
+    const ack = verdict === "liked" ? "Anotado. Eso me sirve para la próxima."
+      : verdict === "meh" ? "Anotado, gracias por decírmelo: la próxima afino."
+      : "Dale, la dejamos ahí. ¿Qué tenés ganas de ver hoy?";
+    setTurns((prev) => prev.map((t) => (t.id === turnId ? { kind: "miru", id: turnId, text: ack } as Turn : t)));
+    void maybeRefreshProfile();
+  };
+
+  // 👍/👎 en la ficha: reacción a la propuesta (todavía no la viste). Señal de
+  // gusto declarado; el swap sigue siendo "Dame otra" o decirle qué no cerró.
+  const reactToCard = (title: string, verdict: Verdict) => {
+    recordVerdict(title, verdict, "card");
+    track("verdict_given", { verdict, stage: "card" });
+    void maybeRefreshProfile();
   };
 
   // ── Micrófono: press-to-speak / press-to-stop (la ley de voz de toda la app) ──
@@ -256,6 +331,8 @@ export function ChatScreen() {
     : "idle";
   const pillState: VoicePillState = micState === "requesting" ? "requesting" : orbPhase;
   const showPill = micState !== "idle" || speaking;
+  // Hilo "fresco" = todavía no pediste nada: saludo centrado + ejemplos.
+  const fresh = !turns.some((t) => t.kind === "user");
 
   return (
     <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
@@ -298,7 +375,7 @@ export function ChatScreen() {
       {/* El hilo */}
       <div className={cn(
         "flex-1 min-h-0 overflow-y-auto px-5 pb-4",
-        turns.length === 1 && "flex flex-col justify-center",
+        fresh && "flex flex-col justify-center",
       )}>
         {turns.map((t) => {
           if (t.kind === "user") {
@@ -327,6 +404,21 @@ export function ChatScreen() {
               </div>
             );
           }
+          if (t.kind === "verdict") {
+            return (
+              <div key={t.id} className="fade-in mt-2 flex flex-wrap gap-1.5 pl-9">
+                {([["liked", "Me gustó"], ["meh", "No tanto"], ["unseen", "No la vi"]] as [Verdict, string][]).map(([v, label]) => (
+                  <button
+                    key={v}
+                    onClick={() => answerVerdict(t.id, t.title, v)}
+                    className="rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-[12px] font-semibold text-foreground transition-transform active:scale-95"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            );
+          }
           if (t.kind === "thinking") {
             return (
               <div key={t.id} className="fade-in mt-4 flex items-center gap-2.5">
@@ -346,6 +438,8 @@ export function ChatScreen() {
               item={t.item}
               poster={posters[t.item.title]}
               avail={availability[t.item.title]}
+              onOpened={() => openedRef.current.add(t.item.title)}
+              onReact={(v) => reactToCard(t.item.title, v)}
             />
           );
         })}
@@ -363,7 +457,7 @@ export function ChatScreen() {
         )}
 
         {/* Ejemplos tocables: solo al arrancar, cuando el hilo es el saludo. */}
-        {turns.length === 1 && (
+        {fresh && (
           <div className="mt-5 flex flex-wrap gap-1.5 pl-9">
             {EXAMPLES.map((ex) => (
               <button
@@ -426,13 +520,17 @@ export function ChatScreen() {
 // ── La película ──────────────────────────────────────────────────────────────
 // Una sola, con el porqué entero. El póster acompaña; el texto es el producto.
 function RecoCard({
-  turnId, item, poster, avail,
+  turnId, item, poster, avail, onOpened, onReact,
 }: {
   turnId: string;
   item: Recommendation;
   poster?: string | null;
   avail?: JwResult;
+  onOpened: () => void;
+  onReact: (verdict: Verdict) => void;
 }) {
+  const [reaction, setReaction] = useState<Verdict | null>(() => cardVerdict(item.title));
+  const react = (v: Verdict) => { setReaction(v); onReact(v); };
   const color = colorForPlatform(item.platform);
   const label = platformLabel(item.platform);
   // El celeste de Prime con texto blanco queda ilegible: el color de la tipografía
@@ -474,7 +572,7 @@ function RecoCard({
           <p className="mt-1 text-[14.5px] leading-relaxed text-foreground/90">{item.reason}</p>
 
           <button
-            onClick={() => void openStreaming(item, avail, { posterUrl: poster })}
+            onClick={() => { onOpened(); void openStreaming(item, avail, { posterUrl: poster }); }}
             className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold shadow-sm transition-transform active:scale-95"
             style={{ backgroundColor: color, color: onColor }}
           >
@@ -482,6 +580,31 @@ function RecoCard({
           </button>
           {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
           <p className="mt-1 text-center text-[9px] text-muted-foreground/80">Disponibilidad: JustWatch</p>
+
+          {/* La manito: reacción a la propuesta (no un veredicto de vista). Alimenta
+              el perfil; el swap sigue siendo "Dame otra" o decirle qué no cerró. */}
+          <div className="mt-2 flex items-center justify-center gap-2">
+            <button
+              onClick={() => react("liked")}
+              aria-label="Me cierra"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95",
+                reaction === "liked" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground",
+              )}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" /> Me cierra
+            </button>
+            <button
+              onClick={() => react("meh")}
+              aria-label="No es para mí"
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95",
+                reaction === "meh" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground",
+              )}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" /> No es para mí
+            </button>
+          </div>
         </div>
       </div>
 

@@ -37,6 +37,10 @@ export async function fetchRecommendation(params: {
   alternativesCount?: number;
   /** ISO2 del usuario: el backend valida disponibilidad real en ese país. */
   country?: string;
+  /** Modo conversación: el perfil de gusto del dispositivo (texto ya armado por lib/taste.ts). */
+  tasteProfile?: string | null;
+  /** Modo conversación: descartes de ESTA charla, con lo que dijo el usuario como motivo. */
+  rejected?: { title: string; reason: string | null }[];
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",
@@ -47,6 +51,48 @@ export async function fetchRecommendation(params: {
   });
   if (!res.ok) throw new Error(`/api/recommend ${res.status}`);
   return res.json() as Promise<RecoResponse>;
+}
+
+// La memoria del videoclub: manda las señales crudas y vuelve el perfil de
+// gusto sintetizado. Falla en silencio (null): el perfil anterior sigue valiendo.
+export type TasteProfile = {
+  summary: string;
+  likes: string[];
+  avoid: string[];
+  patterns: string;
+  asks: string;
+  confidence: "baja" | "media" | "alta";
+};
+
+export async function fetchProfile(signals: {
+  requests: { q: string; ts: string; source: "text" | "voice" }[];
+  opened: { title: string; platform: string; ts: string; q: string }[];
+  rejected: { title: string; reason: string | null; ts: string }[];
+  verdicts: { title: string; verdict: string; stage: string; ts: string }[];
+  sessions: string[];
+  previous: { summary: string; likes: string[]; avoid: string[] } | null;
+}): Promise<TasteProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signals),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) return null;
+    const p = (await res.json()) as Partial<TasteProfile>;
+    if (!p || typeof p.summary !== "string" || !p.summary.trim()) return null;
+    return {
+      summary: p.summary,
+      likes: Array.isArray(p.likes) ? p.likes.filter((x): x is string => typeof x === "string") : [],
+      avoid: Array.isArray(p.avoid) ? p.avoid.filter((x): x is string => typeof x === "string") : [],
+      patterns: typeof p.patterns === "string" ? p.patterns : "",
+      asks: typeof p.asks === "string" ? p.asks : "",
+      confidence: p.confidence === "alta" || p.confidence === "media" ? p.confidence : "baja",
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Pregunta conversacional sobre el título en pantalla (no re-recomienda).

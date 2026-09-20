@@ -43,6 +43,16 @@ no se borró nada.
 - **Regla de voz: "habla si le hablaste"** — pedido por voz → Miru contesta hablado (TTS); pedido escrito →
   contesta escrito. La nota se muestra siempre.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
+- **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada
+  descarte **con lo que dijiste como motivo** (pedir otra cosa con una peli en pantalla que no abriste
+  ES un descarte), la manito 👍/👎 de la ficha (reacción a la propuesta) y el **"¿Qué tal estuvo X?"**
+  al volver (veredicto después de verla, la señal más fuerte; una sola vez por título). Cada ~3 señales,
+  `/api/profile` (`profile.mjs`) las sintetiza en un perfil de 50-90 palabras + tags + patrones, en
+  segundo plano. Ese perfil viaja con cada pedido (`tasteProfile`) y el motor lo usa para elegir y para
+  **nombrar UNA señal tuya** en la carta: el "cómo supo". `excludeTitles` es entre sesiones (30 días).
+- **Motor en dos pasos** (`recommendSingle` en `recommend.mjs`): Haiku **propone 6 candidatos**
+  rankeados (barato), **TMDB decide** cuál está en el país, y recién ahí Haiku **escribe la carta** para
+  ese título. Nunca más "Ver en Netflix" de algo que no está. Ver "Notas de desarrollo".
 - La TV no desapareció: "Conectar TV" vive en **Mi cuenta** (`AccountSheet` → `ControlScreen`).
 - **Tema "Papel"** (claro, crema + tinta): la conversación es texto largo y UNA ficha, y ahí el negro
   puro cansaba y aplanaba los escalones fondo→burbuja→ficha. `index.css` define dos temas sobre los
@@ -145,12 +155,17 @@ memorias viejas o en tu cabeza, ignorarlos:
 8. **"Abiertos recientemente"** (móvil `miru:opened`, TV `miru:tv:opened`): registro local de cada
    "Ver en X" para volver a abrirlo. NO es "Continuar viendo": no hay progreso real ni se captura lo
    visto fuera de Miru.
-9. **Modo "una sola" del motor** (`recommend.mjs`): `alternativesCount: 0` = la app conversacional.
-   `reason` pasa a 2-4 oraciones (45-75 palabras) y no se piden `hook` ni `filters`; el modelo igual
-   devuelve 3 títulos de **respaldo interno** que NO se muestran — existen para que la validación de
-   disponibilidad tenga a quién promover. Si promueve, `redoMainText()` regenera el porqué largo y la
-   intro hablada (el respaldo venía con textos de una línea). `alternativesCount >= 1` sigue exactamente
-   como siempre: de eso viven la TV y `?full=1`.
+9. **Modo conversación del motor** (`recommend.mjs`, `alternativesCount: 0`): **propone → verifica →
+   pitchea**. Paso 1 (`SYSTEM_PROPOSE`, ~700 tokens): 6 candidatos rankeados por encaje con el pedido y
+   el perfil (3 al centro, 2 que abren, 1 apuesta), solo título/plataforma/año/línea, más
+   `clarification_needed` si el pedido es vago o hay 2 descartes secos seguidos. TMDB valida los 6; gana
+   el primero confirmado (después, el primero `unknown`); si ninguno está, UN reintento con esos
+   excluidos. Paso 2 (`SYSTEM_PITCH`): synopsis + `reason` de 45-75 palabras + intro hablada para el
+   título ya confirmado, con la regla de **nombrar UNA señal** del perfil/charla cuando influyó (nunca
+   inventada, nunca más de una). Si la carta falla, la peli sale igual con la línea del paso 1. Entradas
+   nuevas: `tasteProfile` (texto) y `rejected` (descartes de la charla con motivo). Log
+   `[metrics-single]`. `alternativesCount >= 1` sigue exactamente como siempre: de eso viven la TV y
+   `?full=1`.
 10. **Home sin búsqueda = banner + tiras "Top 6 en X"** (TV y móvil): catálogo por
    plataforma desde `/api/tv-home` (`rows`) / `/api/top-platforms`, ranking TMDB por plataforma
    (`byPlatform` en `availability.mjs` — NO es el top oficial de cada plataforma, no hay API

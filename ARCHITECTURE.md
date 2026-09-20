@@ -50,6 +50,7 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | Ruta | Método | Módulo → función | Qué hace |
 |---|---|---|---|
 | `/api/recommend` | POST | `recommend.mjs` → `recommend()` | Recomendación conversacional (1 main + N alternativas). Móvil + TV. **`alternativesCount: 0` = modo "una sola"** (ver abajo). |
+| `/api/profile` | POST | `profile.mjs` → `synthesizeProfile()` | **La memoria del videoclub.** Recibe las señales crudas del teléfono (`requests`, `opened`, `rejected` con motivo, `verdicts` con `stage: card\|return`, `sessions`, `previous`) y devuelve `{summary, likes, avoid, patterns, asks, confidence}`. Lo pide la app en segundo plano cada ~3 señales; `max_tokens` 500. Cubeta IA. |
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
@@ -66,15 +67,19 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/tv` | — | inline | 302 → `/tv-lite.html` (para tipear con el control remoto). |
 | resto | — | `dist/server/server.js` | SSR de la web app. |
 
-**Modo "una sola"** de `/api/recommend` (2026-09, lo usa la app conversacional): con `alternativesCount: 0`,
-`buildSystem()` suma un bloque `SINGLE_OVERRIDE` que pisa las reglas de formato: `reason` pasa de 12-18
-palabras a **2-4 oraciones (45-75 palabras)** —el porqué es el producto, ya no tiene que entrar en una
-tarjeta chica— y se caen `hook` y `filters` del JSON. Igual se le piden **3 títulos de respaldo** al modelo,
-con textos de una línea: **nunca se muestran** (`alternatives` vuelve `[]`), existen para que la validación
-de TMDB tenga a quién promover si el principal no está en el país. Cuando promueve, `redoMainText()`
-regenera de una sola llamada el `reason` largo y el `cinephile_note` (el respaldo traía textos cortos).
-`max_tokens` 1200 contra 2600 del camino multi: sale **más barato y más rápido** que una búsqueda normal.
-`alternativesCount >= 1` no cambió en nada.
+**Modo conversación** de `/api/recommend` (`alternativesCount: 0`, lo usa la app móvil): `recommendSingle()`
+en tres tiempos. **Propone**: `SYSTEM_PROPOSE` pide 6 candidatos rankeados (título/plataforma/tipo/año +
+una línea; ~700 tokens de salida como techo, ~250 reales) y la repregunta si el pedido es vago o hay 2
+descartes secos seguidos. **Verifica**: `validateItems()` sobre los 6; gana el primero `confirmed|corrected`
+por ranking, si no el primero `unknown`; si ninguno está en el país, un reintento con esos títulos
+excluidos; si sigue sin haber, el primero (degradación suave). **Pitchea**: `SYSTEM_PITCH` escribe
+`synopsis` + `reason` (45-75 palabras) + `cinephile_note` + `duration` + `ageRating` para el título ya
+confirmado, viendo el hilo entero, el `tasteProfile` y los `rejected` de la charla, con la regla de nombrar
+UNA señal de la persona cuando influyó. Si la carta falla, sale la película con la línea del paso 1.
+`alternatives` vuelve `[]`, `filters` `{}`. Entradas nuevas (saneadas en `server-node.mjs`): `tasteProfile`
+(≤1500 chars, ya formateado por `lib/taste.ts`) y `rejected` (≤8, `{title, reason|null}`). Cada turno loguea
+`[metrics-single] {propose_ms, tmdb_ms, pitch_ms, retried, picked_rank, avail, profile, rejected}`.
+Costo por turno ≈ 1.3k tokens de entrada / 450 de salida en dos llamadas. `alternativesCount >= 1` no cambió.
 
 **Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20
 (recommend, tv-search, tv-home-more, transcribe, tts, ask, orb, intent) y **blurb 60 en cubeta aparte** (navegar
@@ -143,6 +148,16 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   jerarquía se invierte — en papel la ficha es blanca sobre crema) y `--accent` (el rótulo del porqué).
   `textOnPlatform()` en `lib/deeplink.ts` elige blanco o tinta sobre el color de marca por luminancia
   (el celeste de Prime con blanco da 2.7:1).
+- **La memoria** (`src/lib/taste.ts`, clave `miru:taste`): señales locales —`requests` (texto, hora,
+  voz/texto), `rejected` (título + motivo: el próximo pedido con una peli en pantalla no abierta ES el
+  descarte y su motivo; "Dame otra" = sin motivo), `verdicts` (`stage: "card"` = manito en la ficha,
+  `"return"` = "¿Qué tal estuvo X?" al volver, una vez por título, solo si la apertura fue hace >3 h),
+  `shown` (para `excludeTitles()` a 30 días, junto con `miru:opened`), `sessions`— y el `profile` que
+  devuelve `/api/profile`. `maybeRefreshProfile()` corre tras cada turno/manito/veredicto y sintetiza
+  cuando juntó ≥3 señales (la manito y el veredicto valen 2) o el perfil tiene >7 días. `profileBlock()`
+  arma el texto que viaja como `tasteProfile`: el perfil + las últimas aperturas, opiniones y descartes
+  con motivo (≈120-200 tokens), así el "cómo supo" existe desde la segunda sesión aunque el perfil no
+  se haya sintetizado. El saludo también lee la memoria: "¿Qué tal estuvo X?" / "Hola de nuevo".
 - **Compartido entre las dos pantallas**: `lib/watch.ts` (la cascada de apertura: deeplink confirmado →
   búsqueda en la app → Google si JustWatch dice que NO está, + registro en "Abiertos recientemente"),
   `lib/prefs.ts` (plataformas y país del dispositivo), `components/BrandSplash.tsx`, `lib/tv-remote.ts`
