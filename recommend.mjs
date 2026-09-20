@@ -39,20 +39,42 @@ Reglas estrictas:
 
 FORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido (sin markdown, sin texto extra). El array "alternatives" debe tener exactamente el número de elementos solicitado en el pedido.`;
 
-function buildSystem(alternativesCount = 4) {
+// Modo "una sola" (la app móvil conversacional): Miru devuelve UNA película y la
+// justifica largo — el porqué ES el producto, ya no tiene que entrar en una
+// tarjeta chica. Va como OVERRIDE al final de SYSTEM_BASE en vez de forkear el
+// prompt entero: la persona del videoclub queda en un solo lugar.
+const SINGLE_OVERRIDE = `
+
+MODO CONVERSACIÓN (estas reglas PISAN las de arriba):
+- Estás charlando con el usuario, no llenando una grilla. Le das UNA sola película o serie: la que mejor responde a lo que pidió. Sin ranking, sin empates, sin "también podrías".
+- "reason" pasa a ser EL PRODUCTO: 2 a 4 oraciones (45 a 75 palabras), español rioplatense, sin emojis ni listas. Arrancá por el porqué atado a lo que ESTE usuario pidió; seguí con qué la hace especial (quién la dirigió y qué más hizo, la época o el movimiento, con qué otra obra dialoga, una decisión de puesta en escena); cerrá con qué se va a llevar si la ve. Nada genérico ("gran película", "imperdible"): hablá como el que te la ponía en la mano en el videoclub. Sin spoilers.
+- NO devuelvas "hook".
+- El array "alternatives" es RESPALDO INTERNO: no se le muestra al usuario, solo se usa si el título principal no está disponible en su país. Llenalo igual con títulos buenos y distintos entre sí, pero con "synopsis" y "reason" de UNA línea corta cada uno — no gastes palabras ahí.
+- "cinephile_note" sigue siendo la intro hablada, pero NO cierres invitando a mirar las alternativas (no hay): cerrá invitando a verla, o a pedirte otra cosa si no le cierra.`;
+
+function buildSystem(alternativesCount = 4, single = false) {
+  if (single) {
+    // Los respaldos van sin "hook" y con textos de una línea: no se muestran.
+    const backupItem = `{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","reason":""}`;
+    const backups = Array.from({ length: alternativesCount }, () => backupItem).join(",");
+    const format = `\n\nFORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:\n{"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","reason":""},"alternatives":[${backups}],"clarification_needed":null,"cinephile_note":""}`;
+    return SYSTEM_BASE + SINGLE_OVERRIDE + format;
+  }
   const altItem = `{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","hook":"","reason":""}`;
   const altsArray = Array.from({ length: alternativesCount }, () => altItem).join(",");
   const format = `\n\nFORMATO DE SALIDA: Devolvé ÚNICAMENTE JSON válido con esta forma exacta, sin markdown, sin texto extra:\n{"filters":{"time":"","company":"","mood":"","type":"","attention":"","novelty":""},"main":{"title":"","platform":"","duration":"","type":"","year":"","ageRating":"","synopsis":"","hook":"","reason":""},"alternatives":[${altsArray}],"clarification_needed":null,"cinephile_note":""}`;
   return SYSTEM_BASE + format;
 }
 
-async function callAnthropic(messages, alternativesCount = 4) {
+async function callAnthropic(messages, alternativesCount = 4, single = false) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
   // Galería necesita más tokens de salida. Cada ítem ahora trae también
   // synopsis + hook (~45 palabras extra c/u), así que el techo sube: si el JSON
   // se trunca, la respuesta entera se pierde.
-  const maxTokens = alternativesCount > 6 ? 5500 : 2600;
+  // Modo single: 1 título largo + 3 respaldos de una línea ≈ 400 tokens de
+  // salida. Techo holgado igual, pero lejos de los 2600 del camino multi.
+  const maxTokens = single ? 1200 : (alternativesCount > 6 ? 5500 : 2600);
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -63,7 +85,7 @@ async function callAnthropic(messages, alternativesCount = 4) {
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: maxTokens,
-      system: buildSystem(alternativesCount),
+      system: buildSystem(alternativesCount, single),
       messages,
     }),
   }, { timeoutMs: 40000 });
@@ -98,9 +120,15 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   const mentioned = detectPlatformMentions(lastUserQuery);
   const effectivePlatforms = mentioned.length ? mentioned : ((platforms && platforms.length > 0) ? platforms : PLATFORMS);
   const validationPlatforms = mentioned.length ? mentioned : ((platforms && platforms.length) ? platforms : null);
+  // alternativesCount === 0 = modo conversacional (la app móvil): se devuelve UNA
+  // sola película. Igual se le piden 3 títulos de RESPALDO al modelo — no se
+  // muestran nunca, existen para que la validación de disponibilidad tenga a
+  // quién promover si el principal no está en el país del usuario.
+  const single = alternativesCount === 0;
+  const BACKUPS = 3;
   // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
   // por país) puede descartar títulos, y así igual se llega al count pedido.
-  const askCount = alternativesCount + 2;
+  const askCount = single ? BACKUPS : alternativesCount + 2;
   const excludeLine = excludeTitles && excludeTitles.length > 0
     ? `\n\nTítulos a excluir (ya vistos o mostrados — NO los recomiendes):\n- ${excludeTitles.join("\n- ")}`
     : "";
@@ -118,14 +146,16 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
         `Plataformas disponibles: ${effectivePlatforms.join(", ")}`,
         country ? `País del usuario: ${country} (recomendá solo títulos en el catálogo local)` : null,
         excludeLine || null,
-        `Alternativas requeridas: ${askCount}`,
+        single
+          ? `Títulos de respaldo requeridos: ${askCount} (respaldo interno, no se muestran)`
+          : `Alternativas requeridas: ${askCount}`,
       ].filter(Boolean).join("\n");
       return { role: "user", content: `${contextBlock}\n\nPedido del usuario: ${m.content}` };
     }
     return m;
   });
 
-  const parsed = await callAnthropic(builtMessages, askCount);
+  const parsed = await callAnthropic(builtMessages, askCount, single);
 
   // Normalize output
   const normalize = (r) => ({
@@ -150,17 +180,28 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   // voz, que lo presenta por nombre.
   await validateItems([main, ...alternatives], validationPlatforms, country);
   const mainOk = main._avail === "confirmed" || main._avail === "corrected" || main._avail === "unknown";
-  const pool = pickAvailable(alternatives, askCount, alternativesCount);
+  // minFill = askCount en modo single: con minFill 0, pickAvailable tiraría los
+  // "unknown" y nos quedaríamos sin respaldo.
+  const pool = pickAvailable(alternatives, askCount, single ? askCount : alternativesCount);
   delete main._avail;
   if (!mainOk && pool.length > 0) {
     main = pool.shift();
-    cinephileNote = await renoteFor(main, messages).catch(() => null) || cinephileNote;
+    if (single) {
+      // El respaldo promovido trae un "reason" de una línea (nunca iba a
+      // mostrarse): se regeneran el porqué largo y la intro de voz de una sola
+      // llamada, que en modo conversacional el porqué ES el producto.
+      const redone = await redoMainText(main, messages).catch(() => null);
+      if (redone && redone.reason) main.reason = redone.reason;
+      if (redone && redone.cinephile_note) cinephileNote = redone.cinephile_note;
+    } else {
+      cinephileNote = await renoteFor(main, messages).catch(() => null) || cinephileNote;
+    }
   }
 
   return {
     filters: parsed.filters || {},
     main,
-    alternatives: pool.slice(0, alternativesCount),
+    alternatives: single ? [] : pool.slice(0, alternativesCount),
     clarification_needed: parsed.clarification_needed || null,
     cinephile_note: cinephileNote,
   };
@@ -195,6 +236,51 @@ async function renoteFor(item, messages) {
   const data = await res.json();
   const text = ((data.content && data.content[0] && data.content[0].text) || "").trim();
   return text || null;
+}
+
+// Modo conversacional: cuando la validación baja al título principal y se
+// promueve un respaldo, ese respaldo trae textos de una línea (nunca iba a
+// mostrarse). Una sola llamada barata regenera las DOS cosas que sí se ven: el
+// porqué largo y la intro hablada.
+async function redoMainText(item, messages) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 420,
+      system:
+        'Sos Miru, el experto de tu videoclub de confianza: un cinéfilo apasionado que explica POR QUÉ esta película y por qué a ESTA persona. Devolvé ÚNICAMENTE JSON válido, sin markdown: {"reason":"","cinephile_note":""}. ' +
+        '"reason": 2 a 4 oraciones (45 a 75 palabras), español rioplatense, sin emojis ni listas. Arrancá por el porqué atado a lo que el usuario pidió, seguí con qué la hace especial (director, época o movimiento, con qué otra obra dialoga) y cerrá con qué se va a llevar si la ve. Sin spoilers, nada genérico. ' +
+        '"cinephile_note": 2 a 3 oraciones (45 a 65 palabras) para ser HABLADAS en voz alta: arrancá con el contexto del pedido, presentá el título con una frase que enganche, y cerrá invitando a verla o a pedirte otra cosa si no le cierra.',
+      messages: [{
+        role: "user",
+        content: `Pedido del usuario: ${String((lastUser && lastUser.content) || "algo para ver hoy").slice(0, 400)}\n\nTítulo a presentar: "${item.title}"${item.year ? ` (${item.year})` : ""} en ${item.platform}. De qué va: ${item.synopsis || item.reason || ""}`,
+      }],
+    }),
+  }, { timeoutMs: 18000 });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const text = ((data.content && data.content[0] && data.content[0].text) || "").trim();
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first < 0 || last <= first) return null;
+  try {
+    const parsed = JSON.parse(text.slice(first, last + 1));
+    return {
+      reason: typeof parsed.reason === "string" ? parsed.reason.trim() : "",
+      cinephile_note: typeof parsed.cinephile_note === "string" ? parsed.cinephile_note.trim() : "",
+    };
+  } catch {
+    return null;
+  }
 }
 
 const ASK_SYSTEM = `Sos Miru: el experto de tu videoclub de confianza — un cinéfilo apasionado, como esos críticos de los programas de TV de los 60/70/80 que con una frase te abrían un mundo. El usuario está mirando la ficha de un título y te hace una pregunta sobre él (de qué trata, si vale la pena, el director, con qué compararla, etc.).
