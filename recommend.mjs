@@ -178,10 +178,14 @@ function normalize(r) {
   };
 }
 
-function excludeLine(excludeTitles) {
-  return excludeTitles && excludeTitles.length > 0
-    ? `Títulos a excluir (ya vistos o mostrados — NO los recomiendes):\n- ${excludeTitles.join("\n- ")}`
-    : null;
+function excludeLine(excludeTitles, single = false) {
+  if (!excludeTitles || !excludeTitles.length) return null;
+  // En conversación el rótulo importa: "ya vistos" hacía que el modelo diera
+  // por vista una película que la persona solo abrió (o que Miru solo propuso).
+  const label = single
+    ? "Títulos a NO proponer (Miru ya se los propuso o los abrió desde Miru — NO significa que los haya visto)"
+    : "Títulos a excluir (ya vistos o mostrados — NO los recomiendes)";
+  return `${label}:\n- ${excludeTitles.join("\n- ")}`;
 }
 
 // El contexto va inyectado en el PRIMER mensaje del usuario (la conversación
@@ -215,7 +219,8 @@ Reglas:
 - Si hay "Perfil de gusto", es una señal FUERTE: rankeá por encaje con ESTA persona, no con el público general. Pero el pedido de HOY manda sobre el perfil: si hoy pide algo distinto a lo de siempre, seguilo.
 - "Descartes en esta charla" con motivo: ese motivo es una restricción dura para TODOS los candidatos. Si hay 2 o más descartes seguidos SIN motivo, la persona no sabe decir qué no le cierra: elegí candidatos en CONTRASTE claro con lo descartado y completá "clarification_needed" con UNA pregunta corta y cálida que lo destrabe.
 - Pedido ambiguo o con duda (muletillas transcriptas, "no sé", "lo que sea", frases inconclusas): proponé igual tu mejor lectura Y completá "clarification_needed" (máximo 20 palabras, cálida, una sola). Si el pedido es claro, null.
-- Títulos a excluir: JAMÁS los propongas.
+- Títulos a no proponer: JAMÁS los propongas. OJO: estar en esa lista NO significa que la persona los haya visto — son títulos que Miru ya le propuso o que abrió desde Miru.
+- ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
 - Priorizá títulos con presencia estable en la plataforma; evitá estrenos de los últimos 6 meses salvo certeza.
@@ -234,6 +239,7 @@ Devolvé JSON válido y nada más:
 - "synopsis": 20 a 30 palabras, DE QUÉ VA (planteo y qué está en juego), sin spoilers, sin emojis.
 - "reason": 2 a 4 oraciones (45 a 75 palabras), español rioplatense, sin emojis ni listas. Arrancá por el porqué atado a lo que pidió HOY; seguí con qué la hace especial (quién la dirigió y qué más hizo, la época o el movimiento, con qué obra dialoga, una decisión de puesta en escena); cerrá con qué se va a llevar si la ve. Nada genérico ("gran película", "imperdible", "muy recomendable"). Sin spoilers.
 - LA CARTA: si el "Perfil de gusto" o un descarte de esta charla influyeron en la elección, NOMBRÁ UNA sola señal concreta de esa persona, como quien se acuerda ("como la última vez te fuiste con X…", "como dijiste que la anterior era muy larga…", "como te tira el cine de los 70…"). Una, y VERDADERA: nunca inventes lo que no está en el contexto, y nunca más de una — una es "cómo supo", tres es incómodo. Si nada influyó, no fuerces nada.
+- ABRIR NO ES VER. Si la señal es que "fue a ver" un título, lo máximo que podés decir es "te llevaste X" o "te interesó X": NUNCA "la viste", "la terminaste", "acabás de ver" ni "te gustó" — eso solo si hay un veredicto explícito. Afirmar que vio algo que solo abrió rompe la confianza en un segundo.
 - "cinephile_note": 2 a 3 oraciones (45 a 65 palabras) para ser HABLADAS en voz alta: arrancá con el contexto del pedido ("Para esta noche de finde…"), presentá el título con una frase que enganche y deje claro por qué responde al pedido, y cerrá invitando a verla o a pedirte otra si no le cierra. Sin emojis ni listas.
 - "duration": ej. "1h 52m" o "8 capítulos de 45m". "ageRating": "ATP", "PG", "+13", "+16" o "+18" (el más conservador si dudás).`;
 
@@ -290,7 +296,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
 
   // 1) Proponer. Si NINGÚN candidato está en el país, un solo reintento con
   //    esos títulos excluidos; después, degradar suave (como siempre).
-  let proposed = await proposeCandidates({ messages, contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine(exclude)] });
+  let proposed = await proposeCandidates({ messages, contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
   let candidates = proposed.candidates;
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
@@ -300,7 +306,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     retried = true;
     const again = await proposeCandidates({
       messages,
-      contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)]), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
+      contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
     });
     if (again.candidates.length) {
       candidates = again.candidates;

@@ -150,7 +150,9 @@ export function profileBlock(): string | null {
   // Señales crudas recientes, aunque no haya perfil todavía: es lo que permite
   // "cómo supo" desde la segunda sesión.
   const opened = loadOpened().slice(0, 3);
-  if (opened.length) lines.push(`Últimas que fue a ver: ${opened.map((o) => `${o.title} (${o.platform}, ${timeAgo(o.openedAt)})`).join("; ")}.`);
+  // "Abrió" y no "vio": tocar "Ver en X" no dice si la vio. Con ese rótulo,
+  // el modelo daba por vista (y hasta "recién terminada") una peli solo abierta.
+  if (opened.length) lines.push(`Abrió desde Miru (tocó "Ver en X"; NO sabemos si la vio): ${opened.map((o) => `${o.title} (${o.platform}, ${timeAgo(o.openedAt)})`).join("; ")}.`);
   const verdicts = t.verdicts.slice(-4);
   if (verdicts.length) {
     lines.push(`Opiniones: ${verdicts.map((v) => `${v.title}: ${v.verdict === "liked" ? (v.stage === "card" ? "le cerró la propuesta" : "le gustó") : v.verdict === "meh" ? (v.stage === "card" ? "no era para esa persona" : "no tanto") : "no la vio"}`).join("; ")}.`);

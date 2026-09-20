@@ -18,7 +18,7 @@ Devolvé JSON válido y nada más:
 - "asks": UNA frase sobre CÓMO pide (con referencias a títulos o directores, vago, con mood, por duración, por compañía) — sirve para saber cuánto preguntar.
 - "confidence": "baja" (menos de 4 señales fuertes), "media", "alta" (muchas aperturas y veredictos coherentes).
 
-Pesos: "después de verla: le gustó / no tanto" vale más que todo; una reacción 👍/👎 a la propuesta vale como gusto declarado (pero no la vio); "fue a ver" = le interesó (no significa que la vio entera); un descarte CON motivo es una restricción explícita; un descarte sin motivo pesa poco; los pedidos muestran el registro y el humor, no necesariamente el gusto. Si hay un perfil previo, INTEGRALO con lo nuevo (no lo repitas ni lo tires): lo reciente pesa más que lo viejo. Nunca inventes títulos ni gustos que no estén en las señales.`;
+Pesos: "después de verla: le gustó / no tanto" vale más que todo; una reacción 👍/👎 a la propuesta vale como gusto declarado (pero no la vio); "abrió" = le interesó lo suficiente para ir a verla, pero NO sabemos si la vio (jamás lo des por visto); un descarte CON motivo es una restricción explícita; un descarte sin motivo pesa poco; los pedidos muestran el registro y el humor, no necesariamente el gusto. Si hay un perfil previo, INTEGRALO con lo nuevo (no lo repitas ni lo tires): lo reciente pesa más que lo viejo. Nunca inventes títulos ni gustos que no estén en las señales.`;
 
 const DAYS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 function when(ts) {
@@ -36,7 +36,7 @@ function formatSignals({ requests, opened, rejected, verdicts, sessions, previou
     for (const r of requests) lines.push(`- [${when(r.ts)}${r.source === "voice" ? ", por voz" : ""}] "${r.q}"`);
   }
   if (opened.length) {
-    lines.push("\nFue a ver (tocó \"Ver en X\"):");
+    lines.push("\nAbrió desde Miru (tocó \"Ver en X\" — NO sabemos si la vio ni si la terminó):");
     for (const o of opened) lines.push(`- ${o.title} (${o.platform}) — ${when(o.ts)}${o.q ? ` — había pedido: "${o.q}"` : ""}`);
   }
   if (rejected.length) {
