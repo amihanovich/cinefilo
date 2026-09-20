@@ -4,6 +4,19 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railwa
 
 export type Message = { role: "user" | "assistant"; content: string };
 
+/** Error HTTP del backend, con el status: la app distingue "se trabó el
+ *  servicio" (5xx) de "sin red" (TypeError) y de "tardó demasiado" (TimeoutError). */
+export class HttpError extends Error {
+  status: number;
+  detail: string;
+  constructor(message: string, status: number, detail: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export type Recommendation = {
   title: string;
   platform: string;
@@ -47,9 +60,14 @@ export async function fetchRecommendation(params: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
     // Timeout duro: sin esto, si Railway cuelga el spinner queda infinito.
-    signal: AbortSignal.timeout(45000),
+    // 60 s: el modo conversación son dos llamadas al modelo + TMDB (y a veces
+    // un reintento); 45 s cortaba turnos que iban a salir bien.
+    signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error(`/api/recommend ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new HttpError(`/api/recommend ${res.status}`, res.status, detail.slice(0, 200));
+  }
   return res.json() as Promise<RecoResponse>;
 }
 

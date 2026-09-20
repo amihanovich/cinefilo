@@ -223,9 +223,16 @@ export function ChatScreen() {
         .catch(() => { /* sin verificar: el botón cae a buscar en la plataforma */ });
     } catch (e) {
       console.error("[chat]", e);
+      // Tres fallas distintas, tres mensajes: el genérico escondía cuál era.
+      const err = e as { name?: string; status?: number };
+      const msg =
+        err?.name === "TimeoutError" ? "Me demoré demasiado eligiendo. Pedímelo de nuevo, ya lo tengo más a mano."
+        : err?.name === "HttpError" ? `Se me trabó la elección (error ${err.status}). Probá de nuevo en un toque.`
+        : "No llego al servidor. Fijate la conexión y pedímelo de nuevo.";
+      track("chat_turn_failed", { kind: err?.name ?? "unknown", status: err?.status ?? null });
       setTurns((prev) => [
         ...prev.filter((t) => t.kind !== "thinking"),
-        { kind: "miru", id: uid(), text: "Se me cortó la búsqueda. Fijate la conexión y pedímelo de nuevo.", tone: "error" },
+        { kind: "miru", id: uid(), text: msg, tone: "error" },
       ]);
     } finally {
       busyRef.current = false;

@@ -265,17 +265,29 @@ function formatRejected(rejected) {
 }
 
 async function proposeCandidates({ messages, contextLines }) {
-  const parsed = await callJson({
-    system: SYSTEM_PROPOSE,
-    messages: injectContext(messages, contextLines),
-    maxTokens: 700,
-    timeoutMs: 25000,
-  });
-  const candidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
-    .map(normalizeCandidate)
-    .filter((c) => c.title)
-    .slice(0, CANDIDATES);
-  return { candidates, clarification: typeof parsed.clarification_needed === "string" && parsed.clarification_needed.trim() ? parsed.clarification_needed.trim() : null };
+  const attempt = async () => {
+    const parsed = await callJson({
+      system: SYSTEM_PROPOSE,
+      messages: injectContext(messages, contextLines),
+      maxTokens: 700,
+      timeoutMs: 25000,
+    });
+    const candidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
+      .map(normalizeCandidate)
+      .filter((c) => c.title)
+      .slice(0, CANDIDATES);
+    return { candidates, clarification: typeof parsed.clarification_needed === "string" && parsed.clarification_needed.trim() ? parsed.clarification_needed.trim() : null };
+  };
+  // Un hipo del modelo (JSON roto, lista vacía, 5xx que el retry de red no
+  // salvó) no tira el turno: una segunda oportunidad y recién ahí se rinde.
+  try {
+    const first = await attempt();
+    if (first.candidates.length) return first;
+    console.warn("[recommend] el paso 1 vino sin candidatos, reintento");
+  } catch (e) {
+    console.warn("[recommend] el paso 1 falló, reintento:", e.message);
+  }
+  return attempt();
 }
 
 // El primero disponible según el ranking del modelo; "unknown" (TMDB no lo
@@ -302,7 +314,10 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   await validateItems(candidates, validationPlatforms, country);
   let winner = pickWinner(candidates);
   let retried = false;
-  if (!winner && candidates.length) {
+  // Presupuesto: el reintento por "ninguno disponible" suma otra elección +
+  // otra validación. Si ya pasaron 20 s, mejor degradar suave que dejar al
+  // teléfono esperando hasta que corte.
+  if (!winner && candidates.length && Date.now() - t0 < 20000) {
     retried = true;
     const again = await proposeCandidates({
       messages,
