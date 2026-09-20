@@ -66,3 +66,24 @@ export async function scanTvQr(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Entrada al control remoto: escanea el QR de la TV y, si no hay cámara/plugin
+ * (browser de desarrollo), cae a ingresar el código a mano. Devuelve el session
+ * id listo para usar (ya persistido) o null si el usuario canceló.
+ * `onInvalid` avisa que lo tipeado no era un código válido.
+ */
+export async function pickTvSession(onInvalid?: () => void): Promise<string | null> {
+  const scanned = await scanTvQr();
+  if (scanned) { saveSession(scanned); return scanned; }
+  const recent = recentSession();
+  const typed = window.prompt(
+    recent
+      ? `Ingresá el código de la TV, o dejá vacío para reconectar (${recent}):`
+      : "Ingresá el código que aparece debajo del QR en la TV:",
+  );
+  const id = typed?.trim() ? parseSession(typed) : recent;
+  if (id) { saveSession(id); return id; }
+  if (typed) onInvalid?.();
+  return null;
+}
