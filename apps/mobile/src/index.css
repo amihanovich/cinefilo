@@ -3,14 +3,38 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Dos temas sobre los mismos tokens.
+     - OSCURO (`:root` = el default de siempre, y `.theme-dark` para volver a él
+       dentro de una pantalla clara): la app de pósters y el control de TV.
+     - PAPEL (`.theme-paper`): la conversación. Texto largo y UNA ficha: el negro
+       puro cansaba de leer y los escalones fondo→burbuja→ficha no se veían.
+     `--card` existe porque la jerarquía se invierte: en oscuro las superficies
+     SUBEN en luz; en papel la ficha es blanca apoyada sobre crema.
+     `--accent` es el ocre del "por qué te la propongo": color propio, que no
+     compita con el violeta de Miru ni con el rojo del botón de plataforma. */
+  :root,
+  .theme-dark {
     --background: 0 0% 4%;
+    --card: 0 0% 8%;
     --foreground: 0 0% 95%;
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 50%;
     --border: 0 0% 18%;
     --primary: 263 70% 60%;
     --primary-foreground: 0 0% 100%;
+    --accent: 38 80% 62%;
+  }
+
+  .theme-paper {
+    --background: 40 33% 95%;      /* #F8F4EC crema */
+    --card: 0 0% 100%;             /* ficha y burbujas de Miru */
+    --foreground: 25 15% 14%;      /* #29231F tinta */
+    --muted: 40 25% 91%;           /* input, chips */
+    --muted-foreground: 30 9% 40%; /* #6F655D — 4.9:1 sobre crema */
+    --border: 38 30% 86%;          /* #E5DCCC hairline */
+    --primary: 263 52% 51%;        /* #6B3FC4 el violeta de Miru — 7:1 */
+    --primary-foreground: 0 0% 100%;
+    --accent: 34 82% 32%;          /* #96600F ocre — 4.8:1 (el rótulo es 11px bold) */
   }
 
   * {

@@ -14,6 +14,15 @@ function wantsFullApp(): boolean {
   }
 }
 
+const full = wantsFullApp();
+
+// El tema va en <html> y no en un div: el body pinta el fondo, así que el rebote
+// del scroll y las safe areas mostrarían el otro tema por detrás. La conversación
+// es PAPEL (texto largo, una ficha); la app de pósters sigue oscura.
+try {
+  document.documentElement.classList.add(full ? "theme-dark" : "theme-paper");
+} catch { /* noop */ }
+
 export default function App() {
-  return wantsFullApp() ? <WizardPage /> : <ChatScreen />;
+  return full ? <WizardPage /> : <ChatScreen />;
 }

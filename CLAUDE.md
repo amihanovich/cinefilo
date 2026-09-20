@@ -44,6 +44,13 @@ no se borró nada.
   contesta escrito. La nota se muestra siempre.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - La TV no desapareció: "Conectar TV" vive en **Mi cuenta** (`AccountSheet` → `ControlScreen`).
+- **Tema "Papel"** (claro, crema + tinta): la conversación es texto largo y UNA ficha, y ahí el negro
+  puro cansaba y aplanaba los escalones fondo→burbuja→ficha. `index.css` define dos temas sobre los
+  mismos tokens (`.theme-paper` / `.theme-dark`, + `--card` y `--accent`); `App.tsx` los pone en
+  `<html>`. **Todo lo demás sigue oscuro**: `?full=1`, el control de TV (`theme-dark` en su raíz), la
+  TV y la web legacy. El violeta es de Miru, el ocre es del "por qué", y el color de plataforma se usa
+  SOLO en el botón "Ver en X" (con `textOnPlatform()`, porque el celeste de Prime con blanco no llega
+  a AA).
 
 ## Los clientes (resumen — detalle en ARCHITECTURE.md)
 

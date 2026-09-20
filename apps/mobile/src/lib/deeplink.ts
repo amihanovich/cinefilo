@@ -33,3 +33,20 @@ export function deepLinkFor(platform: string, title: string): string {
   };
   return urls[platform] ?? `https://www.google.com/search?q=${q}+streaming`;
 }
+
+/**
+ * Color de texto legible sobre el color de una plataforma. Casi todas son
+ * oscuras y llevan blanco, pero el celeste de Prime Video con blanco da 2.7:1
+ * (abajo de AA) — sobre él el texto va en tinta. Se decide por luminancia, así
+ * que sirve igual si mañana cambia un color de marca.
+ */
+export function textOnPlatform(platform: string): string {
+  const hex = colorForPlatform(platform).replace("#", "");
+  const ch = (i: number) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
+  // Umbral 0.3: por encima, el blanco no llega a 4.5:1.
+  return lum > 0.3 ? "#1A1614" : "#FFFFFF";
+}

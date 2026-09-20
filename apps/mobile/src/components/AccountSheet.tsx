@@ -208,8 +208,8 @@ function MainSection({
                 className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95"
                 style={
                   active
-                    ? { borderColor: color, backgroundColor: `${color}22`, color }
-                    : { borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)", color: "var(--color-muted-foreground)" }
+                    ? { borderColor: color, backgroundColor: `${color}22`, color: "hsl(var(--foreground))" }
+                    : { borderColor: "hsl(var(--border))", backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
                 }
               >
                 <span

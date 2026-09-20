@@ -322,7 +322,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
     : todayTitles.map((t, i) => ({ id: "tt" + i, title: t }));
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
+    <div className="theme-dark fixed inset-0 z-50 flex flex-col bg-background text-foreground safe-top safe-bottom">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
         <button onClick={onClose} className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground active:scale-95">

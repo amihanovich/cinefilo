@@ -15,7 +15,7 @@ import { AccountSheet } from "../components/AccountSheet";
 import { ControlScreen } from "./ControlScreen";
 import { fetchRecommendation, fetchPosters, warmupBackend, type Message, type Recommendation } from "../lib/api";
 import { inferContext, contextToPromptHint, seasonHintShort } from "../lib/context";
-import { colorForPlatform, platformLabel } from "../lib/deeplink";
+import { colorForPlatform, platformLabel, textOnPlatform } from "../lib/deeplink";
 import { jwSearch, type JwResult } from "../lib/justwatch";
 import { openStreaming } from "../lib/watch";
 import { VoiceRecorder, transcribe } from "../lib/stt";
@@ -296,12 +296,15 @@ export function ChatScreen() {
       </div>
 
       {/* El hilo */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-4">
+      <div className={cn(
+        "flex-1 min-h-0 overflow-y-auto px-5 pb-4",
+        turns.length === 1 && "flex flex-col justify-center",
+      )}>
         {turns.map((t) => {
           if (t.kind === "user") {
             return (
               <div key={t.id} className="fade-in mt-4 flex justify-end">
-                <p className="max-w-[80%] rounded-3xl rounded-br-lg bg-primary/15 px-4 py-2.5 text-[14px] leading-snug text-foreground">
+                <p className="max-w-[80%] rounded-3xl rounded-br-lg border border-primary/15 bg-primary/10 px-4 py-2.5 text-[14px] leading-snug text-foreground">
                   {t.text}
                 </p>
               </div>
@@ -315,9 +318,9 @@ export function ChatScreen() {
                 </span>
                 <p className={cn(
                   "max-w-[85%] rounded-3xl rounded-bl-lg px-4 py-2.5 text-[14px] leading-relaxed",
-                  t.tone === "error" ? "bg-red-500/10 text-red-300"
+                  t.tone === "error" ? "bg-red-500/10 text-red-700"
                   : t.tone === "question" ? "border border-primary/25 bg-primary/5 text-foreground"
-                  : "bg-muted text-foreground/90",
+                  : "border border-border bg-card text-foreground/90",
                 )}>
                   {t.text}
                 </p>
@@ -330,7 +333,7 @@ export function ChatScreen() {
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
                   <Orb phase="thinking" size="mini" sizePx={28} />
                 </span>
-                <span className="flex items-center gap-2 rounded-3xl rounded-bl-lg bg-muted px-4 py-2.5 text-[13px] text-muted-foreground">
+                <span className="flex items-center gap-2 rounded-3xl rounded-bl-lg border border-border bg-card px-4 py-2.5 text-[13px] text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando la tuya…
                 </span>
               </div>
@@ -432,11 +435,14 @@ function RecoCard({
 }) {
   const color = colorForPlatform(item.platform);
   const label = platformLabel(item.platform);
+  // El celeste de Prime con texto blanco queda ilegible: el color de la tipografía
+  // lo decide la luminancia de la marca, no un default.
+  const onColor = textOnPlatform(item.platform);
   return (
     <div data-turn={turnId} className="fade-in mt-3 pl-9">
-      <div className="overflow-hidden rounded-3xl border border-border bg-muted/30">
+      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-[0_1px_3px_rgba(41,35,31,0.07)]">
         <div className="flex gap-3 p-3">
-          <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-muted" style={!poster ? { backgroundColor: `${color}20` } : undefined}>
+          <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border" style={!poster ? { backgroundColor: `${color}20` } : undefined}>
             {poster ? (
               <img src={poster} alt={item.title} className="h-full w-full object-cover" />
             ) : (
@@ -448,7 +454,7 @@ function RecoCard({
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-bold leading-tight text-foreground">{item.title}</h2>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: color }}>{label}</span>
+              <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ backgroundColor: color, color: onColor }}>{label}</span>
               <span className="text-[11px] text-muted-foreground">
                 {item.type}{item.duration ? ` · ${item.duration}` : ""}{item.year ? ` · ${item.year}` : ""}
               </span>
@@ -464,18 +470,18 @@ function RecoCard({
 
         {/* El porqué: entero, sin recortes. Es por lo que existe la app. */}
         <div className="px-4 pb-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-primary">✦ Por qué te la propongo</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">✦ Por qué te la propongo</p>
           <p className="mt-1 text-[14.5px] leading-relaxed text-foreground/90">{item.reason}</p>
 
           <button
             onClick={() => void openStreaming(item, avail, { posterUrl: poster })}
-            className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold text-white shadow-lg transition-transform active:scale-95"
-            style={{ backgroundColor: color }}
+            className="mt-4 w-full rounded-full py-3 text-center text-sm font-bold shadow-sm transition-transform active:scale-95"
+            style={{ backgroundColor: color, color: onColor }}
           >
             ▶ Ver en {label}
           </button>
           {/* Atribución requerida por TMDB: la disponibilidad es data de JustWatch */}
-          <p className="mt-1 text-center text-[9px] text-muted-foreground/50">Disponibilidad: JustWatch</p>
+          <p className="mt-1 text-center text-[9px] text-muted-foreground/80">Disponibilidad: JustWatch</p>
         </div>
       </div>
 

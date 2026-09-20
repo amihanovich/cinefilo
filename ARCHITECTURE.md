@@ -131,6 +131,13 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   **voz** (`VoiceAgent.tsx` + `Orb.tsx`) **o texto** → **resultados** (`/api/recommend`), con estado de carga
   `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos (y la entrada a la
   TV, que en la conversación es la única puerta al control).
+- **Temas** (`src/index.css`): dos juegos de valores sobre los mismos tokens HSL. `.theme-paper` (crema
+  #F8F4EC + tinta #29231F + violeta #6B3FC4 + ocre #96600F) para la conversación; `.theme-dark` (los
+  valores de siempre) para `?full=1` y para `ControlScreen`, que lo fuerza en su raíz. `App.tsx` pone la
+  clase en `<html>` (el `body` pinta el fondo: un div no alcanzaba). Tokens nuevos: `--card` (la
+  jerarquía se invierte — en papel la ficha es blanca sobre crema) y `--accent` (el rótulo del porqué).
+  `textOnPlatform()` en `lib/deeplink.ts` elige blanco o tinta sobre el color de marca por luminancia
+  (el celeste de Prime con blanco da 2.7:1).
 - **Compartido entre las dos pantallas**: `lib/watch.ts` (la cascada de apertura: deeplink confirmado →
   búsqueda en la app → Google si JustWatch dice que NO está, + registro en "Abiertos recientemente"),
   `lib/prefs.ts` (plataformas y país del dispositivo), `components/BrandSplash.tsx`, `lib/tv-remote.ts`
