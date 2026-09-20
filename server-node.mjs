@@ -6,6 +6,7 @@ import { toNodeHandler } from "srvx/node";
 import serverModule from "./dist/server/server.js";
 import { tvSearch, tvHome, tvHomeMore, tvRibbons, tvTop, tvBlurb, warmHome } from "./tv-search.mjs";
 import { recommend, askAboutTitle, orbRespond, inferIntent } from "./recommend.mjs";
+import { synthesizeProfile } from "./profile.mjs";
 import { Readable } from "node:stream";
 import { transcribeAudio } from "./transcribe.mjs";
 import { ttsStream } from "./tts.mjs";
@@ -379,11 +380,47 @@ http
           excludeTitles: strArr(p.excludeTitles, 100, 120),
           alternativesCount: alt,
           country: str(p.country, 2),
+          // Modo conversación: el perfil de gusto del dispositivo (texto ya
+          // formateado por el cliente) y los descartes de esta charla.
+          tasteProfile: str(p.tasteProfile, 1500),
+          rejected: (Array.isArray(p.rejected) ? p.rejected : [])
+            .slice(-8)
+            .filter((r) => r && typeof r.title === "string")
+            .map((r) => ({ title: r.title.slice(0, 120), reason: typeof r.reason === "string" && r.reason.trim() ? r.reason.slice(0, 200) : null })),
         }));
       });
       return;
     }
     if (urlPath === "/api/recommend" && req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // La memoria del videoclub: señales crudas del teléfono → perfil de gusto.
+    if (urlPath === "/api/profile" && req.method === "POST") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      readBody(req, res, 32768).then((body) => {
+        if (body === null) return;
+        const p = asJson(body);
+        const list = (v, n) => (Array.isArray(v) ? v.filter((x) => x && typeof x === "object").slice(0, n) : []);
+        const ts = (v) => (typeof v === "string" ? v.slice(0, 40) : "");
+        const prev = p.previous && typeof p.previous === "object" ? p.previous : null;
+        sendJson(synthesizeProfile({
+          requests: list(p.requests, 25).map((r) => ({ q: str(r.q, 300) || "", ts: ts(r.ts), source: r.source === "voice" ? "voice" : "text" })).filter((r) => r.q),
+          opened: list(p.opened, 20).map((o) => ({ title: str(o.title, 120) || "", platform: str(o.platform, 40) || "", ts: ts(o.ts), q: str(o.q, 200) || "" })).filter((o) => o.title),
+          rejected: list(p.rejected, 30).map((r) => ({ title: str(r.title, 120) || "", reason: str(r.reason, 200) || null })).filter((r) => r.title),
+          verdicts: list(p.verdicts, 30).map((v) => ({ title: str(v.title, 120) || "", verdict: ["liked", "meh", "unseen"].includes(v.verdict) ? v.verdict : "unseen", stage: v.stage === "card" ? "card" : "return" })).filter((v) => v.title),
+          sessions: strArr(p.sessions, 60, 40),
+          previous: prev ? { summary: str(prev.summary, 900) || "", likes: strArr(prev.likes, 6, 40), avoid: strArr(prev.avoid, 4, 40) } : null,
+        }));
+      });
+      return;
+    }
+    if (urlPath === "/api/profile" && req.method === "OPTIONS") {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
       res.setHeader("Access-Control-Allow-Headers", "Content-Type");

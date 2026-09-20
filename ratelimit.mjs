@@ -18,7 +18,7 @@ export const RATE_MAX_AI = 20;
 export const RATE_MAX_BLURB = 60;
 export const AI_PATHS = new Set([
   "/api/recommend", "/api/tv-search", "/api/tv-home-more",
-  "/api/transcribe", "/api/tts", "/api/ask", "/api/orb", "/api/intent",
+  "/api/transcribe", "/api/tts", "/api/ask", "/api/orb", "/api/intent", "/api/profile",
 ]);
 export const BLURB_PATH = "/api/tv-blurb";
 
