@@ -12,7 +12,7 @@
 // que permite que la carta diga "como la última vez te fuiste con X…".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { User, Volume2, VolumeX, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
+import { User, Volume2, VolumeX, RefreshCw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import { MiruMark } from "../components/MiruMark";
 import { Composer, type DictationState } from "../components/Composer";
 import { PlatformSheet } from "../components/PlatformSheet";
@@ -21,7 +21,7 @@ import { LoginSheet } from "../components/LoginSheet";
 import { startTasteSync, stopTasteSync } from "../lib/tasteSync";
 import { currentUser, onUserChange, signInWithGoogle, signOut, deleteAccount, takePendingAsk, rememberPendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
 import { BrandSplash } from "../components/BrandSplash";
-import { AccountSheet } from "../components/AccountSheet";
+import { ProfileSheet } from "../components/ProfileSheet";
 import { ControlScreen } from "./ControlScreen";
 import { fetchRecommendation, fetchPosters, warmupBackend, type Message, type Recommendation } from "../lib/api";
 import { inferContext, contextToPromptHint, seasonHintShort } from "../lib/context";
@@ -30,13 +30,17 @@ import { jwSearch, type JwResult } from "../lib/justwatch";
 import { openStreaming } from "../lib/watch";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking, isMuted, setMuted } from "../lib/tts";
-import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, timeGreeting } from "../lib/prefs";
+import {
+  PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, timeGreeting,
+  loadMode, saveMode, modeLabel, type ModeId,
+} from "../lib/prefs";
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
 import {
   recordSession, recordRequest, recordRejection, recordVerdict, recordShown, cardVerdict,
   pendingVerdict, markAsked, excludeTitles as tasteExclude, profileBlock, hasProfile, maybeRefreshProfile,
+  addNote, removeNote, loadTaste,
   type Verdict,
 } from "../lib/taste";
 
@@ -55,7 +59,9 @@ type Turn =
   | { kind: "reco"; id: string; item: Recommendation }
   | { kind: "thinking"; id: string }
   /** "¿Qué tal estuvo X?" al volver: tres chips, una sola vez por título. */
-  | { kind: "verdict"; id: string; title: string };
+  | { kind: "verdict"; id: string; title: string }
+  /** "Acordate que…": lo que Miru guardó en la memoria, con Deshacer. */
+  | { kind: "memory"; id: string; text: string; noteId: string | null };
 
 // Cómo arranca el hilo: vacío (el saludo es el encabezado grande), salvo que en
 // otra sesión hayas abierto algo — ahí Miru pregunta qué tal estuvo, que es la
@@ -82,6 +88,8 @@ export function ChatScreen() {
   const [phase, setPhase] = useState<"splash" | "chat">("splash");
   const [turns, setTurns] = useState<Turn[]>(openingTurns);
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
+  // Modo de búsqueda (las "habilidades" del +): queda puesto hasta que lo saques.
+  const [mode, setMode] = useState<ModeId | null>(loadMode);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
   const [brokenPosters, setBrokenPosters] = useState<Set<string>>(new Set());
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
@@ -236,7 +244,35 @@ export function ChatScreen() {
         tasteProfile: profileBlock(),
         userName: name,
         rejected: rejectedRef.current.slice(-8),
+        mode,
       });
+
+      // "Acordate que…": lo que pidió recordar va a la memoria (manda sobre el
+      // perfil) y queda a la vista con Deshacer.
+      const remember = (data?.remember ?? "").trim();
+      let memoryTurn: Turn | null = null;
+      if (remember) {
+        addNote(remember, "chat");
+        const saved = loadTaste().notes.find((n) => n.text.toLowerCase() === remember.toLowerCase());
+        memoryTurn = { kind: "memory", id: uid(), text: remember, noteId: saved?.id ?? null };
+        track("memory_note_added", { source: "chat" });
+      }
+
+      // Solo pidió que recuerde algo (sin pedir película): Miru acusa recibo y listo.
+      if (!data?.main?.title && remember) {
+        const ack = (data.cinephile_note ?? "").trim() || "Anotado, lo voy a tener en cuenta.";
+        historyRef.current = [...history, { role: "assistant", content: ack }];
+        const ackId = uid();
+        anchorRef.current = ackId;
+        setTurns((prev) => [
+          ...prev.filter((t) => t.kind !== "thinking"),
+          { kind: "miru", id: ackId, text: ack },
+          ...(memoryTurn ? [memoryTurn] : []),
+        ]);
+        // En el modo voz va como "repregunta": Miru lo dice y sigue escuchando.
+        return { note: null, title: "", platform: "", question: ack };
+      }
+
       const main = data?.main;
       if (!main?.title) throw new Error("sin resultado");
 
@@ -257,6 +293,7 @@ export function ChatScreen() {
       anchorRef.current = note ? noteId : recoId;
       setTurns((prev) => [
         ...prev.filter((t) => t.kind !== "thinking"),
+        ...(memoryTurn ? [memoryTurn] : []),
         ...(note ? [{ kind: "miru", id: noteId, text: note } as Turn] : []),
         { kind: "reco", id: recoId, item: main },
         // La repregunta va DESPUÉS de la película: Miru nunca deja al usuario con
@@ -303,7 +340,7 @@ export function ChatScreen() {
       // La memoria se re-sintetiza en segundo plano cuando juntó señales.
       void maybeRefreshProfile();
     }
-  }, [platforms, name]);
+  }, [platforms, name, mode]);
 
   const send = () => {
     const q = text.trim();
@@ -382,6 +419,18 @@ export function ChatScreen() {
     track("platforms_changed", { count: next.length, all: next.length === PLATFORMS.length });
   };
 
+  const changeMode = (next: ModeId | null) => {
+    setMode(next);
+    saveMode(next);
+    track("mode_changed", { mode: next });
+  };
+
+  const undoMemory = (turnId: string, noteId: string | null) => {
+    if (noteId) removeNote(noteId);
+    track("memory_note_undone");
+    setTurns((prev) => prev.filter((t) => t.id !== turnId));
+  };
+
   const toggleMute = () => {
     const next = !ttsMuted;
     setTtsMuted(next);
@@ -417,11 +466,10 @@ export function ChatScreen() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-background safe-top safe-bottom">
-      <AccountSheet
+      <ProfileSheet
         open={accountOpen}
         onClose={() => setAccountOpen(false)}
-        onPlatformsChange={setPlatforms}
-        onOpenTvRemote={() => void openTvRemote()}
+        onOpenTvRemote={() => { setAccountOpen(false); void openTvRemote(); }}
         user={user}
         onSignIn={() => { setAccountOpen(false); setLogin({ reason: "manual", pending: null }); }}
         onDeleteAccount={() => {
@@ -531,6 +579,18 @@ export function ChatScreen() {
               </div>
             );
           }
+          if (t.kind === "memory") {
+            return (
+              <div key={t.id} data-testid="memory-chip" className="fade-in mt-2 flex items-center gap-2 pl-9">
+                <span className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-[12px] text-foreground">
+                  <Check className="h-3.5 w-3.5 text-primary" /> Lo voy a recordar: {t.text}
+                </span>
+                <button onClick={() => undoMemory(t.id, t.noteId)} className="text-[12px] font-semibold text-muted-foreground underline">
+                  Deshacer
+                </button>
+              </div>
+            );
+          }
           if (t.kind === "verdict") {
             return (
               <div key={t.id} className="fade-in mt-2 flex flex-wrap gap-1.5 pl-9">
@@ -624,6 +684,8 @@ export function ChatScreen() {
           busy={busy}
           platforms={platforms}
           onOpenPlatforms={() => setPlatformsOpen(true)}
+          modeLabel={modeLabel(mode)}
+          onClearMode={() => changeMode(null)}
           dictation={micState}
           onDictate={() => void toggleMic()}
           onVoiceMode={() => { track("voice_mode_open"); stopSpeaking(); setVoiceMode(true); }}
@@ -656,6 +718,8 @@ export function ChatScreen() {
         open={platformsOpen}
         selected={platforms}
         onChange={changePlatforms}
+        mode={mode}
+        onModeChange={changeMode}
         onClose={() => setPlatformsOpen(false)}
       />
     </div>

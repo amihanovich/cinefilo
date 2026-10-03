@@ -43,7 +43,7 @@ export function PrivacyPage() {
       <H>Qué datos guardamos</H>
       <Ul>
         <li><strong>Tu cuenta</strong>: nombre, mail y foto de perfil, si entrás con Google; o nombre, mail y contraseña (guardada cifrada), si entrás con mail.</li>
-        <li><strong>Tus gustos</strong>: lo que le pediste a Miru, lo que fuiste a ver desde Miru, lo que descartaste y por qué, tus reacciones (👍/👎) y tus respuestas a "¿qué tal estuvo?", tus plataformas elegidas, y un perfil de gusto que Miru arma con eso.</li>
+        <li><strong>Tus gustos</strong>: lo que le pediste a Miru, lo que fuiste a ver desde Miru, lo que descartaste y por qué, tus reacciones (👍/👎) y tus respuestas a "¿qué tal estuvo?", tus plataformas elegidas, lo que le pediste que recuerde ("acordate que…"), y un perfil de gusto que Miru arma con eso. Todo eso lo ves, lo editás y lo borrás en Mi cuenta, y podés pausar la memoria.</li>
         <li><strong>Uso sin cuenta</strong>: si usás Miru sin cuenta, esa información queda solo en tu dispositivo. Si después creás una cuenta, se suma a ella.</li>
       </Ul>
 

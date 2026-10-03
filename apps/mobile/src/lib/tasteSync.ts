@@ -50,6 +50,10 @@ export function mergeTaste(local: TasteStore, remote: Partial<TasteStore> | null
     profile: !lp ? rp : !rp ? lp : (lp.updatedAt > rp.updatedAt ? lp : rp),
     pending: Math.max(local.pending ?? 0, remote.pending ?? 0),
     askedAbout: local.askedAbout ?? r.askedAbout ?? null,
+    notes: unionBy(remote.notes, local.notes, (x) => x.id, tsOf, 30),
+    // La pausa es una preferencia de la cuenta: si en algún lado la pausaste, sigue pausada.
+    memoryOff: !!(local.memoryOff || remote.memoryOff),
+    removedTags: [...new Set([...(remote.removedTags ?? []), ...(local.removedTags ?? [])])],
   };
 }
 

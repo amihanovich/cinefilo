@@ -41,6 +41,8 @@ export type RecoResponse = {
   alternatives: Recommendation[];
   clarification_needed: string | null;
   cinephile_note: string | null;
+  /** Algo que la persona pidió recordar en este mensaje (modo conversación). */
+  remember?: string | null;
 };
 
 export async function fetchRecommendation(params: {
@@ -59,6 +61,8 @@ export async function fetchRecommendation(params: {
   rejected?: { title: string; reason: string | null }[];
   /** Cómo se llama la persona (opcional): Miru la nombra como mucho una vez. */
   userName?: string | null;
+  /** Modo de búsqueda elegido en el + (kids, couple, short, binge, auteur, classic). */
+  mode?: string | null;
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",
@@ -94,6 +98,8 @@ export async function fetchProfile(signals: {
   verdicts: { title: string; verdict: string; stage: string; ts: string }[];
   sessions: string[];
   previous: { summary: string; likes: string[]; avoid: string[] } | null;
+  notes?: string[];
+  removedTags?: string[];
 }): Promise<TasteProfile | null> {
   try {
     const res = await fetch(`${API_BASE}/api/profile`, {

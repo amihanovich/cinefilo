@@ -101,7 +101,7 @@ async function callAnthropic(messages, alternativesCount = 4) {
  * @param {string|null} [params.tasteProfile] - perfil de gusto del dispositivo (texto, ya formateado)
  * @param {{title:string, reason:string|null}[]} [params.rejected] - descartes de ESTA charla
  */
-export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country, tasteProfile = null, rejected = [], userName = null }) {
+export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country, tasteProfile = null, rejected = [], userName = null, mode = null }) {
   // Si el pedido de ESTE turno nombra una plataforma explícita ("buscame algo
   // en Netflix", "para ver en Disney"), eso PISA el preset de plataformas del
   // perfil — solo para este pedido puntual, no para toda la conversación.
@@ -124,7 +124,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   // pasos con la verificación de catálogo en el medio.
   if (alternativesCount === 0) {
     if (userName) baseContext.push(`La persona se llama ${userName}. Podés nombrarla como mucho UNA vez, y solo si suena natural (nunca en cada frase).`);
-    return recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected });
+    return recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected, mode });
   }
 
   // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
@@ -227,9 +227,10 @@ Reglas:
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
 - Priorizá títulos con presencia estable en la plataforma; evitá estrenos de los últimos 6 meses salvo certeza.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
+- RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
 
 FORMATO DE SALIDA: JSON válido y nada más:
-{"candidates":[{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""}],"clarification_needed":null}`;
+{"candidates":[{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""}],"clarification_needed":null,"remember":null,"only_remember":false,"ack":null}`;
 
 const SYSTEM_PITCH = `${PERSONA}
 
@@ -246,6 +247,18 @@ Devolvé JSON válido y nada más:
 - "duration": ej. "1h 52m" o "8 capítulos de 45m". "ageRating": "ATP", "PG", "+13", "+16" o "+18" (el más conservador si dudás).`;
 
 const CANDIDATES = 6;
+
+// Modos de búsqueda: las "habilidades" de Miru. Se eligen en el + del composer
+// y cambian CÓMO elige. Las reglas viven acá (el cliente solo manda el id), así
+// se ajustan sin rebuildear la app.
+export const MODES = {
+  kids: { label: "Con chicos", rule: "Es para ver en familia con chicos: SOLO ATP o PG, nada que asuste, ni violencia ni sexo; que la disfruten también los grandes.", type: null },
+  couple: { label: "Para dos", rule: "Es para ver de a dos: algo que funcione en pareja, que dé para comentar después; ni muy denso ni infantil.", type: null },
+  short: { label: "Algo corto", rule: "Tiene poco tiempo: películas de MENOS de 100 minutos, o series de capítulos de menos de 30.", type: null },
+  binge: { label: "Maratón", rule: "Quiere maratonear: SERIES enganchantes, con varias temporadas o muchos capítulos, de las que piden \"uno más\".", type: "Serie" },
+  auteur: { label: "Cine de autor", rule: "Quiere cine de autor: directores con mirada propia, festivales, lo menos mainstream; nada de franquicias ni tanques.", type: null },
+  classic: { label: "Un clásico", rule: "Quiere un clásico: estrenado ANTES del año 2000, de esos que hay que haber visto.", type: null },
+};
 
 // Tipo pedido explícitamente en el ÚLTIMO pedido (no en toda la charla: "ahora
 // una serie" pisa a la "película" de antes). El prompt ya lo pide, pero el
@@ -294,13 +307,20 @@ async function proposeCandidates({ messages, contextLines, wantType = null }) {
     // Si pidió un tipo, solo ese tipo. Si el modelo no trajo NINGUNO del tipo,
     // la lista queda vacía y se reintenta (mejor que entregar el tipo equivocado).
     if (wantType) candidates = candidates.filter((c) => c.type === wantType);
-    return { candidates, clarification: typeof parsed.clarification_needed === "string" && parsed.clarification_needed.trim() ? parsed.clarification_needed.trim() : null };
+    const txt = (v, n) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+    return {
+      candidates,
+      clarification: txt(parsed.clarification_needed, 200),
+      remember: txt(parsed.remember, 160),
+      onlyRemember: parsed.only_remember === true && !!txt(parsed.remember, 160),
+      ack: txt(parsed.ack, 120),
+    };
   };
   // Un hipo del modelo (JSON roto, lista vacía, 5xx que el retry de red no
   // salvó) no tira el turno: una segunda oportunidad y recién ahí se rinde.
   try {
     const first = await attempt();
-    if (first.candidates.length) return first;
+    if (first.candidates.length || first.onlyRemember) return first;
     console.warn("[recommend] el paso 1 vino sin candidatos, reintento");
   } catch (e) {
     console.warn("[recommend] el paso 1 falló, reintento:", e.message);
@@ -316,7 +336,7 @@ function pickWinner(candidates) {
   return candidates.find((c) => c._avail === "unknown" || c._avail === undefined) || null;
 }
 
-async function recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected }) {
+async function recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected, mode = null }) {
   const t0 = Date.now();
   const profileBlock = tasteProfile && String(tasteProfile).trim()
     ? `Perfil de gusto (lo que Miru sabe de esta persona por su historial en el dispositivo):\n${String(tasteProfile).trim().slice(0, 1500)}`
@@ -324,12 +344,24 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const rejectedBlock = formatRejected(rejected);
   const exclude = [...(excludeTitles || [])];
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  const wantType = requestedType(lastUser && lastUser.content);
+  const modeDef = mode && MODES[mode] ? MODES[mode] : null;
+  // Lo que pide el mensaje manda sobre el modo ("una peli" en modo Maratón = peli).
+  const wantType = requestedType(lastUser && lastUser.content) || (modeDef ? modeDef.type : null);
   const typeLine = wantType ? `Tipo pedido: SOLO ${wantType === "Película" ? "películas" : "series"}.` : null;
+  const modeLine = modeDef ? `Modo elegido por la persona: "${modeDef.label}". ${modeDef.rule}` : null;
 
   // 1) Proponer. Si NINGÚN candidato está en el país, un solo reintento con
   //    esos títulos excluidos; después, degradar suave (como siempre).
-  let proposed = await proposeCandidates({ messages, wantType, contextLines: [...baseContext, typeLine, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
+  let proposed = await proposeCandidates({ messages, wantType, contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
+  // Solo quería que Miru recordara algo: se confirma y no se recomienda nada.
+  if (proposed.onlyRemember) {
+    console.log(`[metrics-single] ${JSON.stringify({ only_remember: true, propose_ms: Date.now() - t0 })}`);
+    return {
+      filters: {}, main: null, alternatives: [], clarification_needed: null,
+      cinephile_note: proposed.ack || "Anotado, lo voy a tener en cuenta.",
+      remember: proposed.remember,
+    };
+  }
   let candidates = proposed.candidates;
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
@@ -343,11 +375,12 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     const again = await proposeCandidates({
       messages,
       wantType,
-      contextLines: [...baseContext, typeLine, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
+      contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
     });
     if (again.candidates.length) {
       candidates = again.candidates;
       if (!proposed.clarification && again.clarification) proposed = { ...proposed, clarification: again.clarification };
+      if (!proposed.remember && again.remember) proposed = { ...proposed, remember: again.remember };
       await validateItems(candidates, validationPlatforms, country);
       winner = pickWinner(candidates);
     }
@@ -380,7 +413,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
   }
   const tPitch = Date.now();
-  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
 
   const main = {
     title: winner.title,
@@ -400,6 +433,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     alternatives: [],
     clarification_needed: proposed.clarification,
     cinephile_note: pitch && pitch.cinephile_note ? String(pitch.cinephile_note) : null,
+    remember: proposed.remember,
   };
 }
 

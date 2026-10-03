@@ -1,9 +1,10 @@
-// "¿Dónde busco?": el selector de plataformas de la conversación, que se abre
-// con el "+" del composer (como el selector de modelo de Claude). "Todas" o la
-// combinación que armes; la elección queda guardada y se ve en el composer.
+// La hoja del "+" del composer (como el selector de modelo de Claude), en dos
+// partes: "¿Qué buscás?" (el modo: las "habilidades" de Miru, uno a la vez) y
+// "¿Dónde busco?" (las plataformas: "Todas" o tu combinación). Lo elegido queda
+// guardado y se ve en el composer.
 
 import { Check, X } from "lucide-react";
-import { PLATFORMS, isAllPlatforms, togglePlatformIn } from "../lib/prefs";
+import { PLATFORMS, MODES, isAllPlatforms, togglePlatformIn, type ModeId } from "../lib/prefs";
 import { platformLabel } from "../lib/deeplink";
 import { PlatformIcon } from "./PlatformIcon";
 
@@ -19,11 +20,13 @@ function Switch({ on }: { on: boolean }) {
 }
 
 export function PlatformSheet({
-  open, selected, onChange, onClose,
+  open, selected, onChange, mode, onModeChange, onClose,
 }: {
   open: boolean;
   selected: string[];
   onChange: (next: string[]) => void;
+  mode: ModeId | null;
+  onModeChange: (next: ModeId | null) => void;
   onClose: () => void;
 }) {
   if (!open) return null;
@@ -31,8 +34,35 @@ export function PlatformSheet({
   return (
     <>
       <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
-      <div className="fade-in fixed inset-x-0 bottom-0 z-[70] rounded-t-3xl border-t border-border bg-card px-5 pb-6 pt-4 shadow-2xl safe-bottom">
+      <div className="fade-in fixed inset-x-0 bottom-0 z-[70] max-h-[90dvh] overflow-y-auto rounded-t-3xl border-t border-border bg-card px-5 pb-6 pt-4 shadow-2xl safe-bottom">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" />
+
+        <div className="mb-2 flex items-center justify-between">
+          <div>
+            <p className="text-base font-bold text-foreground">¿Qué buscás?</p>
+            <p className="text-[12px] text-muted-foreground">Un modo cambia cómo elijo. Tocalo de nuevo para sacarlo.</p>
+          </div>
+          <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mb-5 grid grid-cols-2 gap-2" data-testid="modes">
+          {MODES.map((m) => {
+            const on = mode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => onModeChange(on ? null : m.id)}
+                aria-pressed={on}
+                className={`rounded-2xl border px-3 py-2.5 text-left transition-colors active:scale-[0.98] ${on ? "border-primary bg-primary/10" : "border-border bg-background"}`}
+              >
+                <span className={`block text-[14px] font-semibold ${on ? "text-primary" : "text-foreground"}`}>{m.label}</span>
+                <span className="block text-[11.5px] leading-tight text-muted-foreground">{m.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="text-base font-bold text-foreground">¿Dónde busco?</p>
@@ -40,9 +70,6 @@ export function PlatformSheet({
               {all ? "En todas tus plataformas." : "Tocá para sumar o sacar. Si sacás todas, vuelvo a buscar en todas."}
             </p>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90">
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <button

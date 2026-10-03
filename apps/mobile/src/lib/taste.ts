@@ -25,14 +25,26 @@ type TasteStore = {
   pending: number;
   /** Última apertura sobre la que Miru ya preguntó (o el usuario ya contestó). */
   askedAbout: string | null;
+  /**
+   * Lo que la persona le pidió a Miru que recuerde ("nada de gore", "los
+   * sábados veo con mi mujer"): a mano en Mi cuenta o diciéndolo en la charla.
+   * Es la señal MÁS fuerte: manda sobre el perfil deducido.
+   */
+  notes: MemoryNote[];
+  /** Memoria pausada (como el interruptor de Claude): no viaja a los pedidos. */
+  memoryOff: boolean;
+  /** Etiquetas del perfil que la persona sacó: la síntesis no las vuelve a poner. */
+  removedTags: string[];
 };
+
+export type MemoryNote = { id: string; text: string; ts: string; source: "manual" | "chat" };
 
 const CAPS = { requests: 30, rejected: 40, verdicts: 40, shown: 80, sessions: 60 };
 const REFRESH_EVERY = 3; // señales
 const REFRESH_STALE_MS = 7 * 24 * 60 * 60 * 1000;
 const EXCLUDE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
-const empty = (): TasteStore => ({ requests: [], rejected: [], verdicts: [], shown: [], sessions: [], profile: null, pending: 0, askedAbout: null });
+const empty = (): TasteStore => ({ requests: [], rejected: [], verdicts: [], shown: [], sessions: [], profile: null, pending: 0, askedAbout: null, notes: [], memoryOff: false, removedTags: [] });
 
 export function loadTaste(): TasteStore {
   try {
@@ -157,11 +169,17 @@ export function excludeTitles(): string[] {
 /** El bloque de texto que viaja con cada pedido (≈120-200 tokens). */
 export function profileBlock(): string | null {
   const t = loadTaste();
+  if (t.memoryOff) return null;
   const lines: string[] = [];
+  if (t.notes.length) {
+    lines.push(`Lo que te pidió que recuerdes (respetalo SIEMPRE, manda sobre todo lo demás):\n${t.notes.slice(-12).map((n) => `- ${n.text}`).join("\n")}`);
+  }
   if (t.profile?.summary) {
     lines.push(t.profile.summary);
-    if (t.profile.likes.length) lines.push(`Le va: ${t.profile.likes.join(", ")}.`);
-    if (t.profile.avoid.length) lines.push(`Evitar: ${t.profile.avoid.join(", ")}.`);
+    const likes = t.profile.likes.filter((x) => !t.removedTags.includes(x));
+    const avoid = t.profile.avoid.filter((x) => !t.removedTags.includes(x));
+    if (likes.length) lines.push(`Le va: ${likes.join(", ")}.`);
+    if (avoid.length) lines.push(`Evitar: ${avoid.join(", ")}.`);
     if (t.profile.patterns) lines.push(`Patrón: ${t.profile.patterns}`);
     if (t.profile.asks) lines.push(`Cómo pide: ${t.profile.asks}`);
     lines.push(`(confianza del perfil: ${t.profile.confidence})`);
@@ -185,6 +203,73 @@ function timeAgo(iso: string): string {
   const days = Math.round((Date.now() - new Date(iso).getTime()) / 86400000);
   if (!Number.isFinite(days)) return "";
   return days <= 0 ? "hoy" : days === 1 ? "ayer" : `hace ${days} días`;
+}
+
+// ── La memoria, editable (la hoja "Mi cuenta" y "acordate que…" en la charla) ──
+const newId = () => `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+/** Agrega algo para recordar. Devuelve false si ya estaba (mismo texto). */
+export function addNote(text: string, source: "manual" | "chat"): boolean {
+  const clean = text.trim().replace(/\s+/g, " ").slice(0, 160);
+  if (!clean) return false;
+  const t = loadTaste();
+  if (t.notes.some((n) => n.text.toLowerCase() === clean.toLowerCase())) return false;
+  t.notes.push({ id: newId(), text: clean, ts: now(), source });
+  t.notes = t.notes.slice(-30);
+  t.pending += 2; // dicho por la persona: pesa como un veredicto
+  save(t);
+  return true;
+}
+
+export function removeNote(id: string): void {
+  const t = loadTaste();
+  t.notes = t.notes.filter((n) => n.id !== id);
+  save(t);
+}
+
+/** Saca una etiqueta del perfil ("te gusta"/"evitás") y que no vuelva. */
+export function removeTag(tag: string): void {
+  const t = loadTaste();
+  if (!t.removedTags.includes(tag)) t.removedTags.push(tag);
+  if (t.profile) {
+    t.profile = { ...t.profile, likes: t.profile.likes.filter((x) => x !== tag), avoid: t.profile.avoid.filter((x) => x !== tag) };
+  }
+  save(t);
+}
+
+export function setMemoryOff(off: boolean): void {
+  const t = loadTaste();
+  t.memoryOff = off;
+  save(t);
+}
+
+/**
+ * Borra lo que Miru sabe de vos: perfil, notas, pedidos, descartes y opiniones.
+ * No toca lo ya mostrado (para no repetirte títulos) ni tus aperturas.
+ */
+export function clearMemory(): void {
+  const t = loadTaste();
+  save({ ...empty(), shown: t.shown, sessions: t.sessions, memoryOff: t.memoryOff, askedAbout: t.askedAbout });
+}
+
+/** Lo que la hoja de cuenta muestra como historial. */
+export function tasteHistory(): {
+  liked: string[];
+  rejected: { title: string; reason: string | null }[];
+} {
+  const t = loadTaste();
+  const liked: string[] = [];
+  for (const v of [...t.verdicts].reverse()) {
+    if (v.verdict === "liked" && !liked.includes(v.title)) liked.push(v.title);
+  }
+  const seen = new Set<string>();
+  const rejected: { title: string; reason: string | null }[] = [];
+  for (const r of [...t.rejected].reverse()) {
+    if (seen.has(r.title)) continue;
+    seen.add(r.title);
+    rejected.push({ title: r.title, reason: r.reason });
+  }
+  return { liked: liked.slice(0, 20), rejected: rejected.slice(0, 20) };
 }
 
 /** ¿Hay perfil? (para el saludo con memoria) */
@@ -221,6 +306,8 @@ export async function maybeRefreshProfile(): Promise<void> {
       verdicts: t.verdicts.slice(-30),
       sessions: t.sessions.slice(-60),
       previous: t.profile ? { summary: t.profile.summary, likes: t.profile.likes, avoid: t.profile.avoid } : null,
+      notes: t.notes.map((n) => n.text),
+      removedTags: t.removedTags,
     });
     if (profile) {
       const fresh = loadTaste(); // pudo cambiar mientras tanto

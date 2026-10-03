@@ -29,8 +29,13 @@ function when(ts) {
   return `${DAYS[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}h, ${ago}`;
 }
 
-function formatSignals({ requests, opened, rejected, verdicts, sessions, previous }) {
+function formatSignals({ requests, opened, rejected, verdicts, sessions, previous, notes = [], removedTags = [] }) {
   const lines = [];
+  if (notes.length) {
+    lines.push("Lo que la persona le pidió a Miru que recuerde (es lo MÁS firme; el perfil tiene que ser coherente con esto):");
+    for (const n of notes) lines.push(`- ${n}`);
+    lines.push("");
+  }
   if (requests.length) {
     lines.push("Pedidos (más reciente primero):");
     for (const r of requests) lines.push(`- [${when(r.ts)}${r.source === "voice" ? ", por voz" : ""}] "${r.q}"`);
@@ -72,6 +77,9 @@ function formatSignals({ requests, opened, rejected, verdicts, sessions, previou
     lines.push(`\nPerfil previo (integrarlo, no repetirlo):\n${previous.summary}`);
     if (Array.isArray(previous.likes) && previous.likes.length) lines.push(`Le iba: ${previous.likes.join(", ")}`);
     if (Array.isArray(previous.avoid) && previous.avoid.length) lines.push(`Evitaba: ${previous.avoid.join(", ")}`);
+  }
+  if (removedTags.length) {
+    lines.push(`\nEtiquetas que la persona SACÓ de su perfil (no las vuelvas a poner, ni sinónimos): ${removedTags.join(", ")}`);
   }
   return lines.join("\n");
 }

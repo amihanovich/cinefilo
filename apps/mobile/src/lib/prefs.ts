@@ -126,3 +126,50 @@ export function timeGreeting(d = new Date()): string {
   if (h >= 13 && h < 20) return "Buenas tardes";
   return "Buenas noches";
 }
+
+// ── Modos de búsqueda (las "habilidades" de Miru) ───────────────────────────
+// Se eligen en el + del composer y cambian CÓMO elige Miru. El cliente solo
+// manda el id; las reglas viven en el backend (MODES en recommend.mjs).
+export const MODES = [
+  { id: "kids", label: "Con chicos", hint: "Solo ATP, nada que asuste" },
+  { id: "couple", label: "Para dos", hint: "Algo para ver en pareja" },
+  { id: "short", label: "Algo corto", hint: "Menos de 100 minutos" },
+  { id: "binge", label: "Maratón", hint: "Series para engancharse" },
+  { id: "auteur", label: "Cine de autor", hint: "Lo menos mainstream" },
+  { id: "classic", label: "Un clásico", hint: "Antes del 2000" },
+] as const;
+export type ModeId = (typeof MODES)[number]["id"];
+
+const MODE_KEY = "miru:mode";
+
+export function loadMode(): ModeId | null {
+  try {
+    const v = localStorage.getItem(MODE_KEY);
+    return MODES.some((m) => m.id === v) ? (v as ModeId) : null;
+  } catch { return null; }
+}
+
+export function saveMode(mode: ModeId | null): void {
+  try { if (mode) localStorage.setItem(MODE_KEY, mode); else localStorage.removeItem(MODE_KEY); } catch { /* noop */ }
+}
+
+export function modeLabel(mode: ModeId | null): string | null {
+  return MODES.find((m) => m.id === mode)?.label ?? null;
+}
+
+// Países para verificar disponibilidad (códigos JustWatch/ISO).
+export const COUNTRIES: { code: string; label: string }[] = [
+  { code: "AR", label: "🇦🇷 Argentina" },
+  { code: "MX", label: "🇲🇽 México" },
+  { code: "ES", label: "🇪🇸 España" },
+  { code: "CL", label: "🇨🇱 Chile" },
+  { code: "CO", label: "🇨🇴 Colombia" },
+  { code: "PE", label: "🇵🇪 Perú" },
+  { code: "UY", label: "🇺🇾 Uruguay" },
+  { code: "BR", label: "🇧🇷 Brasil" },
+  { code: "US", label: "🇺🇸 Estados Unidos" },
+];
+
+export function setCountry(code: string): void {
+  try { localStorage.setItem(COUNTRY_KEY, code); } catch { /* noop */ }
+}

@@ -6,15 +6,18 @@
 // texto y se vuelve "enviar" apenas escribís — igual que el negro de Claude.
 
 import { useEffect, useRef } from "react";
-import { Plus, Mic, ArrowUp, AudioLines, Loader2 } from "lucide-react";
+import { Plus, Mic, ArrowUp, AudioLines, Loader2, X } from "lucide-react";
 import { isAllPlatforms } from "../lib/prefs";
 import { PlatformIcon } from "./PlatformIcon";
 
 export type DictationState = "idle" | "requesting" | "rec" | "processing";
 
 export function Composer({
-  value, onChange, onSend, busy, platforms, onOpenPlatforms, dictation, onDictate, onVoiceMode,
+  value, onChange, onSend, busy, platforms, onOpenPlatforms, dictation, onDictate, onVoiceMode, modeLabel, onClearMode,
 }: {
+  /** Modo de búsqueda activo ("Con chicos"…), o null. */
+  modeLabel?: string | null;
+  onClearMode?: () => void;
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -41,6 +44,17 @@ export function Composer({
 
   return (
     <div className="rounded-[28px] border border-border bg-card px-4 pb-3 pt-3 shadow-[0_1px_4px_rgba(41,35,31,0.08)]">
+      {modeLabel && (
+        // El modo activo, como un adjunto del mensaje (a la manera de Claude).
+        <div className="mb-2 flex">
+          <span className="flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 py-1 pl-3 pr-1 text-[12.5px] font-semibold text-primary" data-testid="mode-chip">
+            ✦ {modeLabel}
+            <button onClick={onClearMode} aria-label={`Sacar el modo ${modeLabel}`} className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-primary/15">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
       <textarea
         ref={ref}
         rows={1}

@@ -105,7 +105,24 @@ no se borró nada.
 - **Motor en dos pasos** (`recommendSingle` en `recommend.mjs`): Haiku **propone 6 candidatos**
   rankeados (barato), **TMDB decide** cuál está en el país, y recién ahí Haiku **escribe la carta** para
   ese título. Nunca más "Ver en Netflix" de algo que no está. Ver "Notas de desarrollo".
-- La TV no desapareció: "Conectar TV" vive en **Mi cuenta** (`AccountSheet` → `ControlScreen`).
+- **Mi cuenta** (`components/ProfileSheet.tsx`; el viejo `AccountSheet` queda solo para `?full=1`):
+  quién sos (Entrar / Cerrar sesión) · **"Lo que Miru sabe de vos"** = la memoria visible y editable,
+  como la de Claude: el resumen del perfil, tags "Te gusta"/"Evitás" que se sacan con una X
+  (`removedTags`: no vuelven ni en la próxima síntesis), **"Lo que me pediste recordar"** (notas, se
+  agregan a mano o desde la charla, se borran), un switch para **pausar la memoria** (`memoryOff`:
+  `profileBlock()` devuelve null) y "Borrar la memoria" · historial (te gustaron / fuiste a ver /
+  descartaste) · región · "Conectar la TV" (→ `ControlScreen`) · legales y Borrar mi cuenta. **No
+  tiene plataformas ni "Ver luego"**: las plataformas se eligen por búsqueda, en el +.
+- **"Acordate que…" en la charla**: el paso 1 del motor detecta un pedido de recordar o una
+  preferencia firme y duradera, y la devuelve en `remember` (3ª persona, corta). La app la guarda como
+  nota (`addNote(…, "chat")`) y muestra "✓ Lo voy a recordar: … · Deshacer". Si el mensaje es SOLO eso
+  (`only_remember`), el motor no busca película: vuelve `main: null` + `cinephile_note` = acuse, y la
+  app lo muestra sin gastar un uso de prueba (en el modo voz, Miru lo dice y sigue escuchando). Las
+  notas encabezan el `tasteProfile` ("respetalo SIEMPRE") y van a `/api/profile`.
+- **Modos de búsqueda (las "habilidades")**: arriba del "¿Dónde busco?", **"¿Qué buscás?"** con 6
+  modos (`MODES` en `lib/prefs.ts` y en `recommend.mjs`: Con chicos, Para dos, Algo corto, Maratón
+  →serie, Cine de autor, Un clásico). Queda puesto (`miru:mode`) y se ve como chip en el composer
+  hasta que lo sacás; viaja como `mode` y entra al prompt del paso 1 como regla dura.
 - **Tema "Papel"** (claro, crema + tinta): la conversación es texto largo y UNA ficha, y ahí el negro
   puro cansaba y aplanaba los escalones fondo→burbuja→ficha. `index.css` define dos temas sobre los
   mismos tokens (`.theme-paper` / `.theme-dark`, + `--card` y `--accent`); `App.tsx` los pone en

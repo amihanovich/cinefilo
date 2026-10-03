@@ -383,6 +383,7 @@ http
           // Modo conversación: el perfil de gusto del dispositivo (texto ya
           // formateado por el cliente) y los descartes de esta charla.
           tasteProfile: str(p.tasteProfile, 1500),
+          mode: /^[a-z]{2,12}$/.test(String(p.mode || "")) ? String(p.mode) : null,
           userName: (str(p.userName, 30) || "").replace(/[^\p{L}\p{M} '.-]/gu, "").trim() || null,
           rejected: (Array.isArray(p.rejected) ? p.rejected : [])
             .slice(-8)
@@ -417,6 +418,8 @@ http
           verdicts: list(p.verdicts, 30).map((v) => ({ title: str(v.title, 120) || "", verdict: ["liked", "meh", "unseen"].includes(v.verdict) ? v.verdict : "unseen", stage: v.stage === "card" ? "card" : "return" })).filter((v) => v.title),
           sessions: strArr(p.sessions, 60, 40),
           previous: prev ? { summary: str(prev.summary, 900) || "", likes: strArr(prev.likes, 6, 40), avoid: strArr(prev.avoid, 4, 40) } : null,
+          notes: strArr(p.notes, 30, 160),
+          removedTags: strArr(p.removedTags, 30, 40),
         }));
       });
       return;
