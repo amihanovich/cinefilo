@@ -60,9 +60,13 @@ interface AccountSheetProps {
   onPlatformsChange?: (platforms: string[]) => void;
   onCountryChange?: (country: string) => void;
   onOpenTvRemote?: () => void;
+  /** Cuenta (solo la app conversacional las pasa). */
+  user?: { name: string | null; email: string | null; avatarUrl: string | null } | null;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
 }
 
-export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote }: AccountSheetProps) {
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote, user, onSignIn, onSignOut }: AccountSheetProps) {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -130,6 +134,24 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
 
         {/* Contenido */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
+          {section === "main" && (onSignIn || onSignOut) && (
+            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" referrerPolicy="no-referrer" className="h-11 w-11 rounded-full object-cover" />
+              ) : (
+                <div className="h-11 w-11 rounded-full bg-muted" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-foreground">{user ? (user.name ?? "Tu cuenta") : "Sin cuenta"}</p>
+                <p className="truncate text-[12px] text-muted-foreground">{user ? user.email : "Entrá con Google para usar Miru sin límite."}</p>
+              </div>
+              {user ? (
+                <button onClick={onSignOut} className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold text-foreground/80 active:scale-95">Cerrar sesión</button>
+              ) : (
+                <button onClick={onSignIn} className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground active:scale-95">Entrar</button>
+              )}
+            </div>
+          )}
           {section === "main" && (
             <MainSection
               platforms={platforms}

@@ -17,6 +17,8 @@ import { MiruMark } from "../components/MiruMark";
 import { Composer, type DictationState } from "../components/Composer";
 import { PlatformSheet } from "../components/PlatformSheet";
 import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
+import { LoginSheet } from "../components/LoginSheet";
+import { currentUser, onUserChange, signInWithGoogle, signOut, takePendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
 import { BrandSplash } from "../components/BrandSplash";
 import { AccountSheet } from "../components/AccountSheet";
 import { ControlScreen } from "./ControlScreen";
@@ -27,7 +29,7 @@ import { jwSearch, type JwResult } from "../lib/justwatch";
 import { openStreaming } from "../lib/watch";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking, isMuted, setMuted } from "../lib/tts";
-import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, setName, nameAsked, dismissNameAsk, timeGreeting } from "../lib/prefs";
+import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, timeGreeting } from "../lib/prefs";
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
@@ -87,10 +89,12 @@ export function ChatScreen() {
   const [micState, setMicState] = useState<DictationState>("idle");
   const [platformsOpen, setPlatformsOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
-  const [name, setNameState] = useState<string | null>(getName);
-  const [askingName, setAskingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [showNameAsk, setShowNameAsk] = useState(() => !getName() && !nameAsked());
+  const [user, setUser] = useState<MiruUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [login, setLogin] = useState<{ reason: "limit" | "manual"; pending: string | null } | null>(null);
+  const [usesLeft, setUsesLeft] = useState(freeUsesLeft);
+  // El nombre sale de la cuenta de Google; sin cuenta, el que hayas dado antes (si hay).
+  const name = user?.firstName ?? getName();
   const [ttsMuted, setTtsMuted] = useState(() => { try { return isMuted(); } catch { return false; } });
   const [accountOpen, setAccountOpen] = useState(false);
   const [controlSession, setControlSession] = useState<string | null>(null);
@@ -111,8 +115,31 @@ export function ChatScreen() {
   // final del hilo dejaba al usuario mirando el botón en vez del título.
   const anchorRef = useRef<string | null>(null);
   const lastRecoRef = useRef<Recommendation | null>(null);
+  const userRef = useRef<MiruUser | null>(null);
+  userRef.current = user; // askMiru lo lee sin quedar atado a un render viejo
 
   const lastReco = [...turns].reverse().find((t): t is Extract<Turn, { kind: "reco" }> => t.kind === "reco");
+
+  // La cuenta: sesión guardada, vuelta de Google (?code=… lo canjea el cliente)
+  // y cambios (login / logout).
+  useEffect(() => {
+    let alive = true;
+    void currentUser().then((u) => { if (alive) { setUser(u); setAuthReady(true); } });
+    const off = onUserChange((u) => {
+      setUser(u);
+      setAuthReady(true);
+      if (u) {
+        setLogin(null);
+        track("login_success");
+        // Limpia el ?code= de la URL después del canje.
+        try {
+          const url = new URL(window.location.href);
+          if (url.searchParams.has("code")) { url.searchParams.delete("code"); window.history.replaceState(window.history.state, "", url.toString()); }
+        } catch { /* noop */ }
+      }
+    });
+    return () => { alive = false; off(); };
+  }, []);
 
   // Splash corto: cubre el cold start de Railway y el saludo queda listo abajo.
   useEffect(() => {
@@ -150,6 +177,14 @@ export function ChatScreen() {
   const askMiru = useCallback(async (raw: string, source: "text" | "voice", opts?: { dry?: boolean }): Promise<VoiceTurnResult | null> => {
     const q = raw.trim();
     if (!q || busyRef.current) return null;
+    // Sin cuenta y sin usos de prueba: en vez de buscar, "Creá tu cuenta". Lo que
+    // pediste queda guardado y se busca solo al volver de Google.
+    if (!userRef.current && freeUsesLeft() <= 0) {
+      track("login_gate_shown", { source });
+      setVoiceMode(false);
+      setLogin({ reason: "limit", pending: q });
+      return null;
+    }
     busyRef.current = true;
     setBusy(true);
     stopSpeaking();
@@ -194,6 +229,8 @@ export function ChatScreen() {
 
       shownRef.current.add(main.title);
       lastRecoRef.current = main;
+      // Cuenta solo la recomendación que salió bien (errores no gastan).
+      if (!userRef.current) { spendFreeUse(); setUsesLeft(freeUsesLeft()); }
       recordShown(main.title);
       historyRef.current = [
         ...history,
@@ -326,15 +363,6 @@ export function ChatScreen() {
     window.setTimeout(() => { void speak(res.note || `Te propongo ${res.title}, en ${res.platform}.`); }, 80);
   };
 
-  const saveName = () => {
-    const n = nameDraft.trim();
-    setName(n);
-    setNameState(n || null);
-    setAskingName(false);
-    setShowNameAsk(false);
-    if (n) track("name_set");
-  };
-
   const changePlatforms = (next: string[]) => {
     setPlatforms(next);
     savePlatforms(next);
@@ -353,7 +381,15 @@ export function ChatScreen() {
     if (id) setControlSession(id);
   };
 
+  useEffect(() => {
+    if (!user || phase !== "chat") return;
+    const pending = takePendingAsk();
+    if (pending) void askMiru(pending, "text");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, phase]);
+
   useBackLayer(accountOpen, () => setAccountOpen(false));
+  useBackLayer(!!login, () => setLogin(null));
   useBackLayer(platformsOpen, () => setPlatformsOpen(false));
   useBackLayer(voiceMode, () => setVoiceMode(false));
   useBackLayer(!!controlSession, () => setControlSession(null));
@@ -373,6 +409,9 @@ export function ChatScreen() {
         onClose={() => setAccountOpen(false)}
         onPlatformsChange={setPlatforms}
         onOpenTvRemote={() => void openTvRemote()}
+        user={user}
+        onSignIn={() => { setAccountOpen(false); setLogin({ reason: "manual", pending: null }); }}
+        onSignOut={() => { void signOut(); setAccountOpen(false); }}
       />
 
       {/* Header: la marca, el mute de la voz y UNA puerta a los ajustes (que es
@@ -399,7 +438,11 @@ export function ChatScreen() {
             aria-label="Mi cuenta"
             className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90 transition-transform"
           >
-            <User className="h-4 w-4" />
+            {user?.avatarUrl ? (
+              <img src={user.avatarUrl} alt={user.name ?? "Mi cuenta"} referrerPolicy="no-referrer" className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <User className="h-4 w-4" />
+            )}
           </button>
         </div>
       </div>
@@ -416,25 +459,11 @@ export function ChatScreen() {
               {timeGreeting()}{name ? `, ${name}` : ""}
             </h1>
             <p className="mt-1.5 text-[15px] text-muted-foreground">{hasProfile() ? SUB_BACK : SUB_FIRST}</p>
-            {askingName ? (
-              <div className="mt-3 flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") saveName(); }}
-                  placeholder="Tu nombre"
-                  maxLength={30}
-                  className="h-9 w-40 rounded-full border border-border bg-card px-3 text-[14px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
-                />
-                <button onClick={saveName} className="h-9 rounded-full bg-primary px-3 text-[13px] font-semibold text-primary-foreground active:scale-95">Listo</button>
-              </div>
-            ) : showNameAsk ? (
-              <div className="mt-2 flex items-center gap-3 text-[13px]">
-                <button onClick={() => { setNameDraft(""); setAskingName(true); }} className="font-semibold text-primary">¿Cómo te llamo?</button>
-                <button onClick={() => { dismissNameAsk(); setShowNameAsk(false); }} className="text-muted-foreground">Ahora no</button>
-              </div>
-            ) : null}
+            {!user && authReady && (
+              <button onClick={() => setLogin({ reason: "manual", pending: null })} className="mt-2 text-[13px] font-semibold text-primary">
+                Iniciar sesión con Google
+              </button>
+            )}
           </div>
         )}
         {turns.map((t) => {
@@ -542,6 +571,14 @@ export function ChatScreen() {
 
       {/* Composer a la manera de Claude: texto, dónde busco, dictado y modo voz. */}
       <div className="shrink-0 bg-background px-3 pb-3 pt-2">
+        {authReady && !user && usesLeft <= 1 && (
+          <p className="mb-2 text-center text-[12px] text-muted-foreground" data-testid="uses-left">
+            {usesLeft === 1 ? "Te queda 1 recomendación sin cuenta." : `Usaste tus ${FREE_USES} recomendaciones de prueba.`}{" "}
+            <button onClick={() => setLogin({ reason: usesLeft === 0 ? "limit" : "manual", pending: null })} className="font-semibold text-primary">
+              Crear cuenta
+            </button>
+          </p>
+        )}
         <Composer
           value={text}
           onChange={setText}
@@ -567,6 +604,13 @@ export function ChatScreen() {
           onToggleMute={toggleMute}
         />
       )}
+
+      <LoginSheet
+        open={!!login}
+        reason={login?.reason ?? "manual"}
+        onSignIn={() => signInWithGoogle(login?.pending ?? null)}
+        onClose={() => setLogin(null)}
+      />
 
       {/* Después del modo voz: el selector se abre también desde ahí, encima. */}
       <PlatformSheet
