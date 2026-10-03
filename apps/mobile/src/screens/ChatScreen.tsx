@@ -216,8 +216,12 @@ export function ChatScreen() {
         void speak(note, () => setSpeaking(true), () => setSpeaking(false));
       }
 
-      void fetchPosters([{ title: main.title, type: main.type, year: main.year }])
-        .then((p) => setPosters((prev) => ({ ...prev, ...p })));
+      // El póster de TMDB viaja con la película; solo si el backend no lo
+      // resolvió se busca desde el teléfono (Cinemeta/iTunes/Wikipedia).
+      if (!main.posterUrl) {
+        void fetchPosters([{ title: main.title, type: main.type, year: main.year }])
+          .then((p) => setPosters((prev) => ({ ...prev, ...p })));
+      }
       void jwSearch(main.title, main.platform, main.type, getCountry())
         .then((r) => setAvailability((prev) => ({ ...prev, [main.title]: r })))
         .catch(() => { /* sin verificar: el botón cae a buscar en la plataforma */ });
@@ -443,7 +447,7 @@ export function ChatScreen() {
               key={t.id}
               turnId={t.id}
               item={t.item}
-              poster={posters[t.item.title]}
+              poster={t.item.posterUrl ?? posters[t.item.title]}
               avail={availability[t.item.title]}
               onOpened={() => openedRef.current.add(t.item.title)}
               onReact={(v) => reactToCard(t.item.title, v)}

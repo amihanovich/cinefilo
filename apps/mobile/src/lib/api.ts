@@ -30,6 +30,9 @@ export type Recommendation = {
   hook?: string;
   /** El porqué de la recomendación (12-18 palabras). */
   reason: string;
+  /** Póster de TMDB: el backend lo resuelve al validar disponibilidad (modo conversación). */
+  posterUrl?: string;
+  backdropUrl?: string;
 };
 
 export type RecoResponse = {
