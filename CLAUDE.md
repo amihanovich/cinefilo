@@ -123,6 +123,9 @@ no se borró nada.
   modos (`MODES` en `lib/prefs.ts` y en `recommend.mjs`: Con chicos, Para dos, Algo corto, Maratón
   →serie, Cine de autor, Un clásico). Queda puesto (`miru:mode`) y se ve como chip en el composer
   hasta que lo sacás; viaja como `mode` y entra al prompt del paso 1 como regla dura.
+- **Paywall (en diseño, sin código todavía)**: Mercado Pago, suscripción mensual (preapproval). Plan,
+  decisiones, URLs, variables de entorno y la tarea para la CLI con el plugin de Mercado Pago:
+  **`docs/PAYWALL.md`** — leerlo antes de tocar cobros.
 - **Tema "Papel"** (claro, crema + tinta): la conversación es texto largo y UNA ficha, y ahí el negro
   puro cansaba y aplanaba los escalones fondo→burbuja→ficha. `index.css` define dos temas sobre los
   mismos tokens (`.theme-paper` / `.theme-dark`, + `--card` y `--accent`); `App.tsx` los pone en
