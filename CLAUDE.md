@@ -90,7 +90,7 @@ no se borró nada.
 - **Legales y borrar cuenta**: `/privacidad` y `/terminos` (`screens/LegalScreen.tsx`, ruteo por path en
   `App.tsx`) — los pide Google para publicar el login. Dicen lo que Miru REALMENTE hace con los datos
   (qué guarda, con qué servicios lo comparte): si eso cambia, se actualizan en el mismo cambio. Contacto
-  `CONTACT_EMAIL` (`hola@mirumovies.com`, tiene que existir). **Borrar mi cuenta** en Mi cuenta llama a la
+  `CONTACT_EMAIL` (`support@mirumovies.com`). **Borrar mi cuenta** en Mi cuenta llama a la
   función `delete_user()` de Supabase (migración 20260530021059); `miru_taste` se borra en cascada. Dominio:
   `www.mirumovies.com` (Railway, servicio de la web de la app; `mirumovies.com` redirige ahí desde GoDaddy). **Repregunta solo si amerita**: por defecto el motor va directo al
   resultado; un pedido corto con UNA señal ("algo de acción") no se repregunta.

@@ -7,7 +7,7 @@ import { MiruMark } from "../components/MiruMark";
 
 // Mail de contacto para pedidos de privacidad. ⚠️ Tiene que existir y llegarle
 // a alguien (p. ej. un reenvío desde el dominio).
-export const CONTACT_EMAIL = "hola@mirumovies.com";
+export const CONTACT_EMAIL = "support@mirumovies.com";
 const UPDATED = "3 de octubre de 2026";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
