@@ -75,6 +75,7 @@ export function ChatScreen() {
   const [turns, setTurns] = useState<Turn[]>(openingTurns);
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
+  const [brokenPosters, setBrokenPosters] = useState<Set<string>>(new Set());
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
@@ -447,7 +448,16 @@ export function ChatScreen() {
               key={t.id}
               turnId={t.id}
               item={t.item}
-              poster={t.item.posterUrl ?? posters[t.item.title]}
+              poster={(t.item.posterUrl && !brokenPosters.has(t.item.posterUrl) ? t.item.posterUrl : null) ?? posters[t.item.title]}
+              onPosterError={(url) => {
+                // La imagen de TMDB no cargó (red, bloqueo): se marca rota y se
+                // busca desde el teléfono, como antes.
+                setBrokenPosters((prev) => new Set(prev).add(url));
+                if (!(t.item.title in posters)) {
+                  void fetchPosters([{ title: t.item.title, type: t.item.type, year: t.item.year }])
+                    .then((p) => setPosters((prev) => ({ ...prev, ...p })));
+                }
+              }}
               avail={availability[t.item.title]}
               onOpened={() => openedRef.current.add(t.item.title)}
               onReact={(v) => reactToCard(t.item.title, v)}
@@ -531,8 +541,9 @@ export function ChatScreen() {
 // ── La película ──────────────────────────────────────────────────────────────
 // Una sola, con el porqué entero. El póster acompaña; el texto es el producto.
 function RecoCard({
-  turnId, item, poster, avail, onOpened, onReact,
+  turnId, item, poster, avail, onOpened, onReact, onPosterError,
 }: {
+  onPosterError: (url: string) => void;
   turnId: string;
   item: Recommendation;
   poster?: string | null;
@@ -553,7 +564,7 @@ function RecoCard({
         <div className="flex gap-3 p-3">
           <div className="h-36 w-24 shrink-0 overflow-hidden rounded-xl bg-muted ring-1 ring-border" style={!poster ? { backgroundColor: `${color}20` } : undefined}>
             {poster ? (
-              <img src={poster} alt={item.title} className="h-full w-full object-cover" />
+              <img src={poster} alt={item.title} className="h-full w-full object-cover" onError={() => onPosterError(poster)} />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
                 <span className="text-3xl font-black opacity-20" style={{ color }}>{item.title.charAt(0)}</span>

@@ -215,6 +215,7 @@ Estás en una CONVERSACIÓN y en este paso tu tarea es ELEGIR, no escribir: prop
 Reglas:
 - 6 títulos DISTINTOS entre sí (no seis variaciones de lo mismo): los primeros 3 apuntan al centro del pedido; el 4 y el 5 abren un poco (otra época, otro país, otro tono compatible); el 6 es una apuesta que el perfil no pediría pero que vos jugarías — decilo en su "line".
 - "platform" EXACTAMENTE una de las plataformas listadas. "type": "Película" o "Serie". "year" obligatorio (ej. "2014").
+- TIPO: si el pedido dice "película", "peli", "film" o "largometraje", los 6 candidatos son PELÍCULAS (nada de series ni miniseries); si dice "serie", "miniserie", "temporada" o "capítulo", son SERIES. Si no lo dice, elegí libre. "type" tiene que ser el real del título, no el que pidió.
 - Si el pedido nombra un título o un director, es LA BRÚJULA: buscá por su ADN (época, tono, ritmo, puesta en escena), no por género a secas.
 - Si hay "Perfil de gusto", es una señal FUERTE: rankeá por encaje con ESTA persona, no con el público general. Pero el pedido de HOY manda sobre el perfil: si hoy pide algo distinto a lo de siempre, seguilo.
 - "Descartes en esta charla" con motivo: ese motivo es una restricción dura para TODOS los candidatos. Si hay 2 o más descartes seguidos SIN motivo, la persona no sabe decir qué no le cierra: elegí candidatos en CONTRASTE claro con lo descartado y completá "clarification_needed" con UNA pregunta corta y cálida que lo destrabe.
@@ -245,6 +246,19 @@ Devolvé JSON válido y nada más:
 
 const CANDIDATES = 6;
 
+// Tipo pedido explícitamente en el ÚLTIMO pedido (no en toda la charla: "ahora
+// una serie" pisa a la "película" de antes). El prompt ya lo pide, pero el
+// filtro en código es la garantía: pedir película y recibir una serie rompe
+// la confianza en un segundo.
+export function requestedType(text) {
+  const t = String(text || "").toLowerCase();
+  const movie = /\b(pel[ií]cula|peli|pelis|film|largometraje)s?\b/.test(t);
+  const series = /\b(serie|series|miniserie|miniseries|temporada|temporadas|cap[ií]tulo|cap[ií]tulos)\b/.test(t);
+  if (movie && !series) return "Película";
+  if (series && !movie) return "Serie";
+  return null;
+}
+
 function normalizeCandidate(c) {
   return {
     title: String(c.title || "").trim(),
@@ -264,7 +278,7 @@ function formatRejected(rejected) {
   return `Descartes en esta charla (más viejo primero):\n${items.join("\n")}${tail}`;
 }
 
-async function proposeCandidates({ messages, contextLines }) {
+async function proposeCandidates({ messages, contextLines, wantType = null }) {
   const attempt = async () => {
     const parsed = await callJson({
       system: SYSTEM_PROPOSE,
@@ -272,10 +286,13 @@ async function proposeCandidates({ messages, contextLines }) {
       maxTokens: 700,
       timeoutMs: 25000,
     });
-    const candidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
+    let candidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
       .map(normalizeCandidate)
       .filter((c) => c.title)
       .slice(0, CANDIDATES);
+    // Si pidió un tipo, solo ese tipo. Si el modelo no trajo NINGUNO del tipo,
+    // la lista queda vacía y se reintenta (mejor que entregar el tipo equivocado).
+    if (wantType) candidates = candidates.filter((c) => c.type === wantType);
     return { candidates, clarification: typeof parsed.clarification_needed === "string" && parsed.clarification_needed.trim() ? parsed.clarification_needed.trim() : null };
   };
   // Un hipo del modelo (JSON roto, lista vacía, 5xx que el retry de red no
@@ -305,10 +322,13 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     : null;
   const rejectedBlock = formatRejected(rejected);
   const exclude = [...(excludeTitles || [])];
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const wantType = requestedType(lastUser && lastUser.content);
+  const typeLine = wantType ? `Tipo pedido: SOLO ${wantType === "Película" ? "películas" : "series"}.` : null;
 
   // 1) Proponer. Si NINGÚN candidato está en el país, un solo reintento con
   //    esos títulos excluidos; después, degradar suave (como siempre).
-  let proposed = await proposeCandidates({ messages, contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
+  let proposed = await proposeCandidates({ messages, wantType, contextLines: [...baseContext, typeLine, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
   let candidates = proposed.candidates;
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
@@ -321,7 +341,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     retried = true;
     const again = await proposeCandidates({
       messages,
-      contextLines: [...baseContext, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
+      wantType,
+      contextLines: [...baseContext, typeLine, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
     });
     if (again.candidates.length) {
       candidates = again.candidates;
@@ -358,7 +379,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
   }
   const tPitch = Date.now();
-  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
 
   const main = {
     title: winner.title,
