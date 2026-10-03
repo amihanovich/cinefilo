@@ -63,3 +63,10 @@
   to { opacity: 1; transform: none; }
 }
 .fade-in { animation: fadeInUp 0.2s ease-out both; }
+
+/* Modo voz: el brillo de abajo "respira" mientras Miru piensa o habla. */
+@keyframes miruBreath {
+  0%, 100% { opacity: 0.7; transform: scaleY(1); }
+  50% { opacity: 1; transform: scaleY(1.14); }
+}
+.miru-breath { animation: miruBreath 2.4s ease-in-out infinite; transform-origin: 50% 100%; }

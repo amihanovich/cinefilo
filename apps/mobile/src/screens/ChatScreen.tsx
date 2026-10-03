@@ -506,19 +506,24 @@ export function ChatScreen() {
         />
       </div>
 
+      {voiceMode && (
+        <VoiceMode
+          onTurn={(heard) => askMiru(heard, "voice")}
+          onClose={() => setVoiceMode(false)}
+          platforms={platforms}
+          onOpenPlatforms={() => setPlatformsOpen(true)}
+          ttsMuted={ttsMuted}
+          onToggleMute={toggleMute}
+        />
+      )}
+
+      {/* Después del modo voz: el selector se abre también desde ahí, encima. */}
       <PlatformSheet
         open={platformsOpen}
         selected={platforms}
         onChange={changePlatforms}
         onClose={() => setPlatformsOpen(false)}
       />
-
-      {voiceMode && (
-        <VoiceMode
-          onTurn={(heard) => askMiru(heard, "voice")}
-          onClose={() => setVoiceMode(false)}
-        />
-      )}
     </div>
   );
 }

@@ -7,12 +7,28 @@
 // app. El mismo código arregla el back del navegador en la webapp, sin depender
 // del plugin @capacitor/app.
 //
-// Regla: la capa que se abre última es la primera en cerrarse (el orden lo da el
-// propio historial, no un stack nuestro).
+// Regla: la capa que se abre última es la primera en cerrarse. Eso lo garantiza
+// una PILA propia: antes cada capa escuchaba `popstate` por su cuenta, así que un
+// "atrás" (o el history.back() con el que una capa cerrada desde la UI consume
+// su guard) cerraba TODAS las capas abiertas a la vez — p. ej. cerrar "¿Dónde
+// busco?" se llevaba puesto el modo voz que tenía abajo.
 
 import { useEffect, useRef } from "react";
 
 const GUARD = "miru:layer";
+
+type Layer = { close: () => void; closedByBack: boolean };
+const stack: Layer[] = [];
+// history.back() que disparamos nosotros para consumir el guard de una capa
+// cerrada desde la UI: su popstate no es un "atrás" del usuario.
+let suppress = 0;
+let listening = false;
+
+function onPop(): void {
+  if (suppress > 0) { suppress--; return; }
+  const top = stack.pop();
+  if (top) { top.closedByBack = true; top.close(); }
+}
 
 /**
  * Registra una capa cerrable mientras `active` sea true.
@@ -27,28 +43,24 @@ export function useBackLayer(active: boolean, onBack: () => void): void {
 
   useEffect(() => {
     if (!active) return;
-    let closedByBack = false;
-
     try {
       window.history.pushState({ [GUARD]: true }, "");
     } catch {
       return; // sin History API: el back se comporta como antes
     }
-
-    const onPop = () => {
-      closedByBack = true;
-      cbRef.current();
-    };
-    window.addEventListener("popstate", onPop);
+    if (!listening) { window.addEventListener("popstate", onPop); listening = true; }
+    const layer: Layer = { close: () => cbRef.current(), closedByBack: false };
+    stack.push(layer);
 
     return () => {
-      window.removeEventListener("popstate", onPop);
-      // Si la capa se cerró desde la UI (botón Volver, tap en el fondo…), el
-      // guard sigue en el historial: lo consumimos para que el back del sistema
-      // no tenga que apretarse dos veces.
-      if (!closedByBack) {
+      const i = stack.indexOf(layer);
+      if (i >= 0) stack.splice(i, 1);
+      // Si la capa se cerró desde la UI (botón Volver, tap en el fondo…), su
+      // guard sigue en el historial: lo consumimos —sin que nadie lo tome como
+      // un "atrás"— para que el back del sistema no tenga que apretarse dos veces.
+      if (!layer.closedByBack) {
         try {
-          if (window.history.state && window.history.state[GUARD]) window.history.back();
+          if (window.history.state && window.history.state[GUARD]) { suppress++; window.history.back(); }
         } catch { /* noop */ }
       }
     };

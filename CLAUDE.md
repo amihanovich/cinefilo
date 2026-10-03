@@ -48,8 +48,12 @@ no se borró nada.
   `miru:platforms` (la misma que Mi cuenta). Favicons vía `faviconFor()`, con la inicial de la marca
   de respaldo (`PlatformIcon.tsx`).
 - **Regla de voz: "habla si le hablaste"** — en el **modo voz** (`components/VoiceMode.tsx`) Miru
-  escucha, **corta sola por silencio**, contesta hablado y vuelve a escuchar (tocar el orbe interrumpe;
-  la X vuelve al hilo con las fichas). Escrito o dictado → contesta escrito. La nota se muestra siempre.
+  escucha, **corta sola por silencio**, contesta hablado y vuelve a escuchar. Escrito o dictado →
+  contesta escrito. La nota se muestra siempre. El modo voz busca la **sensación** del de Claude sin
+  copiarlo: pantalla clara, orbe + frase grande en serif al centro ("Te escucho" / "Buscando la tuya…" /
+  el título que propone), un **brillo violeta-lavanda que sube desde abajo y late con la voz**, el mic
+  flotando (pausa/retoma/interrumpe; tocar la frase = "ya terminé") y abajo [+] · dónde busco · voz de
+  Miru on/off · X.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada
   descarte **con lo que dijiste como motivo** (pedir otra cosa con una peli en pantalla que no abriste

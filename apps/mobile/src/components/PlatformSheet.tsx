@@ -30,8 +30,8 @@ export function PlatformSheet({
   const all = isAllPlatforms(selected);
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fade-in fixed inset-x-0 bottom-0 z-50 rounded-t-3xl border-t border-border bg-card px-5 pb-6 pt-4 shadow-2xl safe-bottom">
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
+      <div className="fade-in fixed inset-x-0 bottom-0 z-[70] rounded-t-3xl border-t border-border bg-card px-5 pb-6 pt-4 shadow-2xl safe-bottom">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" />
         <div className="mb-3 flex items-center justify-between">
           <div>
