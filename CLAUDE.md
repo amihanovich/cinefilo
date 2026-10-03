@@ -69,7 +69,8 @@ no se borró nada.
 - **Saludo a la manera de Claude**: la pantalla vacía es la marca + "Buenas tardes, Agustín" en serif
   grande (por la hora del teléfono) + una línea. El nombre sale de la **cuenta de Google** y viaja al
   motor como `userName` (lo nombra como mucho una vez por respuesta).
-- **Cuenta** (`lib/auth.ts`, `LoginSheet.tsx`): login con **Google vía Supabase Auth** (mismo proyecto
+- **Cuenta** (`lib/auth.ts`, `LoginSheet.tsx`): login con **Google** (lo rápido) **o mail + contraseña**
+  (crear cuenta con nombre, entrar, recuperar contraseña; errores de Supabase traducidos), vía **Supabase Auth** (mismo proyecto
   que el pairing, cliente aparte con sesión persistida en `miru:auth`, flujo PKCE). **Sin cuenta: 3
   recomendaciones de prueba** (`FREE_USES`; cuentan solo las que salieron bien, conteo local en
   `miru:free-uses`); en la 4ª, en vez de buscar, "Creá tu cuenta para seguir" → Continuar con Google, y

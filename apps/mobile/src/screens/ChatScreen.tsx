@@ -19,7 +19,7 @@ import { PlatformSheet } from "../components/PlatformSheet";
 import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
 import { LoginSheet } from "../components/LoginSheet";
 import { startTasteSync, stopTasteSync } from "../lib/tasteSync";
-import { currentUser, onUserChange, signInWithGoogle, signOut, takePendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
+import { currentUser, onUserChange, signInWithGoogle, signOut, takePendingAsk, rememberPendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
 import { BrandSplash } from "../components/BrandSplash";
 import { AccountSheet } from "../components/AccountSheet";
 import { ControlScreen } from "./ControlScreen";
@@ -485,7 +485,7 @@ export function ChatScreen() {
             <p className="mt-1.5 text-[15px] text-muted-foreground">{hasProfile() ? SUB_BACK : SUB_FIRST}</p>
             {!user && authReady && (
               <button onClick={() => setLogin({ reason: "manual", pending: null })} className="mt-2 text-[13px] font-semibold text-primary">
-                Iniciar sesión con Google
+                Iniciar sesión
               </button>
             )}
           </div>
@@ -633,6 +633,7 @@ export function ChatScreen() {
         open={!!login}
         reason={login?.reason ?? "manual"}
         onSignIn={() => signInWithGoogle(login?.pending ?? null)}
+        onBeforeEmailAuth={() => rememberPendingAsk(login?.pending ?? null)}
         onClose={() => setLogin(null)}
       />
 

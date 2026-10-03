@@ -61,6 +61,52 @@ export async function signInWithGoogle(pendingAsk?: string | null): Promise<stri
   return error ? error.message : null;
 }
 
+/** Guarda lo pedido antes de un login que no sale de la página (mail + contraseña). */
+export function rememberPendingAsk(q: string | null): void {
+  try { if (q) sessionStorage.setItem(PENDING_KEY, q); } catch { /* noop */ }
+}
+
+// ── Mail + contraseña ────────────────────────────────────────────────────────
+// Mismo Supabase Auth. Google es lo rápido; esto es para quien no quiere usar
+// Google. El nombre va en user_metadata.full_name (lo lee toUser igual que el
+// de Google). Si el proyecto pide confirmar el mail, signUp vuelve sin sesión
+// y la app avisa "revisá tu mail".
+
+// Los errores de Supabase vienen en inglés: los pasamos a lo que entiende la persona.
+function authErrorEs(msg: string): string {
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login credentials")) return "Mail o contraseña incorrectos.";
+  if (m.includes("already registered") || m.includes("already been registered")) return "Ya hay una cuenta con ese mail. Entrá con tu contraseña.";
+  if (m.includes("email not confirmed")) return "Todavía no confirmaste tu mail. Buscá el mail que te mandamos (fijate en spam).";
+  if (m.includes("password") && (m.includes("at least") || m.includes("short"))) return "La contraseña tiene que tener al menos 6 caracteres.";
+  if (m.includes("invalid") && m.includes("email")) return "Ese mail no parece válido.";
+  if (m.includes("rate limit") || m.includes("too many")) return "Demasiados intentos. Esperá un minuto y probá de nuevo.";
+  if (m.includes("signups not allowed") || m.includes("signup is disabled")) return "Por ahora no se pueden crear cuentas con mail.";
+  return "No pude completar el ingreso. Probá de nuevo.";
+}
+
+const here = () => `${window.location.origin}${window.location.pathname}`;
+
+export async function signUpWithEmail(name: string, email: string, password: string): Promise<{ error: string | null; needsConfirm: boolean }> {
+  const { data, error } = await authClient.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { data: { full_name: name.trim() }, emailRedirectTo: here() },
+  });
+  if (error) return { error: authErrorEs(error.message), needsConfirm: false };
+  return { error: null, needsConfirm: !data.session };
+}
+
+export async function signInWithEmail(email: string, password: string): Promise<string | null> {
+  const { error } = await authClient.auth.signInWithPassword({ email: email.trim(), password });
+  return error ? authErrorEs(error.message) : null;
+}
+
+export async function resetPassword(email: string): Promise<string | null> {
+  const { error } = await authClient.auth.resetPasswordForEmail(email.trim(), { redirectTo: here() });
+  return error ? authErrorEs(error.message) : null;
+}
+
 export function takePendingAsk(): string | null {
   try {
     const q = sessionStorage.getItem(PENDING_KEY);
