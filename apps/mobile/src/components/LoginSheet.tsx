@@ -178,7 +178,8 @@ export function LoginSheet({
           </div>
 
           <p className="mt-4 text-[11px] leading-snug text-muted-foreground/80">
-            Solo usamos tu nombre y tu mail para tu cuenta.
+            Al continuar aceptás los <a href="/terminos" target="_blank" rel="noreferrer" className="underline">Términos</a> y
+            la <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">Política de privacidad</a>.
           </p>
         </div>
       </div>

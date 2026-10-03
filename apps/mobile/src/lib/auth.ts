@@ -117,6 +117,17 @@ export function takePendingAsk(): string | null {
   }
 }
 
+/**
+ * Borra la cuenta y todos sus datos (la tabla de gustos se borra en cascada).
+ * Usa la función delete_user() de Supabase (migración 20260530021059).
+ */
+export async function deleteAccount(): Promise<string | null> {
+  const { error } = await authClient.rpc("delete_user");
+  if (error) return "No pude borrar tu cuenta. Escribinos y la borramos a mano.";
+  try { await authClient.auth.signOut({ scope: "local" }); } catch { /* noop */ }
+  return null;
+}
+
 export async function signOut(): Promise<void> {
   try { await authClient.auth.signOut(); } catch { /* noop */ }
 }

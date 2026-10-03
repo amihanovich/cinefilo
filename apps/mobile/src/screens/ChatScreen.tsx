@@ -19,7 +19,7 @@ import { PlatformSheet } from "../components/PlatformSheet";
 import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
 import { LoginSheet } from "../components/LoginSheet";
 import { startTasteSync, stopTasteSync } from "../lib/tasteSync";
-import { currentUser, onUserChange, signInWithGoogle, signOut, takePendingAsk, rememberPendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
+import { currentUser, onUserChange, signInWithGoogle, signOut, deleteAccount, takePendingAsk, rememberPendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
 import { BrandSplash } from "../components/BrandSplash";
 import { AccountSheet } from "../components/AccountSheet";
 import { ControlScreen } from "./ControlScreen";
@@ -424,6 +424,20 @@ export function ChatScreen() {
         onOpenTvRemote={() => void openTvRemote()}
         user={user}
         onSignIn={() => { setAccountOpen(false); setLogin({ reason: "manual", pending: null }); }}
+        onDeleteAccount={() => {
+          if (!window.confirm("¿Borrar tu cuenta? Se borran tu cuenta y todo lo que Miru sabe de tus gustos. No se puede deshacer.")) return;
+          setAccountOpen(false);
+          void deleteAccount().then(async (err) => {
+            if (err) { say(err, "error"); return; }
+            track("account_deleted");
+            await stopTasteSync(false);
+            setTurns([]);
+            historyRef.current = [];
+            shownRef.current = new Set();
+            rejectedRef.current = [];
+            lastRecoRef.current = null;
+          });
+        }}
         onSignOut={() => {
           setAccountOpen(false);
           // Se sube lo último, el teléfono queda limpio y la charla arranca de cero.

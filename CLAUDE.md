@@ -86,7 +86,13 @@ no se borró nada.
   sin cuenta pasa a la cuenta; si el teléfono tenía la de OTRA cuenta —`miru:taste-owner`— no se
   mezclan); cada cambio se sube solo (evento `miru:taste-changed`, 2.5 s de retraso); al cerrar sesión
   sube lo último y deja el teléfono limpio. Un pedido pendiente del login espera a que baje la memoria.
-  Sin la tabla o sin red, todo sigue andando local. **Repregunta solo si amerita**: por defecto el motor va directo al
+  Sin la tabla o sin red, todo sigue andando local.
+- **Legales y borrar cuenta**: `/privacidad` y `/terminos` (`screens/LegalScreen.tsx`, ruteo por path en
+  `App.tsx`) — los pide Google para publicar el login. Dicen lo que Miru REALMENTE hace con los datos
+  (qué guarda, con qué servicios lo comparte): si eso cambia, se actualizan en el mismo cambio. Contacto
+  `CONTACT_EMAIL` (`hola@mirumovies.com`, tiene que existir). **Borrar mi cuenta** en Mi cuenta llama a la
+  función `delete_user()` de Supabase (migración 20260530021059); `miru_taste` se borra en cascada. Dominio:
+  `www.mirumovies.com` (Railway, servicio de la web de la app; `mirumovies.com` redirige ahí desde GoDaddy). **Repregunta solo si amerita**: por defecto el motor va directo al
   resultado; un pedido corto con UNA señal ("algo de acción") no se repregunta.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada

@@ -120,10 +120,13 @@ export async function startTasteSync(userId: string): Promise<boolean> {
   return !!row;
 }
 
-/** Al cerrar sesión: se sube lo último y el teléfono queda limpio. */
-export async function stopTasteSync(): Promise<void> {
+/**
+ * Al cerrar sesión: se sube lo último y el teléfono queda limpio.
+ * Con `upload: false` (la cuenta se acaba de borrar) no se sube nada.
+ */
+export async function stopTasteSync(upload = true): Promise<void> {
   if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
-  if (currentUser) await push().catch(() => undefined);
+  if (currentUser && upload) await push().catch(() => undefined);
   currentUser = null;
   window.removeEventListener(TASTE_CHANGED, schedulePush);
   clearTaste();

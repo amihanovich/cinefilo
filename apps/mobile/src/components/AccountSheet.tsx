@@ -64,9 +64,10 @@ interface AccountSheetProps {
   user?: { name: string | null; email: string | null; avatarUrl: string | null } | null;
   onSignIn?: () => void;
   onSignOut?: () => void;
+  onDeleteAccount?: () => void;
 }
 
-export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote, user, onSignIn, onSignOut }: AccountSheetProps) {
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote, user, onSignIn, onSignOut, onDeleteAccount }: AccountSheetProps) {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -149,6 +150,15 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
                 <button onClick={onSignOut} className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold text-foreground/80 active:scale-95">Cerrar sesión</button>
               ) : (
                 <button onClick={onSignIn} className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground active:scale-95">Entrar</button>
+              )}
+            </div>
+          )}
+          {section === "main" && (onSignIn || onSignOut) && (
+            <div className="-mt-3 mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12px] text-muted-foreground">
+              <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">Privacidad</a>
+              <a href="/terminos" target="_blank" rel="noreferrer" className="underline">Términos</a>
+              {user && onDeleteAccount && (
+                <button onClick={onDeleteAccount} className="ml-auto text-red-700 underline">Borrar mi cuenta</button>
               )}
             </div>
           )}
