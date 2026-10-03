@@ -40,8 +40,16 @@ no se borró nada.
   `reason` largo (2-4 oraciones). Ver "Notas de desarrollo".
 - Usa lo que el backend ya devolvía y la app tiraba: **`cinephile_note`** (intro hablada) y
   **`clarification_needed`** (repregunta cálida cuando dudás).
-- **Regla de voz: "habla si le hablaste"** — pedido por voz → Miru contesta hablado (TTS); pedido escrito →
-  contesta escrito. La nota se muestra siempre.
+- **Composer a la manera de Claude** (`components/Composer.tsx`): texto arriba y abajo **[+]** · pastilla
+  de plataformas ("Todas" o mini favicons) · **mic** (dicta al cuadro, NO envía) · **botón violeta**
+  (modo voz con el cuadro vacío; "enviar" apenas hay texto). El **+** abre **"¿Dónde busco?"**
+  (`PlatformSheet.tsx`): desde "Todas", tocar una deja SOLO esa; después suma/saca; sacar la última o
+  marcar las 7 vuelve a "Todas" (`togglePlatformIn` en `lib/prefs.ts`). Queda guardada en
+  `miru:platforms` (la misma que Mi cuenta). Favicons vía `faviconFor()`, con la inicial de la marca
+  de respaldo (`PlatformIcon.tsx`).
+- **Regla de voz: "habla si le hablaste"** — en el **modo voz** (`components/VoiceMode.tsx`) Miru
+  escucha, **corta sola por silencio**, contesta hablado y vuelve a escuchar (tocar el orbe interrumpe;
+  la X vuelve al hilo con las fichas). Escrito o dictado → contesta escrito. La nota se muestra siempre.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada
   descarte **con lo que dijiste como motivo** (pedir otra cosa con una peli en pantalla que no abriste
@@ -134,7 +142,8 @@ memorias viejas o en tu cabeza, ignorarlos:
 2. **TypeScript:** sin `any`; Zod valida en runtime en los server fns / módulos del backend.
 3. **Voz:** STT vía `/api/transcribe` (Groq Whisper); TTS vía `/api/tts` (ElevenLabs). Si ElevenLabs falla o
    se queda sin créditos, los clientes caen a la voz nativa del dispositivo (`speechSynthesis`). Todos los
-   micrófonos son **press-to-speak / press-to-stop**.
+   micrófonos son **press-to-speak / press-to-stop**, con UNA excepción: el **modo voz** de la app móvil
+   (`VoiceMode.tsx`), que corta solo por silencio (1.4 s) para que la charla fluya como en Claude.
 4. **Build APK (móvil/TV):** desde el checkout PRINCIPAL (`apps/mobile` o `apps/tv`), `JAVA_HOME` seteado,
    `./gradlew.bat clean assembleDebug` (gotcha: NO `cmd.exe /c "gradlew.bat"` — no ejecuta gradle). Verificar
    el mtime del APK antes de instalar. Detalle en `ARCHITECTURE.md` y en las memorias del proyecto.

@@ -67,3 +67,26 @@ export async function detectCountry(): Promise<void> {
 export function getCountry(): string {
   try { return localStorage.getItem(COUNTRY_KEY) ?? "AR"; } catch { return "AR"; }
 }
+
+export function savePlatforms(list: string[]): void {
+  try { localStorage.setItem(PLATFORMS_KEY, JSON.stringify(list)); } catch { /* noop */ }
+}
+
+/** "Todas" = las 7 activas (o ninguna guardada). */
+export function isAllPlatforms(list: string[]): boolean {
+  return list.length === 0 || PLATFORMS.every((p) => list.includes(p));
+}
+
+/**
+ * La lógica del selector "¿Dónde busco?":
+ * - estando en "Todas", tocar una plataforma deja SOLO esa (empezás a armar tu combinación);
+ * - después, cada toque suma o saca;
+ * - si sacás la última, o terminás marcando las 7, vuelve a "Todas".
+ */
+export function togglePlatformIn(list: string[], platform: string): string[] {
+  if (isAllPlatforms(list)) return [platform];
+  const next = list.includes(platform) ? list.filter((x) => x !== platform) : [...list, platform];
+  if (next.length === 0 || isAllPlatforms(next)) return [...PLATFORMS];
+  // Orden canónico, así los favicons no bailan según el orden de los toques.
+  return PLATFORMS.filter((p) => next.includes(p));
+}

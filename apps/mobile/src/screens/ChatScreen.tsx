@@ -12,9 +12,11 @@
 // que permite que la carta diga "como la última vez te fuiste con X…".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, Send, User, Volume2, VolumeX, RefreshCw, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
+import { Sparkles, User, Volume2, VolumeX, RefreshCw, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
 import { Orb } from "../components/Orb";
-import { VoicePill, type VoicePillState } from "../components/VoicePill";
+import { Composer, type DictationState } from "../components/Composer";
+import { PlatformSheet } from "../components/PlatformSheet";
+import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
 import { BrandSplash } from "../components/BrandSplash";
 import { AccountSheet } from "../components/AccountSheet";
 import { ControlScreen } from "./ControlScreen";
@@ -24,8 +26,8 @@ import { colorForPlatform, platformLabel, textOnPlatform } from "../lib/deeplink
 import { jwSearch, type JwResult } from "../lib/justwatch";
 import { openStreaming } from "../lib/watch";
 import { VoiceRecorder, transcribe } from "../lib/stt";
-import { speak, stopSpeaking, isMuted, setMuted } from "../lib/tts";
-import { PLATFORMS, loadPlatforms, seedPlatforms, detectCountry, getCountry } from "../lib/prefs";
+import { stopSpeaking, isMuted, setMuted } from "../lib/tts";
+import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry } from "../lib/prefs";
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
@@ -79,9 +81,9 @@ export function ChatScreen() {
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState("");
-  const [micState, setMicState] = useState<"idle" | "requesting" | "rec" | "processing">("idle");
-  const [volume, setVolume] = useState(0);
-  const [speaking, setSpeaking] = useState(false);
+  const [micState, setMicState] = useState<DictationState>("idle");
+  const [platformsOpen, setPlatformsOpen] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [ttsMuted, setTtsMuted] = useState(() => { try { return isMuted(); } catch { return false; } });
   const [accountOpen, setAccountOpen] = useState(false);
   const [controlSession, setControlSession] = useState<string | null>(null);
@@ -136,13 +138,14 @@ export function ChatScreen() {
     setTurns((prev) => [...prev, { kind: "miru", id: uid(), text, tone }]);
 
   // ── Un turno de conversación ───────────────────────────────────────────────
-  const askMiru = useCallback(async (raw: string, source: "text" | "voice", opts?: { dry?: boolean }) => {
+  // Devuelve lo que el modo voz necesita para hablar (null si falló). La voz la
+  // pone VoiceMode, que sabe cuándo termina para volver a escuchar.
+  const askMiru = useCallback(async (raw: string, source: "text" | "voice", opts?: { dry?: boolean }): Promise<VoiceTurnResult | null> => {
     const q = raw.trim();
-    if (!q || busyRef.current) return;
+    if (!q || busyRef.current) return null;
     busyRef.current = true;
     setBusy(true);
     stopSpeaking();
-    setSpeaking(false);
 
     const turnNumber = historyRef.current.filter((m) => m.role === "user").length + 1;
     track("chat_turn", { source, turn_number: turnNumber });
@@ -211,11 +214,6 @@ export function ChatScreen() {
       });
       if (question) track("clarification_shown");
 
-      // "Habla si le hablaste": la nota se lee siempre, se escucha solo si el
-      // pedido entró por voz (y el usuario no silenció a Miru).
-      if (source === "voice" && note) {
-        void speak(note, () => setSpeaking(true), () => setSpeaking(false));
-      }
 
       // El póster de TMDB viaja con la película; solo si el backend no lo
       // resolvió se busca desde el teléfono (Cinemeta/iTunes/Wikipedia).
@@ -226,6 +224,7 @@ export function ChatScreen() {
       void jwSearch(main.title, main.platform, main.type, getCountry())
         .then((r) => setAvailability((prev) => ({ ...prev, [main.title]: r })))
         .catch(() => { /* sin verificar: el botón cae a buscar en la plataforma */ });
+      return { note: note || null, title: main.title, platform: platformLabel(main.platform) };
     } catch (e) {
       console.error("[chat]", e);
       // Tres fallas distintas, tres mensajes: el genérico escondía cuál era.
@@ -239,6 +238,7 @@ export function ChatScreen() {
         ...prev.filter((t) => t.kind !== "thinking"),
         { kind: "miru", id: uid(), text: msg, tone: "error" },
       ]);
+      return null;
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -278,35 +278,32 @@ export function ChatScreen() {
     void maybeRefreshProfile();
   };
 
-  // ── Micrófono: press-to-speak / press-to-stop (la ley de voz de toda la app) ──
+  // ── Dictado (el mic del composer): press-to-speak / press-to-stop ─────────
+  // Como el mic de Claude: pasa lo que dijiste al cuadro y vos decidís si lo
+  // mandás. Para charlar hablado está el modo voz (el botón violeta).
   const toggleMic = async () => {
     if (micState === "rec") {
       const rec = micRef.current;
       micRef.current = null;
       setMicState("processing");
-      setVolume(0);
       if (!rec) { setMicState("idle"); return; }
       const blob = await rec.stop();
-      if (blob.size < 500) { setMicState("idle"); say("No te escuché. Probá de nuevo.", "error"); return; }
+      if (blob.size < 500) { setMicState("idle"); return; }
       try {
         const heard = (await transcribe(blob)).trim();
-        setMicState("idle");
-        if (heard) void askMiru(heard, "voice");
-        else say("No te escuché. Probá de nuevo.", "error");
+        if (heard) setText((prev) => (prev.trim() ? `${prev.trim()} ${heard}` : heard));
       } catch {
-        setMicState("idle");
-        say("No te escuché. Probá de nuevo.", "error");
+        say("No te escuché bien. Probá de nuevo o escribime.", "error");
       }
+      setMicState("idle");
       return;
     }
     if (micState !== "idle") return;
-    stopSpeaking(); // tocar el orbe mientras Miru habla lo interrumpe
-    setSpeaking(false);
-    setMicState("requesting"); // getUserMedia queda pendiente con el prompt de permiso
+    setMicState("requesting");
     const rec = new VoiceRecorder();
     micRef.current = rec;
     try {
-      await rec.start({ autoStop: false, onVolume: (v) => setVolume(v) });
+      await rec.start({ autoStop: false });
       setMicState("rec");
     } catch {
       micRef.current = null;
@@ -315,11 +312,16 @@ export function ChatScreen() {
     }
   };
 
+  const changePlatforms = (next: string[]) => {
+    setPlatforms(next);
+    savePlatforms(next);
+    track("platforms_changed", { count: next.length, all: next.length === PLATFORMS.length });
+  };
+
   const toggleMute = () => {
     const next = !ttsMuted;
     setTtsMuted(next);
     setMuted(next); // persiste + corta lo que esté sonando
-    if (next) setSpeaking(false);
   };
 
   const openTvRemote = async () => {
@@ -329,6 +331,8 @@ export function ChatScreen() {
   };
 
   useBackLayer(accountOpen, () => setAccountOpen(false));
+  useBackLayer(platformsOpen, () => setPlatformsOpen(false));
+  useBackLayer(voiceMode, () => setVoiceMode(false));
   useBackLayer(!!controlSession, () => setControlSession(null));
 
   if (controlSession) {
@@ -336,13 +340,6 @@ export function ChatScreen() {
   }
   if (phase === "splash") return <BrandSplash message={SPLASH_MSG} />;
 
-  const orbPhase =
-    micState === "rec" ? "listening"
-    : micState === "processing" || micState === "requesting" || busy ? "thinking"
-    : speaking ? "speaking"
-    : "idle";
-  const pillState: VoicePillState = micState === "requesting" ? "requesting" : orbPhase;
-  const showPill = micState !== "idle" || speaking;
   // Hilo "fresco" = todavía no pediste nada: saludo centrado + ejemplos.
   const fresh = !turns.some((t) => t.kind === "user");
 
@@ -494,46 +491,34 @@ export function ChatScreen() {
         <div ref={endRef} className="h-2" />
       </div>
 
-      {/* Composer: el orbe (hablarle) + escribirle. Las dos puertas, siempre. */}
-      <div className="shrink-0 border-t border-border bg-background px-5 pb-3 pt-3">
-        {showPill && (
-          <div className="mb-2 flex justify-center">
-            <VoicePill state={pillState} onClick={() => void toggleMic()} />
-          </div>
-        )}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void toggleMic()}
-            aria-label={micState === "rec" ? "Frenar" : "Hablarle a Miru"}
-            className={cn(
-              "relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border transition-all active:scale-95",
-              micState === "rec" ? "border-red-400/50 bg-red-500/15" : "border-primary/30 bg-primary/5",
-            )}
-            style={{ WebkitTapHighlightColor: "transparent" }}
-          >
-            <Orb phase={orbPhase} size="mini" sizePx={34} volume={volume} />
-          </button>
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-muted px-3">
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-              placeholder={micState === "rec" ? "Te escucho…" : busy ? "Buscando…" : "Pedile algo a Miru"}
-              disabled={micState === "rec"}
-              className="min-h-[52px] min-w-0 flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
-            />
-            <button
-              onClick={send}
-              disabled={!text.trim() || busy}
-              aria-label="Enviar"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-20"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+      {/* Composer a la manera de Claude: texto, dónde busco, dictado y modo voz. */}
+      <div className="shrink-0 bg-background px-3 pb-3 pt-2">
+        <Composer
+          value={text}
+          onChange={setText}
+          onSend={send}
+          busy={busy}
+          platforms={platforms}
+          onOpenPlatforms={() => setPlatformsOpen(true)}
+          dictation={micState}
+          onDictate={() => void toggleMic()}
+          onVoiceMode={() => { track("voice_mode_open"); stopSpeaking(); setVoiceMode(true); }}
+        />
       </div>
+
+      <PlatformSheet
+        open={platformsOpen}
+        selected={platforms}
+        onChange={changePlatforms}
+        onClose={() => setPlatformsOpen(false)}
+      />
+
+      {voiceMode && (
+        <VoiceMode
+          onTurn={(heard) => askMiru(heard, "voice")}
+          onClose={() => setVoiceMode(false)}
+        />
+      )}
     </div>
   );
 }

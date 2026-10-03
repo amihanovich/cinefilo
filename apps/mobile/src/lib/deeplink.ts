@@ -13,6 +13,25 @@ export const PLATFORM_COLORS: Record<string, string> = {
   "Star+": "#0063E5", // absorbido por Disney+ en LatAm
 };
 
+// Dominio de cada plataforma: de ahí sale su favicon (el mini ícono del
+// composer). Si el favicon no carga, PlatformIcon cae a la inicial en el color
+// de la marca.
+export const PLATFORM_DOMAINS: Record<string, string> = {
+  Netflix: "netflix.com",
+  "Disney+": "disneyplus.com",
+  Max: "max.com",
+  "Prime Video": "primevideo.com",
+  "Apple TV+": "tv.apple.com",
+  "Paramount+": "paramountplus.com",
+  "Universal+": "universalplus.com",
+  "Star+": "disneyplus.com",
+};
+
+export function faviconFor(platform: string): string | null {
+  const d = PLATFORM_DOMAINS[platform];
+  return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=64` : null;
+}
+
 export function colorForPlatform(platform: string): string {
   return PLATFORM_COLORS[platform] ?? "#6d28d9";
 }
