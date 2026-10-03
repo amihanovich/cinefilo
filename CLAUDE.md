@@ -29,6 +29,12 @@ recomendación principal + N alternativas, con refinamiento conversacional, feed
 
 ## La app móvil hoy: una conversación (decisión 2026-09)
 
+> **EL MVP ES ESTO (decisión 2026-10).** Todo el trabajo va a la app conversacional (`apps/mobile`,
+> `ChatScreen` y lo que usa) y al backend que la sirve. **El resto queda congelado como está**: TV
+> (`public/tv-lite.html`, `apps/tv`, Tizen, webOS), `apps/web-control`, `wizard.tsx` / `?full=1`, la
+> web legacy y la landing. No se les suman features ni se les hacen ajustes, salvo que se pida
+> explícitamente o que un cambio del backend compartido los rompa.
+
 Miru avanzó fuerte en producto (TV, control, grilla, tops) **sin validar el núcleo**. La app móvil vuelve
 entonces a lo que era la idea: **hablarle y que te dé UNA película, bien justificada**, como el especialista
 del videoclub. Todo lo demás **queda en el repo como capas** que se van a ir sumando si esto tracciona —
