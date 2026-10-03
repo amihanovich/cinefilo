@@ -3,13 +3,14 @@
 export const PLATFORM_COLORS: Record<string, string> = {
   Netflix: "#E50914",
   "Disney+": "#0063E5",
-  Max: "#002BE7",
+  // Max volvió a ser HBO Max (2025): su marca es negra.
+  Max: "#000000",
   "Prime Video": "#00A8E1",
-  "Apple TV+": "#000000",
+  "Apple TV+": "#1D1D1F", // casi negro de Apple: no se confunde con Max
   "Paramount+": "#0064FF",
-  // Navy: los otros azules de la paleta son vivos (Disney+, Max, Paramount+),
-  // así que Universal+ se distingue por oscuro sin pisar el negro de Apple TV+.
-  "Universal+": "#1D2E6B",
+  // Universal+ es amarilla (como su favicon). El texto encima lo decide la
+  // luminancia: sobre amarillo va en tinta, no en blanco.
+  "Universal+": "#FFC20E",
   "Star+": "#0063E5", // absorbido por Disney+ en LatAm
 };
 

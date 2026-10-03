@@ -494,10 +494,22 @@
     return found;
   }
   var COLORS = {
-    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
-    "Apple TV+": "#444", "Paramount+": "#0064FF", "Universal+": "#1D2E6B", "Star+": "#1CB47A"
+    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#000000", "Prime Video": "#00A8E1",
+    "Apple TV+": "#444", "Paramount+": "#0064FF", "Universal+": "#FFC20E", "Star+": "#1CB47A"
   };
   function colorFor(p) { return COLORS[p] || "#2563EB"; }
+  // Texto legible sobre el color de la marca: sobre amarillo (Universal+) o
+  // celeste (Prime) el blanco no se lee. Mismo criterio que textOnPlatform()
+  // del móvil: luminancia relativa > 0.3 → tinta.
+  function textOnColor(hex) {
+    var h = String(hex || "").replace("#", "");
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (h.length !== 6) return "#fff";
+    function ch(i) { var v = parseInt(h.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    var lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
+    return lum > 0.3 ? "#1A1614" : "#fff";
+  }
+  function onPlat(p) { return "color:" + textOnColor(colorFor(p)); }
   // Star+ fue absorbido por Disney+ en LatAm (2024).
   function platLabel(p) { return p === "Star+" ? "Disney+" : p; }
 
@@ -996,7 +1008,7 @@
     if (!it.platform) return "";
     var unk = it.avail === "unknown" || it.avail === "pending";
     var label = (unk ? "Por confirmar en " : "Disponible en ") + esc(platLabel(it.platform));
-    return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + '">' + label + "</span>";
+    return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + (unk ? "" : ";" + onPlat(it.platform)) + '">' + label + "</span>";
   }
 
   // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
@@ -1020,7 +1032,7 @@
     if (sub.length) h += '<span class="csub">' + esc(sub.join(" · ")) + "</span>";
     if (it.platform) {
       var unkP = it.avail === "unknown" || it.avail === "pending";
-      h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
+      h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + (unkP ? "" : ";" + onPlat(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
     }
     h += "</div>";
     return h;
@@ -1064,7 +1076,7 @@
       h += '<div class="hactions">';
       h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
            (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
-      h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+      h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + ';' + onPlat(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
       h += "</div>";
     }
     h += "</div></div>"; // cierra .hpanel y .info
@@ -1398,7 +1410,7 @@
     h += '<div class="hactions">';
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
          (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
-    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + ';' + onPlat(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     // 3er botón SOLO en modo RC: marca "Ya la vi" (en modo vinculado ese flujo
     // vive en el control del teléfono, con su hoja de rating).
     if (uiMode === "rc") {
