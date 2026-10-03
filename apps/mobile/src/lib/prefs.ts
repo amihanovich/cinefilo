@@ -70,6 +70,8 @@ export function getCountry(): string {
 
 export function savePlatforms(list: string[]): void {
   try { localStorage.setItem(PLATFORMS_KEY, JSON.stringify(list)); } catch { /* noop */ }
+  // Las plataformas también viajan con la cuenta (lib/tasteSync.ts).
+  try { window.dispatchEvent(new Event("miru:taste-changed")); } catch { /* noop */ }
 }
 
 /** "Todas" = las 7 activas (o ninguna guardada). */

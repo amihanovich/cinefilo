@@ -77,7 +77,15 @@ no se borró nada.
   header y cuenta + Cerrar sesión en Mi cuenta. Configuración necesaria: cliente OAuth en Google Cloud
   (redirect `https://gyxooovdwputhznnlqhi.supabase.co/auth/v1/callback`) + provider Google en Supabase
   + Site/Redirect URLs. ⚠️ En el **APK** Google bloquea el OAuth dentro del WebView: hace falta otra
-  configuración (pendiente). La memoria de gustos sigue local al teléfono. **Repregunta solo si amerita**: por defecto el motor va directo al
+  configuración (pendiente).
+- **La memoria vive en la cuenta** (`lib/tasteSync.ts` + tabla `public.miru_taste`, migración
+  `supabase/migrations/20261003000000_miru_taste.sql`, RLS: cada uno lee/escribe solo su fila). La app
+  sigue trabajando contra el localStorage (`miru:taste`, `miru:opened`, `miru:platforms`) y este módulo
+  lo sincroniza: al entrar baja la memoria de la cuenta y la **fusiona** con la local (lo de la prueba
+  sin cuenta pasa a la cuenta; si el teléfono tenía la de OTRA cuenta —`miru:taste-owner`— no se
+  mezclan); cada cambio se sube solo (evento `miru:taste-changed`, 2.5 s de retraso); al cerrar sesión
+  sube lo último y deja el teléfono limpio. Un pedido pendiente del login espera a que baje la memoria.
+  Sin la tabla o sin red, todo sigue andando local. **Repregunta solo si amerita**: por defecto el motor va directo al
   resultado; un pedido corto con UNA señal ("algo de acción") no se repregunta.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada

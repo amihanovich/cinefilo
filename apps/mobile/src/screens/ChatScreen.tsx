@@ -18,6 +18,7 @@ import { Composer, type DictationState } from "../components/Composer";
 import { PlatformSheet } from "../components/PlatformSheet";
 import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
 import { LoginSheet } from "../components/LoginSheet";
+import { startTasteSync, stopTasteSync } from "../lib/tasteSync";
 import { currentUser, onUserChange, signInWithGoogle, signOut, takePendingAsk, freeUsesLeft, spendFreeUse, FREE_USES, type MiruUser } from "../lib/auth";
 import { BrandSplash } from "../components/BrandSplash";
 import { AccountSheet } from "../components/AccountSheet";
@@ -91,6 +92,9 @@ export function ChatScreen() {
   const [voiceMode, setVoiceMode] = useState(false);
   const [user, setUser] = useState<MiruUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  // La memoria de la cuenta ya bajó (o no había cuenta): recién ahí se retoma
+  // un pedido pendiente, así la primera recomendación ya te conoce.
+  const [memoryReady, setMemoryReady] = useState(false);
   const [login, setLogin] = useState<{ reason: "limit" | "manual"; pending: string | null } | null>(null);
   const [usesLeft, setUsesLeft] = useState(freeUsesLeft);
   // El nombre sale de la cuenta de Google; sin cuenta, el que hayas dado antes (si hay).
@@ -124,10 +128,19 @@ export function ChatScreen() {
   // y cambios (login / logout).
   useEffect(() => {
     let alive = true;
-    void currentUser().then((u) => { if (alive) { setUser(u); setAuthReady(true); } });
+    const sync = (u: MiruUser | null) => {
+      if (!u) { setMemoryReady(true); return; }
+      void startTasteSync(u.id).then((pulled) => {
+        if (!alive) return;
+        if (pulled) setPlatforms(loadPlatforms()); // tus plataformas vienen con la cuenta
+        setMemoryReady(true);
+      });
+    };
+    void currentUser().then((u) => { if (alive) { setUser(u); setAuthReady(true); sync(u); } });
     const off = onUserChange((u) => {
       setUser(u);
       setAuthReady(true);
+      if (u) sync(u);
       if (u) {
         setLogin(null);
         track("login_success");
@@ -382,11 +395,11 @@ export function ChatScreen() {
   };
 
   useEffect(() => {
-    if (!user || phase !== "chat") return;
+    if (!user || phase !== "chat" || !memoryReady) return;
     const pending = takePendingAsk();
     if (pending) void askMiru(pending, "text");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, phase]);
+  }, [user, phase, memoryReady]);
 
   useBackLayer(accountOpen, () => setAccountOpen(false));
   useBackLayer(!!login, () => setLogin(null));
@@ -411,7 +424,18 @@ export function ChatScreen() {
         onOpenTvRemote={() => void openTvRemote()}
         user={user}
         onSignIn={() => { setAccountOpen(false); setLogin({ reason: "manual", pending: null }); }}
-        onSignOut={() => { void signOut(); setAccountOpen(false); }}
+        onSignOut={() => {
+          setAccountOpen(false);
+          // Se sube lo último, el teléfono queda limpio y la charla arranca de cero.
+          void stopTasteSync().then(() => signOut()).then(() => {
+            setTurns([]);
+            historyRef.current = [];
+            shownRef.current = new Set();
+            rejectedRef.current = [];
+            lastRecoRef.current = null;
+            setPlatforms(loadPlatforms());
+          });
+        }}
       />
 
       {/* Header: la marca, el mute de la voz y UNA puerta a los ajustes (que es

@@ -36,7 +36,17 @@ export function loadOpened(): OpenedItem[] {
   }
 }
 
-function save(list: OpenedItem[]): void {
+/** Reemplaza la lista entera (sincronización con la cuenta); no dispara subida. */
+export function replaceOpened(list: OpenedItem[]): void {
+  save(list, false);
+}
+
+export function clearOpened(): void {
+  try { localStorage.removeItem(OPENED_KEY); } catch { /* noop */ }
+}
+
+function save(list: OpenedItem[], notify = true): void {
+  if (notify) { try { window.dispatchEvent(new Event("miru:taste-changed")); } catch { /* noop */ } }
   try { localStorage.setItem(OPENED_KEY, JSON.stringify(list.slice(0, MAX_OPENED))); } catch { /* sin storage */ }
 }
 

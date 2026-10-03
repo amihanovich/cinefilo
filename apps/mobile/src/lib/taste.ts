@@ -44,7 +44,26 @@ export function loadTaste(): TasteStore {
   }
 }
 
-function save(t: TasteStore): void {
+export type { TasteStore };
+
+/** Evento que escucha lib/tasteSync.ts para subir los cambios a la cuenta. */
+export const TASTE_CHANGED = "miru:taste-changed";
+function changed(): void {
+  try { window.dispatchEvent(new Event(TASTE_CHANGED)); } catch { /* noop */ }
+}
+
+/** Reemplaza la memoria local entera (la usa la sincronización con la cuenta). */
+export function replaceTaste(t: TasteStore, notify = false): void {
+  save(t, notify);
+}
+
+/** Borra la memoria local (al cerrar sesión: el teléfono queda limpio). */
+export function clearTaste(): void {
+  try { localStorage.removeItem(TASTE_KEY); } catch { /* noop */ }
+}
+
+function save(t: TasteStore, notify = true): void {
+  if (notify) changed();
   try {
     localStorage.setItem(TASTE_KEY, JSON.stringify({
       ...t,
