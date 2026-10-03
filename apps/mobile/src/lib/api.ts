@@ -57,6 +57,8 @@ export async function fetchRecommendation(params: {
   tasteProfile?: string | null;
   /** Modo conversación: descartes de ESTA charla, con lo que dijo el usuario como motivo. */
   rejected?: { title: string; reason: string | null }[];
+  /** Cómo se llama la persona (opcional): Miru la nombra como mucho una vez. */
+  userName?: string | null;
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",

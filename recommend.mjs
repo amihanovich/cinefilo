@@ -101,7 +101,7 @@ async function callAnthropic(messages, alternativesCount = 4) {
  * @param {string|null} [params.tasteProfile] - perfil de gusto del dispositivo (texto, ya formateado)
  * @param {{title:string, reason:string|null}[]} [params.rejected] - descartes de ESTA charla
  */
-export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country, tasteProfile = null, rejected = [] }) {
+export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country, tasteProfile = null, rejected = [], userName = null }) {
   // Si el pedido de ESTE turno nombra una plataforma explícita ("buscame algo
   // en Netflix", "para ver en Disney"), eso PISA el preset de plataformas del
   // perfil — solo para este pedido puntual, no para toda la conversación.
@@ -123,6 +123,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   // Modo conversación (la app móvil): UNA película, elegida y escrita en dos
   // pasos con la verificación de catálogo en el medio.
   if (alternativesCount === 0) {
+    if (userName) baseContext.push(`La persona se llama ${userName}. Podés nombrarla como mucho UNA vez, y solo si suena natural (nunca en cada frase).`);
     return recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected });
   }
 
@@ -219,7 +220,7 @@ Reglas:
 - Si el pedido nombra un título o un director, es LA BRÚJULA: buscá por su ADN (época, tono, ritmo, puesta en escena), no por género a secas.
 - Si hay "Perfil de gusto", es una señal FUERTE: rankeá por encaje con ESTA persona, no con el público general. Pero el pedido de HOY manda sobre el perfil: si hoy pide algo distinto a lo de siempre, seguilo.
 - "Descartes en esta charla" con motivo: ese motivo es una restricción dura para TODOS los candidatos. Si hay 2 o más descartes seguidos SIN motivo, la persona no sabe decir qué no le cierra: elegí candidatos en CONTRASTE claro con lo descartado y completá "clarification_needed" con UNA pregunta corta y cálida que lo destrabe.
-- Pedido ambiguo o con duda (muletillas transcriptas, "no sé", "lo que sea", frases inconclusas): proponé igual tu mejor lectura Y completá "clarification_needed" (máximo 20 palabras, cálida, una sola). Si el pedido es claro, null.
+- REPREGUNTA ("clarification_needed"): por defecto es null y vas DIRECTO al resultado. Solo preguntás si de verdad amerita: el pedido no trae NINGUNA señal útil (ni género, ni tono, ni compañía, ni momento, ni duración, ni una referencia) o la persona duda en voz alta ("no sé", "lo que sea", "eh…", frases inconclusas). Un pedido corto pero con UNA señal ("algo de acción", "una comedia", "algo para ver con mi mujer") NO amerita pregunta. Ante la duda, NO preguntes. Si preguntás: una sola, cálida, máximo 20 palabras — y proponé igual tu mejor lectura.
 - Títulos a no proponer: JAMÁS los propongas. OJO: estar en esa lista NO significa que la persona los haya visto — son títulos que Miru ya le propuso o que abrió desde Miru.
 - ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.

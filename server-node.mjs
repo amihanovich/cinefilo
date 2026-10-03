@@ -383,6 +383,7 @@ http
           // Modo conversación: el perfil de gusto del dispositivo (texto ya
           // formateado por el cliente) y los descartes de esta charla.
           tasteProfile: str(p.tasteProfile, 1500),
+          userName: (str(p.userName, 30) || "").replace(/[^\p{L}\p{M} '.-]/gu, "").trim() || null,
           rejected: (Array.isArray(p.rejected) ? p.rejected : [])
             .slice(-8)
             .filter((r) => r && typeof r.title === "string")

@@ -12,8 +12,8 @@
 // que permite que la carta diga "como la última vez te fuiste con X…".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles, User, Volume2, VolumeX, RefreshCw, Loader2, ThumbsUp, ThumbsDown } from "lucide-react";
-import { Orb } from "../components/Orb";
+import { User, Volume2, VolumeX, RefreshCw, ThumbsUp, ThumbsDown } from "lucide-react";
+import { MiruMark } from "../components/MiruMark";
 import { Composer, type DictationState } from "../components/Composer";
 import { PlatformSheet } from "../components/PlatformSheet";
 import { VoiceMode, type VoiceTurnResult } from "../components/VoiceMode";
@@ -26,8 +26,8 @@ import { colorForPlatform, platformLabel, textOnPlatform } from "../lib/deeplink
 import { jwSearch, type JwResult } from "../lib/justwatch";
 import { openStreaming } from "../lib/watch";
 import { VoiceRecorder, transcribe } from "../lib/stt";
-import { stopSpeaking, isMuted, setMuted } from "../lib/tts";
-import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry } from "../lib/prefs";
+import { speak, stopSpeaking, isMuted, setMuted } from "../lib/tts";
+import { PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, setName, nameAsked, dismissNameAsk, timeGreeting } from "../lib/prefs";
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
@@ -37,8 +37,11 @@ import {
   type Verdict,
 } from "../lib/taste";
 
-const GREETING = "Hola, soy Miru. Decime qué tenés ganas de ver y te elijo una.";
-const GREETING_BACK = "Hola de nuevo. ¿Qué tenés ganas de ver hoy?";
+// El saludo es a la manera de Claude: la marca y una frase grande al centro
+// ("Buenas tardes, Agus"), no una burbuja. Debajo, una línea que cambia según
+// si Miru ya te conoce.
+const SUB_FIRST = "Soy Miru. Decime qué tenés ganas de ver y te elijo una.";
+const SUB_BACK = "¿Qué tenés ganas de ver?";
 const SPLASH_MSG = "Rastrillando las plataformas para encontrar lo tuyo…";
 // Ejemplos tocables (anti-parálisis): muestran QUÉ se le puede pedir.
 const EXAMPLES = ["Algo de terror liviano", "Una comedia para reír", "Algo corto y bueno"];
@@ -51,18 +54,18 @@ type Turn =
   /** "¿Qué tal estuvo X?" al volver: tres chips, una sola vez por título. */
   | { kind: "verdict"; id: string; title: string };
 
-// Cómo arranca el hilo: si en otra sesión abriste algo, Miru pregunta qué tal
-// estuvo (es la señal que más afina el perfil); si ya te conoce, saluda como
-// tal; si no, se presenta.
+// Cómo arranca el hilo: vacío (el saludo es el encabezado grande), salvo que en
+// otra sesión hayas abierto algo — ahí Miru pregunta qué tal estuvo, que es la
+// señal que más afina el perfil.
 function openingTurns(): Turn[] {
   const pending = pendingVerdict();
   if (pending) {
     return [
-      { kind: "miru", id: uid(), text: `Hola de nuevo. La última vez te llevaste ${pending.title}. ¿Qué tal estuvo?` },
+      { kind: "miru", id: uid(), text: `La última vez te llevaste ${pending.title}. ¿Qué tal estuvo?` },
       { kind: "verdict", id: uid(), title: pending.title },
     ];
   }
-  return [{ kind: "miru", id: uid(), text: hasProfile() ? GREETING_BACK : GREETING }];
+  return [];
 }
 
 let seq = 0;
@@ -84,6 +87,10 @@ export function ChatScreen() {
   const [micState, setMicState] = useState<DictationState>("idle");
   const [platformsOpen, setPlatformsOpen] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [name, setNameState] = useState<string | null>(getName);
+  const [askingName, setAskingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [showNameAsk, setShowNameAsk] = useState(() => !getName() && !nameAsked());
   const [ttsMuted, setTtsMuted] = useState(() => { try { return isMuted(); } catch { return false; } });
   const [accountOpen, setAccountOpen] = useState(false);
   const [controlSession, setControlSession] = useState<string | null>(null);
@@ -179,6 +186,7 @@ export function ChatScreen() {
         alternativesCount: 0, // modo "una sola": el porqué largo es el producto
         country: getCountry(),
         tasteProfile: profileBlock(),
+        userName: name,
         rejected: rejectedRef.current.slice(-8),
       });
       const main = data?.main;
@@ -224,7 +232,7 @@ export function ChatScreen() {
       void jwSearch(main.title, main.platform, main.type, getCountry())
         .then((r) => setAvailability((prev) => ({ ...prev, [main.title]: r })))
         .catch(() => { /* sin verificar: el botón cae a buscar en la plataforma */ });
-      return { note: note || null, title: main.title, platform: platformLabel(main.platform) };
+      return { note: note || null, title: main.title, platform: platformLabel(main.platform), question: question || null };
     } catch (e) {
       console.error("[chat]", e);
       // Tres fallas distintas, tres mensajes: el genérico escondía cuál era.
@@ -245,7 +253,7 @@ export function ChatScreen() {
       // La memoria se re-sintetiza en segundo plano cuando juntó señales.
       void maybeRefreshProfile();
     }
-  }, [platforms]);
+  }, [platforms, name]);
 
   const send = () => {
     const q = text.trim();
@@ -312,6 +320,21 @@ export function ChatScreen() {
     }
   };
 
+  const voiceResult = (res: VoiceTurnResult) => {
+    setVoiceMode(false);
+    // Después del desmontaje del modo voz (que corta cualquier voz en curso).
+    window.setTimeout(() => { void speak(res.note || `Te propongo ${res.title}, en ${res.platform}.`); }, 80);
+  };
+
+  const saveName = () => {
+    const n = nameDraft.trim();
+    setName(n);
+    setNameState(n || null);
+    setAskingName(false);
+    setShowNameAsk(false);
+    if (n) track("name_set");
+  };
+
   const changePlatforms = (next: string[]) => {
     setPlatforms(next);
     savePlatforms(next);
@@ -357,8 +380,8 @@ export function ChatScreen() {
           de ocupar la pantalla). */}
       <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-2">
         <div className="flex items-center gap-1.5">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="text-base font-bold text-foreground">Miru</span>
+          <MiruMark size={18} />
+          <span className="font-serif text-[17px] font-bold text-foreground">Miru</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -386,6 +409,34 @@ export function ChatScreen() {
         "flex-1 min-h-0 overflow-y-auto px-5 pb-4",
         fresh && "flex flex-col justify-center",
       )}>
+        {fresh && (
+          <div className="fade-in mb-6 flex flex-col items-center text-center">
+            <MiruMark size={44} state="idle" />
+            <h1 className="mt-4 font-serif text-[32px] font-bold leading-tight tracking-tight text-foreground" data-testid="greeting">
+              {timeGreeting()}{name ? `, ${name}` : ""}
+            </h1>
+            <p className="mt-1.5 text-[15px] text-muted-foreground">{hasProfile() ? SUB_BACK : SUB_FIRST}</p>
+            {askingName ? (
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveName(); }}
+                  placeholder="Tu nombre"
+                  maxLength={30}
+                  className="h-9 w-40 rounded-full border border-border bg-card px-3 text-[14px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+                <button onClick={saveName} className="h-9 rounded-full bg-primary px-3 text-[13px] font-semibold text-primary-foreground active:scale-95">Listo</button>
+              </div>
+            ) : showNameAsk ? (
+              <div className="mt-2 flex items-center gap-3 text-[13px]">
+                <button onClick={() => { setNameDraft(""); setAskingName(true); }} className="font-semibold text-primary">¿Cómo te llamo?</button>
+                <button onClick={() => { dismissNameAsk(); setShowNameAsk(false); }} className="text-muted-foreground">Ahora no</button>
+              </div>
+            ) : null}
+          </div>
+        )}
         {turns.map((t) => {
           if (t.kind === "user") {
             return (
@@ -399,8 +450,8 @@ export function ChatScreen() {
           if (t.kind === "miru") {
             return (
               <div key={t.id} data-turn={t.id} className="fade-in mt-4 flex gap-2.5">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
-                  <Orb phase="idle" size="mini" sizePx={28} />
+                <span className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center">
+                  <MiruMark size={20} />
                 </span>
                 <p className={cn(
                   "max-w-[85%] rounded-3xl rounded-bl-lg px-4 py-2.5 text-[14px] leading-relaxed",
@@ -431,12 +482,10 @@ export function ChatScreen() {
           if (t.kind === "thinking") {
             return (
               <div key={t.id} className="fade-in mt-4 flex items-center gap-2.5">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full">
-                  <Orb phase="thinking" size="mini" sizePx={28} />
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center">
+                  <MiruMark size={22} state="thinking" />
                 </span>
-                <span className="flex items-center gap-2 rounded-3xl rounded-bl-lg border border-border bg-card px-4 py-2.5 text-[13px] text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Buscando la tuya…
-                </span>
+                <span className="text-[14px] text-muted-foreground">Buscando la tuya…</span>
               </div>
             );
           }
@@ -476,7 +525,7 @@ export function ChatScreen() {
 
         {/* Ejemplos tocables: solo al arrancar, cuando el hilo es el saludo. */}
         {fresh && (
-          <div className="mt-5 flex flex-wrap gap-1.5 pl-9">
+          <div className="mt-5 flex flex-wrap justify-center gap-1.5">
             {EXAMPLES.map((ex) => (
               <button
                 key={ex}
@@ -509,7 +558,9 @@ export function ChatScreen() {
       {voiceMode && (
         <VoiceMode
           onTurn={(heard) => askMiru(heard, "voice")}
+          onResult={voiceResult}
           onClose={() => setVoiceMode(false)}
+          name={name}
           platforms={platforms}
           onOpenPlatforms={() => setPlatformsOpen(true)}
           ttsMuted={ttsMuted}

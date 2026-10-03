@@ -90,3 +90,37 @@ export function togglePlatformIn(list: string[], platform: string): string[] {
   // Orden canónico, así los favicons no bailan según el orden de los toques.
   return PLATFORMS.filter((p) => next.includes(p));
 }
+
+// El nombre con el que Miru te saluda ("Buenas tardes, Agus"). Opcional: sin
+// nombre, el saludo va sin nombre. Se pregunta una sola vez, sin insistir.
+const NAME_KEY = "miru:name";
+const NAME_ASKED_KEY = "miru:name-asked";
+
+export function getName(): string | null {
+  try { return localStorage.getItem(NAME_KEY)?.trim() || null; } catch { return null; }
+}
+
+export function setName(name: string): void {
+  try {
+    const n = name.trim().slice(0, 30);
+    if (n) localStorage.setItem(NAME_KEY, n); else localStorage.removeItem(NAME_KEY);
+    localStorage.setItem(NAME_ASKED_KEY, "1");
+  } catch { /* noop */ }
+}
+
+/** ¿Ya le preguntamos (y contestó o dijo "ahora no")? */
+export function nameAsked(): boolean {
+  try { return localStorage.getItem(NAME_ASKED_KEY) === "1"; } catch { return true; }
+}
+
+export function dismissNameAsk(): void {
+  try { localStorage.setItem(NAME_ASKED_KEY, "1"); } catch { /* noop */ }
+}
+
+/** "Buen día" / "Buenas tardes" / "Buenas noches", por la hora del teléfono. */
+export function timeGreeting(d = new Date()): string {
+  const h = d.getHours();
+  if (h >= 5 && h < 13) return "Buen día";
+  if (h >= 13 && h < 20) return "Buenas tardes";
+  return "Buenas noches";
+}

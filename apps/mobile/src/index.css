@@ -70,3 +70,11 @@
   50% { opacity: 1; transform: scaleY(1.14); }
 }
 .miru-breath { animation: miruBreath 2.4s ease-in-out infinite; transform-origin: 50% 100%; }
+
+/* La marca de Miru como indicador de estado (ver components/MiruMark.tsx). */
+@keyframes miruMarkBreathe { 0%, 100% { transform: scale(0.94); } 50% { transform: scale(1.04); } }
+@keyframes miruMarkSpin { to { transform: rotate(360deg); } }
+@keyframes miruMarkPulse { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.14); } 70% { transform: scale(0.98); } }
+.miru-mark-breathe { animation: miruMarkBreathe 3.6s ease-in-out infinite; transform-origin: 50% 50%; }
+.miru-mark-spin { animation: miruMarkSpin 3.2s linear infinite; transform-origin: 50% 50%; }
+.miru-mark-pulse { animation: miruMarkPulse 0.9s ease-in-out infinite; transform-origin: 50% 50%; }

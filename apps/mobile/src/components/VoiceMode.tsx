@@ -5,35 +5,34 @@
 // violeta-lavanda, el orbe como marca, y en vez del selector de modelo, dónde
 // busca.
 //
-// Comportamiento: Miru escucha, CORTA SOLA cuando hacés silencio, piensa, te
-// contesta en voz alta y vuelve a escuchar. El mic del medio pausa o retoma
-// (y si Miru está hablando, la interrumpe). La X vuelve al hilo con las fichas.
-// Es la única excepción al press-to-stop de la app.
+// Comportamiento: Miru escucha, CORTA SOLA cuando hacés silencio y piensa.
+//   - Si el pedido amerita una repregunta, la dice en voz alta y vuelve a
+//     escuchar: la charla sigue acá.
+//   - Si no, va DIRECTO al resultado: el modo voz se cierra solo, la ficha
+//     queda a la vista en la charla y Miru te la cuenta hablando.
+// El mic del medio pausa o retoma (y si Miru está hablando, la interrumpe).
+// La X vuelve al hilo. Es la única excepción al press-to-stop de la app.
 
 import { useEffect, useRef, useState } from "react";
 import { X, Plus, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
-import { Orb, type OrbPhase } from "./Orb";
+import { MiruMark, type MarkState } from "./MiruMark";
 import { PlatformIcon } from "./PlatformIcon";
 import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking } from "../lib/tts";
 import { isAllPlatforms } from "../lib/prefs";
 
-export type VoiceTurnResult = { note: string | null; title: string; platform: string };
+export type VoiceTurnResult = { note: string | null; title: string; platform: string; question: string | null };
 
 type State = "listening" | "thinking" | "speaking" | "paused";
 
-const HEADLINE: Record<State, string> = {
-  listening: "Te escucho",
-  thinking: "Buscando la tuya…",
-  speaking: "",
-  paused: "Hablemos",
-};
-
 export function VoiceMode({
-  onTurn, onClose, platforms, onOpenPlatforms, ttsMuted, onToggleMute,
+  onTurn, onResult, onClose, name, platforms, onOpenPlatforms, ttsMuted, onToggleMute,
 }: {
   onTurn: (text: string) => Promise<VoiceTurnResult | null>;
+  /** Hubo resultado sin repregunta: el padre cierra el modo voz y muestra la ficha. */
+  onResult: (res: VoiceTurnResult) => void;
   onClose: () => void;
+  name: string | null;
   platforms: string[];
   onOpenPlatforms: () => void;
   ttsMuted: boolean;
@@ -91,11 +90,18 @@ export function VoiceMode({
     const res = await onTurn(text);
     if (genRef.current !== gen) return;
     if (!res) { setState("paused"); setHint("Se me trabó. Tocá el micrófono y probá de nuevo."); return; }
+    if (!res.question) {
+      // Directo al resultado: se cierra el modo voz y la ficha queda a la vista.
+      genRef.current++; // el grabador ya se cerró al empezar a pensar
+      onResult(res);
+      return;
+    }
+    // Amerita repregunta: Miru la dice y sigue escuchando, acá mismo.
     setAnswer(res);
     setState("speaking");
-    await speak(res.note || `Te propongo ${res.title}, en ${res.platform}.`);
+    await speak(res.question);
     if (genRef.current !== gen) return;
-    void listen(); // la charla sigue sola
+    void listen();
   };
 
   useEffect(() => {
@@ -137,11 +143,16 @@ export function VoiceMode({
     onClose();
   };
 
-  const phase: OrbPhase = state === "paused" ? "idle" : state;
+  const mark: MarkState = state === "paused" ? "idle" : state;
   const all = isAllPlatforms(platforms);
   // El brillo sube con tu voz mientras escucha y respira mientras Miru piensa o habla.
   const lift = state === "listening" ? 1 + Math.min(volume * 6, 0.9) : 1;
-  const headline = state === "speaking" && answer ? answer.title : HEADLINE[state];
+  const hablemos = name ? `Hablemos, ${name}` : "Hablemos";
+  const headline =
+    state === "listening" ? (heard ? "Te escucho" : hablemos)
+    : state === "thinking" ? "Buscando la tuya…"
+    : state === "speaking" ? (answer?.question ?? "")
+    : "En pausa";
 
   return (
     <div className="fade-in fixed inset-0 z-50 overflow-hidden bg-background safe-top safe-bottom">
@@ -163,13 +174,13 @@ export function VoiceMode({
 
         {/* La marca y la frase, al centro. */}
         <button onClick={tapCenter} className="mx-auto flex max-w-sm flex-col items-center gap-5 px-8 text-center" style={{ WebkitTapHighlightColor: "transparent" }}>
-          <Orb phase={phase} size="mini" sizePx={64} volume={volume} />
-          <h1 className="font-serif text-[34px] font-bold leading-tight tracking-tight text-foreground" data-testid="voice-state">
+          <MiruMark size={64} state={mark} volume={volume} />
+          <h1
+            className={`font-serif font-bold leading-tight tracking-tight text-foreground ${state === "speaking" ? "text-[24px]" : "text-[34px]"}`}
+            data-testid="voice-state"
+          >
             {headline}
           </h1>
-          {state === "speaking" && answer && (
-            <p className="-mt-3 text-[13px] text-muted-foreground">en {answer.platform} · la ficha te queda en la charla</p>
-          )}
           {state === "thinking" && heard && <p className="-mt-3 text-[14px] italic text-muted-foreground">«{heard}»</p>}
           {hint && <p className="-mt-2 text-[13px] text-muted-foreground">{hint}</p>}
         </button>

@@ -50,10 +50,21 @@ no se borró nada.
 - **Regla de voz: "habla si le hablaste"** — en el **modo voz** (`components/VoiceMode.tsx`) Miru
   escucha, **corta sola por silencio**, contesta hablado y vuelve a escuchar. Escrito o dictado →
   contesta escrito. La nota se muestra siempre. El modo voz busca la **sensación** del de Claude sin
-  copiarlo: pantalla clara, orbe + frase grande en serif al centro ("Te escucho" / "Buscando la tuya…" /
-  el título que propone), un **brillo violeta-lavanda que sube desde abajo y late con la voz**, el mic
-  flotando (pausa/retoma/interrumpe; tocar la frase = "ya terminé") y abajo [+] · dónde busco · voz de
-  Miru on/off · X.
+  copiarlo: pantalla clara, la marca + frase grande en serif al centro ("Hablemos, Agus" / "Buscando
+  la tuya…"), un **brillo violeta-lavanda que sube desde abajo y late con la voz**, el mic flotando
+  (pausa/retoma/interrumpe; tocar la frase = "ya terminé") y abajo [+] · dónde busco · voz on/off · X.
+  **Si Miru repregunta, la dice y sigue escuchando; si no, el modo voz se cierra solo y la ficha queda
+  a la vista mientras Miru la cuenta hablando** (directo al resultado).
+- **La marca** (`components/MiruMark.tsx`): un destello de 4 puntas violeta (el mismo ✦ del "por qué
+  te la propongo") que reemplazó al orbe en la conversación —el orbe oscuro no hacía juego con el
+  papel—. Como el asterisco de Claude, la marca ES el indicador de estado: respira (idle), crece con
+  la voz (listening), gira (thinking), late (speaking); quieta en las burbujas viejas. El `Orb` sigue
+  vivo solo en el wizard (`?full=1`).
+- **Saludo a la manera de Claude**: la pantalla vacía es la marca + "Buenas tardes, Agus" en serif
+  grande (por la hora del teléfono) + una línea. El nombre (`miru:name`, `lib/prefs.ts`) se pregunta
+  una vez, discreto ("¿Cómo te llamo?" / "Ahora no"), y viaja al motor como `userName` (lo nombra como
+  mucho una vez por respuesta). **Repregunta solo si amerita**: por defecto el motor va directo al
+  resultado; un pedido corto con UNA señal ("algo de acción") no se repregunta.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada
   descarte **con lo que dijiste como motivo** (pedir otra cosa con una peli en pantalla que no abriste
