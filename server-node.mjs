@@ -12,6 +12,7 @@ import { transcribeAudio } from "./transcribe.mjs";
 import { ttsStream } from "./tts.mjs";
 import { startSupabaseKeepAlive } from "./keepalive.mjs";
 import { availabilityStatus } from "./availability.mjs";
+import { warmFresh } from "./fresh.mjs";
 import { rateLimited, startRateSweeper } from "./ratelimit.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -488,5 +489,7 @@ http
   .listen(port, () => {
     console.log(`Server listening on port ${port}`);
     warmHome(); // pre-carga el home en caché para que el primer usuario no espere
+    warmFresh(); // y los recién llegados (JustWatch) del país por defecto
+    setInterval(() => warmFresh(), 6 * 60 * 60 * 1000).unref();
     startSupabaseKeepAlive(); // que el free tier no pause el proyecto (pairing)
   });

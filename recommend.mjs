@@ -1,5 +1,6 @@
 import { fetchUpstream } from "./upstream.mjs";
 import { validateItems, pickAvailable, detectPlatformMentions } from "./availability.mjs";
+import { freshArrivals, freshBlock, matchFresh, norm } from "./fresh.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs.
@@ -225,7 +226,8 @@ Reglas:
 - ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
-- Priorizá títulos con presencia estable en la plataforma; evitá estrenos de los últimos 6 meses salvo certeza.
+- RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y lo más probable es que NO los haya visto, aunque la película tenga años (llegaron hace poco al país). Si uno o más encajan DE VERDAD con el pedido y el perfil, van PRIMEROS en el ranking (hasta 3 de los 6). Nunca fuerces uno que no encaje: el pedido manda.
+- LO OBVIO: asumí que lo más famoso del género (los clásicos de manual, los tanques que vio todo el mundo, lo que está en el catálogo hace años) esta persona probablemente ya lo vio. Preferí lo menos obvio que encaje; algo archiconocido solo si lo pide, si el modo es "Un clásico", o como último recurso.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
 - RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
 
@@ -292,7 +294,8 @@ function formatRejected(rejected) {
   return `Descartes en esta charla (más viejo primero):\n${items.join("\n")}${tail}`;
 }
 
-async function proposeCandidates({ messages, contextLines, wantType = null }) {
+async function proposeCandidates({ messages, contextLines, wantType = null, exclude = [] }) {
+  const excluded = new Set(exclude.map(norm));
   const attempt = async () => {
     const parsed = await callJson({
       system: SYSTEM_PROPOSE,
@@ -307,6 +310,9 @@ async function proposeCandidates({ messages, contextLines, wantType = null }) {
     // Si pidió un tipo, solo ese tipo. Si el modelo no trajo NINGUNO del tipo,
     // la lista queda vacía y se reintenta (mejor que entregar el tipo equivocado).
     if (wantType) candidates = candidates.filter((c) => c.type === wantType);
+    // La lista de "no proponer" viaja en el prompt, pero el modelo a veces la
+    // ignora: acá es la garantía de que no vuelve lo ya propuesto o visto.
+    if (excluded.size) candidates = candidates.filter((c) => !excluded.has(norm(c.title)));
     const txt = (v, n) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
     return {
       candidates,
@@ -349,10 +355,20 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const wantType = requestedType(lastUser && lastUser.content) || (modeDef ? modeDef.type : null);
   const typeLine = wantType ? `Tipo pedido: SOLO ${wantType === "Película" ? "películas" : "series"}.` : null;
   const modeLine = modeDef ? `Modo elegido por la persona: "${modeDef.label}". ${modeDef.rule}` : null;
+  // Lo que llegó hace poco a sus plataformas (JustWatch). Nunca espera: si la
+  // lista todavía no cargó o JustWatch se cayó, va vacía y todo sigue igual.
+  const fresh = freshArrivals({
+    country,
+    platforms: validationPlatforms,
+    type: wantType,
+    exclude,
+    query: (lastUser && lastUser.content) || "",
+  });
+  const freshLine = freshBlock(fresh, country);
 
   // 1) Proponer. Si NINGÚN candidato está en el país, un solo reintento con
   //    esos títulos excluidos; después, degradar suave (como siempre).
-  let proposed = await proposeCandidates({ messages, wantType, contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
+  let proposed = await proposeCandidates({ messages, wantType, exclude, contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, freshLine, excludeLine(exclude, true)] });
   // Solo quería que Miru recordara algo: se confirma y no se recomienda nada.
   if (proposed.onlyRemember) {
     console.log(`[metrics-single] ${JSON.stringify({ only_remember: true, propose_ms: Date.now() - t0 })}`);
@@ -375,7 +391,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     const again = await proposeCandidates({
       messages,
       wantType,
-      contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
+      exclude: [...exclude, ...candidates.map((c) => c.title)],
+      contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, freshLine, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
     });
     if (again.candidates.length) {
       candidates = again.candidates;
@@ -391,6 +408,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const avail = winner._avail || "unknown";
   const pickedRank = candidates.indexOf(winner) + 1;
   for (const c of candidates) delete c._avail;
+  const freshHit = matchFresh(fresh, winner.title);
+  const freshCandidates = candidates.filter((c) => matchFresh(fresh, c.title)).length;
 
   // 2) La carta, con la película ya confirmada. Sigue la conversación (el
   //    modelo ve el hilo) y recibe el perfil y los descartes para poder citar
@@ -400,7 +419,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     ...injectContext(messages, [...baseContext, profileBlock, rejectedBlock]),
     {
       role: "user",
-      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}. Escribí la carta.`,
+      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}.${freshHit ? ` Dato: llegó a ${freshHit.platform} hace ${freshHit.days} días en su país (es nueva en su catálogo aunque sea de ${freshHit.year || "antes"}); si suma, decilo en una frase ("recién llegó a ${freshHit.platform}"), es parte de por qué probablemente no la vio.` : ""} Escribí la carta.`,
     },
   ];
   // El hilo tiene que terminar en un turno de usuario y alternar roles: si el
@@ -413,7 +432,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
   }
   const tPitch = Date.now();
-  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, fresh_pool: fresh.length, fresh_candidates: freshCandidates, winner_fresh: !!freshHit, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
 
   const main = {
     title: winner.title,
@@ -426,6 +445,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     reason: String((pitch && pitch.reason) || winner.line || ""),
     posterUrl: winner.posterUrl || undefined,
     backdropUrl: winner.backdropUrl || undefined,
+    // Llegó hace poco a la plataforma en su país (para una etiqueta discreta en la ficha).
+    fresh: freshHit ? { platform: freshHit.platform, days: freshHit.days } : undefined,
   };
   return {
     filters: {},
