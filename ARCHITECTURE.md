@@ -78,7 +78,16 @@ confirmado, viendo el hilo entero, el `tasteProfile` y los `rejected` de la char
 UNA señal de la persona cuando influyó. Si la carta falla, sale la película con la línea del paso 1.
 `alternatives` vuelve `[]`, `filters` `{}`. Entradas nuevas (saneadas en `server-node.mjs`): `tasteProfile`
 (≤1500 chars, ya formateado por `lib/taste.ts`) y `rejected` (≤8, `{title, reason|null}`). Cada turno loguea
-`[metrics-single] {propose_ms, tmdb_ms, pitch_ms, retried, picked_rank, avail, profile, rejected}`.
+`[metrics-single] {propose_ms, tmdb_ms, pitch_ms, retried, picked_rank, avail, profile, rejected, fresh_pool,
+fresh_candidates, winner_fresh}`. **Recién llegados** (`fresh.mjs`): antes del paso 1 se suma el bloque
+"Recién llegados a sus plataformas" (hasta 50 títulos que entraron en los últimos 90 días a las plataformas
+del pedido en su país, filtrados por tipo y por los géneros que nombra el pedido, ordenados por IMDb menos
+una penalización por fama según votos) y `SYSTEM_PROPOSE` mete 1-2 entre los 6 si encajan (por encaje, no
+por ser nuevos), junto a ≥2 menos obvios; más dosis si el perfil tiene varios "ya la había visto".
+`pickWinner` tiene una **sorpresa** (`SURPRISE_RATE` 0.33): si el primero disponible no es recién llegado
+y hay uno confirmado en el top 4, gana ese. `excludeTitles` se aplica también en código sobre los
+candidatos (antes solo iba en el prompt). La carta NO menciona que es nuevo (regla en `SYSTEM_PITCH`);
+`main.fresh = {platform, days}` es solo para métricas (log: `winner_fresh`, `surprise`).
 Costo por turno ≈ 1.3k tokens de entrada / 450 de salida en dos llamadas. `alternativesCount >= 1` no cambió.
 
 **Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20
@@ -108,6 +117,12 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   `ELEVENLABS_API_KEY` (+ `ELEVENLABS_VOICE_ID` opcional). Si falla/sin créditos, los clientes caen a la
   voz nativa del dispositivo (`speechSynthesis`).
 - **Groq Whisper** STT (`transcribe.mjs`): `whisper-large-v3`, idioma `es`, `GROQ_API_KEY`.
+- **JustWatch "Nuevo"** (`fresh.mjs`, sin key; `JUSTWATCH_GRAPHQL_URL` opcional para pruebas): query
+  `newTitles` de la GraphQL pública NO oficial, por día y país (100 por página, hasta 8 páginas). El filtro
+  de paquetes de la query no funciona: se filtra del lado nuestro por `package.technicalName` → 7
+  plataformas (`amazonuniversalplus`/`amazonparamountplus` cuentan como Universal+/Paramount+). Caché por
+  día en memoria (días viejos 7 d, recientes 6 h), snapshot por país cada 12 h, precarga al arrancar y
+  cada 6 h para `DEFAULT_REGION` (~10-15 s, ~150 requests). Se pierde en cada redeploy.
 - **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
   home de TV vía `discoverPopular(country)` — 7 plataformas × movie/tv × popular/recent = 28 requests
   paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR

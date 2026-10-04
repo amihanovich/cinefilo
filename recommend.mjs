@@ -226,8 +226,9 @@ Reglas:
 - ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
-- RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y lo más probable es que NO los haya visto, aunque la película tenga años (llegaron hace poco al país). Si uno o más encajan DE VERDAD con el pedido y el perfil, van PRIMEROS en el ranking (hasta 3 de los 6). Nunca fuerces uno que no encaje: el pedido manda.
-- LO OBVIO: asumí que lo más famoso del género (los clásicos de manual, los tanques que vio todo el mundo, lo que está en el catálogo hace años) esta persona probablemente ya lo vio. Preferí lo menos obvio que encaje; algo archiconocido solo si lo pide, si el modo es "Un clásico", o como último recurso.
+- BALANCE ENTRE LO CONOCIDO Y LO INESPERADO: no todos vieron todo, así que un título conocido que encaja perfecto sigue siendo una gran respuesta. Pero Miru vale por lo que la persona NO encontraría sola en la portada de su plataforma: mezclá. Entre los 6, poné al menos 2 que no sean lo primero que sale al buscar ese género (lo menos obvio, otra época u otro país).
+- RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y probablemente no los vio, aunque tengan años (llegaron hace poco al país). Si alguno encaja DE VERDAD con el pedido, incluí 1 o 2 entre los 6, en el lugar que les dé su encaje (no los subas por ser nuevos). Nunca fuerces uno que no encaje.
+- SI YA VIO MUCHO: si el perfil muestra 2 o más "ya la había visto", esta persona ve mucho y lo obvio le rebota: subí la dosis de lo inesperado y de los recién llegados en los primeros puestos.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
 - RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
 
@@ -246,6 +247,8 @@ Devolvé JSON válido y nada más:
 - LA CARTA: si el "Perfil de gusto" o un descarte de esta charla influyeron en la elección, NOMBRÁ UNA sola señal concreta de esa persona, como quien se acuerda ("como la última vez te fuiste con X…", "como dijiste que la anterior era muy larga…", "como te tira el cine de los 70…"). Una, y VERDADERA: nunca inventes lo que no está en el contexto, y nunca más de una — una es "cómo supo", tres es incómodo. Si nada influyó, no fuerces nada.
 - Usá las señales por lo que SON: si abrió un título, "como fuiste a ver X" / "como te llevaste X" está perfecto; si le puso 👍, "como te gustó X" / "como te cerró X" está perfecto; si dijo que la vio y le gustó, decilo. Lo único prohibido es inventar lo que no pasó: "la terminaste", "acabás de verla", "te encantó" cuando solo la abrió. Un hecho bien citado suma; una suposición equivocada rompe la confianza en un segundo.
 - "cinephile_note": 2 a 3 oraciones (45 a 65 palabras) para ser HABLADAS en voz alta: arrancá con el contexto del pedido ("Para esta noche de finde…"), presentá el título con una frase que enganche y deje claro por qué responde al pedido, y cerrá invitando a verla o a pedirte otra si no le cierra. Sin emojis ni listas.
+- No menciones cómo la elegiste por dentro: nada de "recién llegó", "es nueva en la plataforma", "seguro no la viste", catálogos ni listas. El porqué es la película y la persona.
+- DATOS DE CINÉFILO: solo los que sabés con certeza (director, año, elenco). Si dudás de quién la dirigió, no lo nombres; un dato inventado rompe la confianza.
 - "duration": ej. "1h 52m" o "8 capítulos de 45m". "ageRating": "ATP", "PG", "+13", "+16" o "+18" (el más conservador si dudás).`;
 
 const CANDIDATES = 6;
@@ -336,8 +339,16 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
 
 // El primero disponible según el ranking del modelo; "unknown" (TMDB no lo
 // resolvió) va después de los confirmados y antes que nada — nunca peor que hoy.
-function pickWinner(candidates) {
+// Sorpresa: si el primero disponible no es recién llegado pero hay uno que sí
+// (confirmado y entre los 4 mejores), a veces gana ese. Así aparece algo que
+// la persona no se iba a cruzar sola, sin que lo nuevo sea la regla.
+const SURPRISE_RATE = 0.33;
+function pickWinner(candidates, isFresh = () => false) {
   const ok = candidates.find((c) => c._avail === "confirmed" || c._avail === "corrected");
+  if (ok && !isFresh(ok) && Math.random() < SURPRISE_RATE) {
+    const surprise = candidates.slice(0, 4).find((c) => c !== ok && isFresh(c) && (c._avail === "confirmed" || c._avail === "corrected"));
+    if (surprise) { surprise._surprise = true; return surprise; }
+  }
   if (ok) return ok;
   return candidates.find((c) => c._avail === "unknown" || c._avail === undefined) || null;
 }
@@ -381,7 +392,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   let candidates = proposed.candidates;
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
-  let winner = pickWinner(candidates);
+  const isFresh = (c) => !!matchFresh(fresh, c.title);
+  let winner = pickWinner(candidates, isFresh);
   let retried = false;
   // Presupuesto: el reintento por "ninguno disponible" suma otra elección +
   // otra validación. Si ya pasaron 20 s, mejor degradar suave que dejar al
@@ -399,7 +411,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
       if (!proposed.clarification && again.clarification) proposed = { ...proposed, clarification: again.clarification };
       if (!proposed.remember && again.remember) proposed = { ...proposed, remember: again.remember };
       await validateItems(candidates, validationPlatforms, country);
-      winner = pickWinner(candidates);
+      winner = pickWinner(candidates, isFresh);
     }
   }
   if (!winner) winner = candidates[0] || null;
@@ -407,7 +419,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const tTmdb = Date.now();
   const avail = winner._avail || "unknown";
   const pickedRank = candidates.indexOf(winner) + 1;
-  for (const c of candidates) delete c._avail;
+  const surprise = !!winner._surprise;
+  for (const c of candidates) { delete c._avail; delete c._surprise; }
   const freshHit = matchFresh(fresh, winner.title);
   const freshCandidates = candidates.filter((c) => matchFresh(fresh, c.title)).length;
 
@@ -419,7 +432,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     ...injectContext(messages, [...baseContext, profileBlock, rejectedBlock]),
     {
       role: "user",
-      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}.${freshHit ? ` Dato: llegó a ${freshHit.platform} hace ${freshHit.days} días en su país (es nueva en su catálogo aunque sea de ${freshHit.year || "antes"}); si suma, decilo en una frase ("recién llegó a ${freshHit.platform}"), es parte de por qué probablemente no la vio.` : ""} Escribí la carta.`,
+      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}. Escribí la carta.`,
     },
   ];
   // El hilo tiene que terminar en un turno de usuario y alternar roles: si el
@@ -432,7 +445,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
   }
   const tPitch = Date.now();
-  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, fresh_pool: fresh.length, fresh_candidates: freshCandidates, winner_fresh: !!freshHit, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, fresh_pool: fresh.length, fresh_candidates: freshCandidates, winner_fresh: !!freshHit, surprise, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
 
   const main = {
     title: winner.title,
@@ -445,7 +458,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     reason: String((pitch && pitch.reason) || winner.line || ""),
     posterUrl: winner.posterUrl || undefined,
     backdropUrl: winner.backdropUrl || undefined,
-    // Llegó hace poco a la plataforma en su país (para una etiqueta discreta en la ficha).
+    // Llegó hace poco a la plataforma en su país. Dato interno (métricas): la
+    // ficha y la carta NO lo cuentan, es criterio de Miru y no un anuncio.
     fresh: freshHit ? { platform: freshHit.platform, days: freshHit.days } : undefined,
   };
   return {

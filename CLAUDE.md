@@ -97,7 +97,9 @@ no se borró nada.
 - Descarte: el chip **"Dame otra"**; el resto se resuelve conversando (el historial viaja en `messages`).
 - **La memoria del videoclub** (`lib/taste.ts`, `miru:taste`, sin DB): cada pedido, cada apertura, cada
   descarte **con lo que dijiste como motivo** (pedir otra cosa con una peli en pantalla que no abriste
-  ES un descarte), la manito 👍/👎 de la ficha (reacción a la propuesta) y el **"¿Qué tal estuvo X?"**
+  ES un descarte), la manito 👍/👎 de la ficha (reacción a la propuesta), **"Ya la vi"** (marca aparte que
+  convive con la manito, etapa `seen`: saca el título de las propuestas sin vencimiento, salvo el toggle
+  **"Incluir ya vistas"** del +, `miru:include-seen`) y el **"¿Qué tal estuvo X?"**
   al volver (veredicto después de verla, la señal más fuerte; una sola vez por título). Cada ~3 señales,
   `/api/profile` (`profile.mjs`) las sintetiza en un perfil de 50-90 palabras + tags + patrones, en
   segundo plano. Ese perfil viaja con cada pedido (`tasteProfile`) y el motor lo usa para elegir y para
@@ -105,6 +107,15 @@ no se borró nada.
 - **Motor en dos pasos** (`recommendSingle` en `recommend.mjs`): Haiku **propone 6 candidatos**
   rankeados (barato), **TMDB decide** cuál está en el país, y recién ahí Haiku **escribe la carta** para
   ese título. Nunca más "Ver en Netflix" de algo que no está. Ver "Notas de desarrollo".
+- **Balance conocido / inesperado + recién llegados** (`fresh.mjs`, decisión 2026-10): no todos vieron
+  todo (un conocido que encaja sigue valiendo), pero Miru vale por lo que la persona no encontraría sola
+  en la portada de su plataforma. `fresh.mjs` lee el feed "Nuevo" de **JustWatch** (GraphQL no oficial;
+  TMDB no sabe cuándo entró un título): lo que **acaba de llegar** a sus plataformas en su país, aunque la
+  peli tenga años, 90 días, filtrado por plataformas/tipo/géneros del pedido. El paso 1 lo recibe y mete
+  **1-2 entre los 6 si encajan**, en el lugar que les dé el encaje, más ≥2 menos obvios; si el perfil
+  muestra varios "ya la había visto", sube la dosis de lo inesperado. En código, **sorpresa ~1/3**: si
+  hay un recién llegado confirmado en el top 4, a veces gana ese. Es **criterio interno**: la carta y la
+  ficha NO lo mencionan (`main.fresh` solo para métricas). Si JustWatch falla, todo sigue igual.
 - **Mi cuenta** (`components/ProfileSheet.tsx`; el viejo `AccountSheet` queda solo para `?full=1`):
   quién sos (Entrar / Cerrar sesión) · **"Lo que Miru sabe de vos"** = la memoria visible y editable,
   como la de Claude: el resumen del perfil, tags "Te gusta"/"Evitás" que se sacan con una X
