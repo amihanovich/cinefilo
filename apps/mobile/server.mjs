@@ -17,7 +17,22 @@ const port = parseInt(process.env.PORT || "3000", 10);
 // pública: la web (www.mirumovies.com) es lo único expuesto. Para eso el build
 // de la web va con VITE_API_BASE_URL=https://www.mirumovies.com (mismo origen).
 // Sin API_UPSTREAM no se reenvía nada (como antes).
-const API_UPSTREAM = process.env.API_UPSTREAM ? new URL(process.env.API_UPSTREAM) : null;
+// Tolerante: sin "http://" se lo agrega, y un valor inválido NO tumba la web
+// (se loguea y la web sigue sirviendo, sin reenvío).
+function parseUpstream(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return null;
+  try {
+    const u = new URL(/^https?:\/\//i.test(v) ? v : `http://${v}`);
+    if (u.protocol !== "http:") throw new Error("usar http:// (la red privada no tiene TLS)");
+    return u;
+  } catch (e) {
+    console.error(`[api-proxy] API_UPSTREAM inválido ("${v}"): ${e.message}`);
+    return null;
+  }
+}
+const API_UPSTREAM = parseUpstream(process.env.API_UPSTREAM);
+if (API_UPSTREAM) console.log(`[api-proxy] /api/* → ${API_UPSTREAM.origin}`);
 
 function proxyApi(req, res) {
   const headers = { ...req.headers, host: API_UPSTREAM.host };
