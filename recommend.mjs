@@ -310,10 +310,10 @@ function formatRejected(rejected) {
 
 async function proposeCandidates({ messages, contextLines, wantType = null, exclude = [] }) {
   const excluded = new Set(exclude.map(norm));
-  const attempt = async () => {
+  const attempt = async (extra = null) => {
     const parsed = await callJson({
       system: SYSTEM_PROPOSE,
-      messages: injectContext(messages, contextLines),
+      messages: injectContext(messages, extra ? [...contextLines, extra] : contextLines),
       maxTokens: 700,
       timeoutMs: 25000,
     });
@@ -342,6 +342,10 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
   };
   // Un hipo del modelo (JSON roto, lista vacía, 5xx que el retry de red no
   // salvó) no tira el turno: una segunda oportunidad y recién ahí se rinde.
+  // Si vino sin candidatos (p. ej. el modelo creyó que solo había que
+  // recordar algo, al ver las notas del perfil), el reintento le aclara que
+  // la persona quiere algo para ver.
+  const NUDGE = "IMPORTANTE: la persona está pidiendo algo para ver y NO pidió que recuerdes nada: proponé los 6 candidatos (only_remember: false).";
   try {
     const first = await attempt();
     if (first.candidates.length || first.onlyRemember) return first;
@@ -349,7 +353,7 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
   } catch (e) {
     console.warn("[recommend] el paso 1 falló, reintento:", e.message);
   }
-  return attempt();
+  return attempt(NUDGE);
 }
 
 // El primero disponible según el ranking del modelo; "unknown" (TMDB no lo
