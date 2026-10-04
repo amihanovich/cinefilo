@@ -201,7 +201,7 @@ function genresIn(text) {
  * Con `query` (el pedido), si nombra géneros se queda con esos; el orden
  * castiga lo archiconocido (lo que todos vieron) para que no tape lo demás.
  */
-export function freshArrivals({ country, platforms = null, type = null, exclude = [], query = "", limit = 50 } = {}) {
+export function freshArrivals({ country, platforms = null, type = null, exclude = [], query = "", profile = "", limit = 50 } = {}) {
   const c = String(country || DEFAULT_REGION).toUpperCase();
   void warmFresh(c);
   const snap = snapshots.get(c);
@@ -231,9 +231,10 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
     const byGenre = base.filter((it) => it.genres.some((g) => accept.has(g)));
     if (byGenre.length >= 5) pool = byGenre;
   }
-  // El catálogo indio regional de Prime/Netflix trae puntajes inflados y rara
-  // vez es "el peliculón" para alguien de acá: afuera, salvo que lo pida.
-  if (!/\b(india|indi[ao]s?|bollywood|hindi|tamil|telugu)\b/i.test(String(query || ""))) {
+  // El catálogo indio regional de Prime/Netflix llena la lista con puntajes
+  // inflados y tapa lo demás. Queda afuera SALVO que el pedido o el perfil de
+  // la persona muestren interés: es por usuario, no un gusto de Miru.
+  if (!/\b(india|indi[ao]s?|bollywood|hindi|tamil|telugu)\b/i.test(`${query || ""} ${profile || ""}`)) {
     pool = pool.filter((it) => !(it.countries.length && it.countries.every((c) => c === "IN")));
   }
   const fame = (v) => (v === null ? 0 : v > 800000 ? 1.2 : v > 300000 ? 0.6 : v > 120000 ? 0.25 : 0);

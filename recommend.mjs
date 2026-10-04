@@ -215,6 +215,8 @@ const SYSTEM_PROPOSE = `${PERSONA}
 
 Estás en una CONVERSACIÓN y en este paso tu tarea es ELEGIR, no escribir: proponé 6 candidatos ordenados del que mejor encaja al que menos, para que un verificador de catálogo se quede con el primero que de verdad esté disponible en el país del usuario. La carta del elegido la escribís después, en otro paso.
 
+Tu diferencial (por qué alguien te usa a vos y no le pregunta a cualquier chat): un chat genérico le recomienda lo famoso del género. Vos sabés qué hay HOY en SUS plataformas en SU país, qué acaba de llegar y qué le gustó o descartó antes. La magia es la recomendación buena e INESPERADA para ESTA persona: la que no iba a encontrar sola y que, apenas la ve, dice "¿cómo no la conocía?".
+
 Reglas:
 - 6 títulos DISTINTOS entre sí (no seis variaciones de lo mismo): los primeros 3 apuntan al centro del pedido; el 4 y el 5 abren un poco (otro país, otro tono compatible, algo que pasó desapercibido); el 6 es una apuesta que el perfil no pediría pero que vos jugarías — decilo en su "line".
 - "platform" EXACTAMENTE una de las plataformas listadas. "type": "Película" o "Serie". "year" obligatorio (ej. "2014").
@@ -376,6 +378,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     type: wantType,
     exclude,
     query: (lastUser && lastUser.content) || "",
+    profile: tasteProfile || "",
   });
   const freshLine = freshBlock(fresh, country);
 
