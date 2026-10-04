@@ -54,10 +54,10 @@ const QUERY = `query MiruNew($country: Country!, $date: Date!, $language: Langua
       newOffer(platform: WEB) { monetizationType package { technicalName clearName } }
       node {
         __typename
-        ... on Movie { content(country: $country, language: $language) { title originalTitle originalReleaseYear genres { shortName } scoring { imdbScore imdbVotes } } }
+        ... on Movie { content(country: $country, language: $language) { title originalTitle originalReleaseYear productionCountries genres { shortName } scoring { imdbScore imdbVotes tmdbPopularity } } }
         ... on Season {
           content(country: $country, language: $language) { seasonNumber }
-          show { content(country: $country, language: $language) { title originalTitle originalReleaseYear genres { shortName } scoring { imdbScore imdbVotes } } }
+          show { content(country: $country, language: $language) { title originalTitle originalReleaseYear productionCountries genres { shortName } scoring { imdbScore imdbVotes tmdbPopularity } } }
         }
       }
     }
@@ -107,6 +107,8 @@ async function fetchDay(country, date) {
         genres: (c.genres || []).map((g) => GENRES[g.shortName]).filter(Boolean),
         imdb: c.scoring && typeof c.scoring.imdbScore === "number" ? c.scoring.imdbScore : null,
         votes: c.scoring && typeof c.scoring.imdbVotes === "number" ? c.scoring.imdbVotes : null,
+        popularity: c.scoring && typeof c.scoring.tmdbPopularity === "number" ? c.scoring.tmdbPopularity : null,
+        countries: Array.isArray(c.productionCountries) ? c.productionCountries : [],
       });
     }
     if (!block.pageInfo || !block.pageInfo.hasNextPage) break;
@@ -229,14 +231,28 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
     const byGenre = base.filter((it) => it.genres.some((g) => accept.has(g)));
     if (byGenre.length >= 5) pool = byGenre;
   }
+  // El catálogo indio regional de Prime/Netflix trae puntajes inflados y rara
+  // vez es "el peliculón" para alguien de acá: afuera, salvo que lo pida.
+  if (!/\b(india|indi[ao]s?|bollywood|hindi|tamil|telugu)\b/i.test(String(query || ""))) {
+    pool = pool.filter((it) => !(it.countries.length && it.countries.every((c) => c === "IN")));
+  }
   const fame = (v) => (v === null ? 0 : v > 800000 ? 1.2 : v > 300000 ? 0.6 : v > 120000 ? 0.25 : 0);
-  const score = (it) => it.imdb - fame(it.votes) + (it.days <= 30 ? 0.3 : 0);
+  // La sorpresa de verdad: producción de los últimos años, que tuvo repercusión
+  // afuera y recién ahora llega acá.
+  const buzz = (it) => (it.votes ? Math.min(0.9, Math.log10(Math.max(1, it.votes)) * 0.18) : 0);
+  const score = (it) => it.imdb - fame(it.votes) + buzz(it) + (isRecent(it) ? 1.2 : 0) + (it.days <= 30 ? 0.2 : 0);
   // Un título que llegó a dos plataformas va una sola vez (la más reciente).
   const once = new Set();
   return pool
     .sort((a, b) => score(b) - score(a))
     .filter((it) => { const k = norm(it.title); if (once.has(k)) return false; once.add(k); return true; })
     .slice(0, limit);
+}
+
+/** Producida en los últimos años (la sorpresa que Miru busca). */
+export const RECENT_YEARS = 4;
+export function isRecent(it) {
+  return !!it && !!it.year && Number(it.year) >= new Date().getFullYear() - RECENT_YEARS;
 }
 
 /** Busca un candidato del modelo en la lista (por título en español u original). */
@@ -250,6 +266,6 @@ export function matchFresh(list, title) {
 export function freshBlock(list, country) {
   if (!list.length) return null;
   const lines = list.map((it) =>
-    `- ${it.title}${it.originalTitle && norm(it.originalTitle) !== norm(it.title) ? ` / ${it.originalTitle}` : ""} (${it.year || "s/f"}, ${it.type}${it.season && it.season > 1 ? `, temporada ${it.season} nueva` : ""}) · ${it.platform} · ${it.genres.slice(0, 3).join(", ") || "-"} · IMDb ${it.imdb} · llegó hace ${it.days} días`);
+    `- ${it.title}${it.originalTitle && norm(it.originalTitle) !== norm(it.title) ? ` / ${it.originalTitle}` : ""} (${it.year || "s/f"}, ${it.type}${it.season && it.season > 1 ? `, temporada ${it.season} nueva` : ""}) · ${it.platform} · ${it.genres.slice(0, 3).join(", ") || "-"} · IMDb ${it.imdb} · llegó hace ${it.days} días${isRecent(it) ? " · PRODUCCIÓN RECIENTE" : ""}`);
   return `Recién llegados a sus plataformas en ${country || DEFAULT_REGION} (últimos ${WINDOW_DAYS} días; confirmados en su catálogo, aunque la película tenga años):\n${lines.join("\n")}`;
 }

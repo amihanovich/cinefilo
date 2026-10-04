@@ -1,6 +1,6 @@
 import { fetchUpstream } from "./upstream.mjs";
 import { validateItems, pickAvailable, detectPlatformMentions, titleCredits } from "./availability.mjs";
-import { freshArrivals, freshBlock, matchFresh, norm } from "./fresh.mjs";
+import { freshArrivals, freshBlock, matchFresh, norm, isRecent } from "./fresh.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
 // Módulo Node autónomo: NO depende del bundle de la app. Lo usa server-node.mjs.
@@ -227,9 +227,9 @@ Reglas:
 - ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
-- ÉPOCA: por defecto, la mayoría de los 6 son de los últimos 15 años y como máximo UNO anterior al 2000. Algo más viejo solo si lo pide (un clásico, una década, "de los 80", un director de esa época) o si el modo es "Un clásico". "Lo inesperado" se busca en otro país, otro tono o algo que pasó desapercibido, NO yéndose décadas atrás.
+- ÉPOCA: por defecto, la mayoría de los 6 son de los últimos 10 años y como máximo UNO anterior al 2000. Algo más viejo solo si lo pide (un clásico, una década, "de los 80", un director de esa época) o si el modo es "Un clásico". "Lo inesperado" se busca en otro país, otro tono o algo que pasó desapercibido, NO yéndose décadas atrás.
 - BALANCE ENTRE LO CONOCIDO Y LO INESPERADO: no todos vieron todo, así que un título conocido que encaja perfecto sigue siendo una buena respuesta. Pero Miru vale por lo que la persona NO encontraría sola en la portada de su plataforma. Entre los 3 PRIMEROS, como máximo UNO archiconocido (de los que están en cualquier top histórico o fueron tanque de taquilla: Cadena perpetua, Interstellar, El padrino, Titanic y compañía); los otros dos, títulos que encajen igual de bien y que la mayoría no tenga vistos. No pongas siempre el archiconocido primero: alternalo según cuál encaje mejor.
-- RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y probablemente no los vio, aunque tengan años (llegaron hace poco al país). Si alguno encaja DE VERDAD con el pedido, incluí 1 o 2 entre los 6, en el lugar que les dé su encaje (no los subas por ser nuevos). Nunca fuerces uno que no encaje.
+- RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y probablemente no los vio. La MEJOR sorpresa de Miru son los marcados "PRODUCCIÓN RECIENTE": películas o series de los últimos años que salieron afuera, nunca estuvieron en su radar y recién ahora llegan a su plataforma ("¡qué peliculón y no la conocía!"). Si una de esas encaja DE VERDAD con el pedido y con su estilo, ponela entre los 2 PRIMEROS. Incluí 1 o 2 recién llegados entre los 6 cuando encajen; nunca fuerces uno que no encaje.
 - SI YA VIO MUCHO: si el perfil muestra 2 o más "ya la había visto", esta persona ve mucho y lo obvio le rebota: subí la dosis de lo inesperado y de los recién llegados en los primeros puestos.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
 - RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
@@ -344,7 +344,7 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
 // Sorpresa: si el primero disponible no es recién llegado pero hay uno que sí
 // (confirmado y entre los 4 mejores), a veces gana ese. Así aparece algo que
 // la persona no se iba a cruzar sola, sin que lo nuevo sea la regla.
-const SURPRISE_RATE = 0.33;
+const SURPRISE_RATE = 0.4;
 function pickWinner(candidates, isFresh = () => false) {
   const ok = candidates.find((c) => c._avail === "confirmed" || c._avail === "corrected");
   if (ok && !isFresh(ok) && Math.random() < SURPRISE_RATE) {
@@ -394,7 +394,8 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   let candidates = proposed.candidates;
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
-  const isFresh = (c) => !!matchFresh(fresh, c.title);
+  // Para la sorpresa cuenta lo recién llegado Y producido en los últimos años.
+  const isFresh = (c) => isRecent(matchFresh(fresh, c.title));
   let winner = pickWinner(candidates, isFresh);
   let retried = false;
   // Presupuesto: el reintento por "ninguno disponible" suma otra elección +

@@ -107,7 +107,8 @@ no se borró nada.
 - **Motor en dos pasos** (`recommendSingle` en `recommend.mjs`): Haiku **propone 6 candidatos**
   rankeados (barato), **TMDB decide** cuál está en el país, y recién ahí Haiku **escribe la carta** para
   ese título. Nunca más "Ver en Netflix" de algo que no está. Ver "Notas de desarrollo".
-- **Época**: por defecto la mayoría de los candidatos son de los últimos 15 años y como máximo uno anterior al 2000, salvo que pida algo viejo; los recién llegados de más de 20 años no entran salvo ese pedido. Lo inesperado se busca en otro país u otro tono, no décadas atrás.
+- **La sorpresa que buscamos** (decisión 2026-10): una producción de los **últimos ~4 años** que salió afuera, nunca estuvo en tu radar y **recién ahora llega a tu plataforma** en tu país. En `fresh.mjs` van marcadas "PRODUCCIÓN RECIENTE" y suben en el orden (más repercusión afuera = más arriba; lo solo indio queda afuera salvo pedido); el paso 1 pone una entre los 2 primeros si encaja, y la sorpresa de `pickWinner` (0.4) solo promueve esas.
+- **Época**: por defecto la mayoría de los candidatos son de los últimos 10 años y como máximo uno anterior al 2000, salvo que pida algo viejo; los recién llegados de más de 20 años no entran salvo ese pedido. Lo inesperado se busca en otro país u otro tono, no décadas atrás.
 - **Balance conocido / inesperado + recién llegados** (`fresh.mjs`, decisión 2026-10): no todos vieron
   todo (un conocido que encaja sigue valiendo), pero Miru vale por lo que la persona no encontraría sola
   en la portada de su plataforma. `fresh.mjs` lee el feed "Nuevo" de **JustWatch** (GraphQL no oficial;
