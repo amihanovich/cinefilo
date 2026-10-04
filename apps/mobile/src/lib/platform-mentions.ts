@@ -8,7 +8,7 @@
 // copia ES5 de public/tv-lite.html.
 
 const ANY_PLATFORM_NAME =
-  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+  "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?|universal\\s*(?:\\+|plus))";
 const PREP = "(?:en|de|para)";
 const PLATFORM_LIST_RE = new RegExp(
   `\\b${PREP}\\s+${ANY_PLATFORM_NAME}(?:\\s*(?:,|y|o|u)\\s*(?:${PREP}\\s+)?${ANY_PLATFORM_NAME})*`,
@@ -22,6 +22,9 @@ const PLATFORM_NAME_RULES: { canonical: string; re: RegExp }[] = [
   { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
   { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
   { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
+  // El "+"/"plus" es obligatorio: "una peli de Universal" (el estudio) no debe
+  // filtrar a la plataforma.
+  { canonical: "Universal+", re: /\buniversal\s*(?:\+|plus)/i },
 ];
 
 /**

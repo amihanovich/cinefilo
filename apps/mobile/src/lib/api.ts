@@ -4,6 +4,19 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "https://miru-ai.up.railwa
 
 export type Message = { role: "user" | "assistant"; content: string };
 
+/** Error HTTP del backend, con el status: la app distingue "se trabó el
+ *  servicio" (5xx) de "sin red" (TypeError) y de "tardó demasiado" (TimeoutError). */
+export class HttpError extends Error {
+  status: number;
+  detail: string;
+  constructor(message: string, status: number, detail: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 export type Recommendation = {
   title: string;
   platform: string;
@@ -17,6 +30,9 @@ export type Recommendation = {
   hook?: string;
   /** El porqué de la recomendación (12-18 palabras). */
   reason: string;
+  /** Póster de TMDB: el backend lo resuelve al validar disponibilidad (modo conversación). */
+  posterUrl?: string;
+  backdropUrl?: string;
 };
 
 export type RecoResponse = {
@@ -25,6 +41,8 @@ export type RecoResponse = {
   alternatives: Recommendation[];
   clarification_needed: string | null;
   cinephile_note: string | null;
+  /** Algo que la persona pidió recordar en este mensaje (modo conversación). */
+  remember?: string | null;
 };
 
 export async function fetchRecommendation(params: {
@@ -37,16 +55,73 @@ export async function fetchRecommendation(params: {
   alternativesCount?: number;
   /** ISO2 del usuario: el backend valida disponibilidad real en ese país. */
   country?: string;
+  /** Modo conversación: el perfil de gusto del dispositivo (texto ya armado por lib/taste.ts). */
+  tasteProfile?: string | null;
+  /** Modo conversación: descartes de ESTA charla, con lo que dijo el usuario como motivo. */
+  rejected?: { title: string; reason: string | null }[];
+  /** Cómo se llama la persona (opcional): Miru la nombra como mucho una vez. */
+  userName?: string | null;
+  /** Modo de búsqueda elegido en el + (kids, couple, short, binge, auteur, classic). */
+  mode?: string | null;
 }): Promise<RecoResponse> {
   const res = await fetch(`${API_BASE}/api/recommend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
     // Timeout duro: sin esto, si Railway cuelga el spinner queda infinito.
-    signal: AbortSignal.timeout(45000),
+    // 60 s: el modo conversación son dos llamadas al modelo + TMDB (y a veces
+    // un reintento); 45 s cortaba turnos que iban a salir bien.
+    signal: AbortSignal.timeout(60000),
   });
-  if (!res.ok) throw new Error(`/api/recommend ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new HttpError(`/api/recommend ${res.status}`, res.status, detail.slice(0, 200));
+  }
   return res.json() as Promise<RecoResponse>;
+}
+
+// La memoria del videoclub: manda las señales crudas y vuelve el perfil de
+// gusto sintetizado. Falla en silencio (null): el perfil anterior sigue valiendo.
+export type TasteProfile = {
+  summary: string;
+  likes: string[];
+  avoid: string[];
+  patterns: string;
+  asks: string;
+  confidence: "baja" | "media" | "alta";
+};
+
+export async function fetchProfile(signals: {
+  requests: { q: string; ts: string; source: "text" | "voice" }[];
+  opened: { title: string; platform: string; ts: string; q: string }[];
+  rejected: { title: string; reason: string | null; ts: string }[];
+  verdicts: { title: string; verdict: string; stage: string; ts: string }[];
+  sessions: string[];
+  previous: { summary: string; likes: string[]; avoid: string[] } | null;
+  notes?: string[];
+  removedTags?: string[];
+}): Promise<TasteProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/profile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(signals),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) return null;
+    const p = (await res.json()) as Partial<TasteProfile>;
+    if (!p || typeof p.summary !== "string" || !p.summary.trim()) return null;
+    return {
+      summary: p.summary,
+      likes: Array.isArray(p.likes) ? p.likes.filter((x): x is string => typeof x === "string") : [],
+      avoid: Array.isArray(p.avoid) ? p.avoid.filter((x): x is string => typeof x === "string") : [],
+      patterns: typeof p.patterns === "string" ? p.patterns : "",
+      asks: typeof p.asks === "string" ? p.asks : "",
+      confidence: p.confidence === "alta" || p.confidence === "media" ? p.confidence : "baja",
+    };
+  } catch {
+    return null;
+  }
 }
 
 // Pregunta conversacional sobre el título en pantalla (no re-recomienda).

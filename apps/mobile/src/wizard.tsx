@@ -8,7 +8,8 @@ import { inferContext, contextToPromptHint, seasonHintShort } from "./lib/contex
 import { fetchRecommendation, fetchPosters, warmupBackend } from "./lib/api";
 import { isMuted, setMuted } from "./lib/tts";
 import { colorForPlatform, platformLabel } from "./lib/deeplink";
-import { jwSearch, openNative, openInApp } from "./lib/justwatch";
+import { jwSearch } from "./lib/justwatch";
+import { openStreaming as openTitle } from "./lib/watch";
 import { VoiceRecorder, transcribe } from "./lib/stt";
 import { VoiceAgentOverlay } from "./components/VoiceAgent";
 import { AccountSheet } from "./components/AccountSheet";
@@ -22,8 +23,9 @@ import { useBackLayer } from "./lib/back";
 import { detectPlatformMentions } from "./lib/platform-mentions";
 import type { Recommendation, Message } from "./lib/api";
 import type { JwResult } from "./lib/justwatch";
-import { loadOpened, recordOpened, removeOpened, type OpenedItem } from "./lib/opened";
+import { loadOpened, removeOpened, type OpenedItem } from "./lib/opened";
 import { RecentOpened } from "./components/RecentOpened";
+import { PLATFORMS, PLATFORMS_KEY, loadPlatforms, seedPlatforms, detectCountry, getCountry } from "./lib/prefs";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
 const WATCHLIST_KEY = "miru:watchlist";
@@ -32,11 +34,6 @@ const WATCHLIST_KEY = "miru:watchlist";
 const MYLIST_ITEMS_KEY = "miru:mylist-items";
 const LIKED_KEY = "miru:liked";
 const DISLIKED_KEY = "miru:disliked";
-// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable,
-// pero los mapeos internos (color, label, deeplink) se mantienen para datos viejos.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
-const COUNTRY_KEY = "miru:country";
-const PLATFORMS_KEY = "miru:platforms";
 const TV_BANNER_KEY = "miru:tvBannerDismissed";
 const OPENED_KEY = "miru:opened_before";
 
@@ -62,41 +59,6 @@ function removeFromStore(key: string, title: string): void {
   } catch { /* noop */ }
 }
 
-// Fallback offline: deduce el país desde la timezone del dispositivo.
-function countryFromTimezone(): string | null {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-    if (tz.startsWith("America/Argentina")) return "AR";
-    const map: Record<string, string> = {
-      "America/Montevideo": "UY",
-      "America/Santiago": "CL",
-      "America/Mexico_City": "MX",
-      "America/Bogota": "CO",
-      "America/Lima": "PE",
-      "America/Sao_Paulo": "BR",
-      "Europe/Madrid": "ES",
-    };
-    return map[tz] ?? null;
-  } catch { return null; }
-}
-
-async function detectCountry(): Promise<void> {
-  if (localStorage.getItem(COUNTRY_KEY)) return;
-  try {
-    const res = await fetch("https://ipapi.co/country/", { signal: AbortSignal.timeout(4000) });
-    if (res.ok) {
-      const code = (await res.text()).trim().toUpperCase();
-      if (/^[A-Z]{2}$/.test(code)) {
-        localStorage.setItem(COUNTRY_KEY, code);
-        return;
-      }
-    }
-  } catch { /* silencioso */ }
-  // ipapi falló (rate limit / sin red): timezone del dispositivo como fallback
-  const tzCountry = countryFromTimezone();
-  if (tzCountry) localStorage.setItem(COUNTRY_KEY, tzCountry);
-}
-function getCountry(): string { return localStorage.getItem(COUNTRY_KEY) ?? "AR"; }
 function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
@@ -107,12 +69,7 @@ function cn(...classes: (string | boolean | undefined | null)[]): string {
 // ── Componente principal ─────────────────────────────────────────────────────
 export default function WizardPage({ onComplete }: { onComplete?: () => void } = {}) {
   const [screen, setScreen] = useState<Screen>("welcome");
-  const [platforms, setPlatforms] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(PLATFORMS_KEY) ?? "[]") as string[];
-      return saved.length > 0 ? saved : [...PLATFORMS];
-    } catch { return [...PLATFORMS]; }
-  });
+  const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
 
   // Cards
   const [items, setItems] = useState<Recommendation[]>([]);
@@ -242,11 +199,7 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
   }, [screen]);
 
   // Semilla: si el usuario nunca eligió plataformas, arrancan TODAS activas.
-  useEffect(() => {
-    if (!localStorage.getItem(PLATFORMS_KEY)) {
-      localStorage.setItem(PLATFORMS_KEY, JSON.stringify(PLATFORMS));
-    }
-  }, []);
+  useEffect(() => { seedPlatforms(); }, []);
 
   // ── Disponibilidad JustWatch ──────────────────────────────────────────────
   const loadAvailability = useCallback(async (allItems: Recommendation[]) => {
@@ -538,56 +491,15 @@ export default function WizardPage({ onComplete }: { onComplete?: () => void } =
     });
   };
 
-  const openStreaming = async (
+  // La cascada de apertura (deeplink → búsqueda en la app → Google) vive en
+  // lib/watch.ts: la comparten esta pantalla y la app conversacional.
+  const openStreaming = (
     current: Pick<Recommendation, "title" | "platform" | "type" | "year">,
     avail: JwResult | undefined,
-  ) => {
-    track("watch_now_tapped", {
-      title: current.title,
-      platform: current.platform,
-      availability_confirmed: !!avail?.confirmed,
-    });
-    // Registro local de la apertura ("Abiertos recientemente"): qué, dónde y
-    // por qué vía. Se anota ANTES de salir de la app (después ya no volvemos).
-    const remember = (via: "deeplink" | "app-search" | "web" | "google") =>
-      setOpened(recordOpened(
-        { title: current.title, platform: current.platform, type: current.type, year: current.year, posterUrl: posters[current.title] ?? galleryPosters[current.title] ?? undefined },
-        { via, confirmed: !!avail?.confirmed },
-      ));
-    // Si hay disponibilidad confirmada, intentamos abrir la app/URL exacta. Si eso
-    // no logra abrir NADA (p.ej. sin standardWebURL ni deeplink), caemos al fallback
-    // web de la plataforma para que el botón nunca quede sin reaccionar.
-    if (avail?.confirmed) {
-      remember("deeplink");
-      if (await openNative(avail)) return;
-    }
-
-    const q = encodeURIComponent(current.title);
-
-    // JustWatch verificó y el título NO está en esa plataforma: abrir su app
-    // igual era mandar al usuario a un "sin resultados". Mejor una búsqueda
-    // neutral de dónde verlo — directo con window.open: openInApp intentaría
-    // el scheme nativo de esa misma app equivocada. (avail === undefined =
-    // sin verificar: se abre la plataforma como siempre.)
-    if (avail && !avail.confirmed) {
-      remember("google");
-      window.open(`https://www.google.com/search?q=${q}+ver+online`, "_system");
-      return;
-    }
-    if (!avail) remember("app-search");
-    const urls: Record<string, string> = {
-      Netflix: `https://www.netflix.com/search?q=${q}`,
-      "Prime Video": `https://www.primevideo.com/search/?phrase=${q}`,
-      "Disney+": `https://www.disneyplus.com/search`,
-      "Star+": `https://www.disneyplus.com/search`,
-      Max: `https://play.max.com/search?q=${q}`,
-      "Apple TV+": `https://tv.apple.com/search?term=${q}`,
-      "Paramount+": `https://www.paramountplus.com/search/${q}/`,
-    };
-    const webUrl = urls[current.platform] ?? `https://www.google.com/search?q=${q}+ver+online`;
-    // Abre la app nativa (scheme/App Link) si está instalada; sino, web.
-    void openInApp(current.platform, webUrl, current.title);
-  };
+  ) => openTitle(current, avail, {
+    posterUrl: posters[current.title] ?? galleryPosters[current.title],
+    onOpened: setOpened,
+  });
 
   // Volver a abrir algo de "Abiertos recientemente": se re-consulta JustWatch
   // (el link exacto puede haber cambiado) y se abre por la misma vía de siempre.

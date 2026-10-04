@@ -3,12 +3,35 @@
 export const PLATFORM_COLORS: Record<string, string> = {
   Netflix: "#E50914",
   "Disney+": "#0063E5",
-  Max: "#002BE7",
+  // Max volvió a ser HBO Max (2025): su marca es negra.
+  Max: "#000000",
   "Prime Video": "#00A8E1",
-  "Apple TV+": "#000000",
+  "Apple TV+": "#1D1D1F", // casi negro de Apple: no se confunde con Max
   "Paramount+": "#0064FF",
+  // Universal+ es amarilla (como su favicon). El texto encima lo decide la
+  // luminancia: sobre amarillo va en tinta, no en blanco.
+  "Universal+": "#FFC20E",
   "Star+": "#0063E5", // absorbido por Disney+ en LatAm
 };
+
+// Dominio de cada plataforma: de ahí sale su favicon (el mini ícono del
+// composer). Si el favicon no carga, PlatformIcon cae a la inicial en el color
+// de la marca.
+export const PLATFORM_DOMAINS: Record<string, string> = {
+  Netflix: "netflix.com",
+  "Disney+": "disneyplus.com",
+  Max: "max.com",
+  "Prime Video": "primevideo.com",
+  "Apple TV+": "tv.apple.com",
+  "Paramount+": "paramountplus.com",
+  "Universal+": "universalplus.com",
+  "Star+": "disneyplus.com",
+};
+
+export function faviconFor(platform: string): string | null {
+  const d = PLATFORM_DOMAINS[platform];
+  return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=64` : null;
+}
 
 export function colorForPlatform(platform: string): string {
   return PLATFORM_COLORS[platform] ?? "#6d28d9";
@@ -32,4 +55,21 @@ export function deepLinkFor(platform: string, title: string): string {
     "Paramount+": `https://www.paramountplus.com/search/${q}/`,
   };
   return urls[platform] ?? `https://www.google.com/search?q=${q}+streaming`;
+}
+
+/**
+ * Color de texto legible sobre el color de una plataforma. Casi todas son
+ * oscuras y llevan blanco, pero el celeste de Prime Video con blanco da 2.7:1
+ * (abajo de AA) — sobre él el texto va en tinta. Se decide por luminancia, así
+ * que sirve igual si mañana cambia un color de marca.
+ */
+export function textOnPlatform(platform: string): string {
+  const hex = colorForPlatform(platform).replace("#", "");
+  const ch = (i: number) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
+  // Umbral 0.3: por encima, el blanco no llega a 4.5:1.
+  return lum > 0.3 ? "#1A1614" : "#FFFFFF";
 }

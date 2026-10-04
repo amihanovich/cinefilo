@@ -49,7 +49,8 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 
 | Ruta | Método | Módulo → función | Qué hace |
 |---|---|---|---|
-| `/api/recommend` | POST | `recommend.mjs` → `recommend()` | Recomendación conversacional (1 main + N alternativas). Móvil + TV. |
+| `/api/recommend` | POST | `recommend.mjs` → `recommend()` | Recomendación conversacional (1 main + N alternativas). Móvil + TV. **`alternativesCount: 0` = modo "una sola"** (ver abajo). |
+| `/api/profile` | POST | `profile.mjs` → `synthesizeProfile()` | **La memoria del videoclub.** Recibe las señales crudas del teléfono (`requests`, `opened`, `rejected` con motivo, `verdicts` con `stage: card\|return`, `sessions`, `previous`) y devuelve `{summary, likes, avoid, patterns, asks, confidence}`. Lo pide la app en segundo plano cada ~3 señales; `max_tokens` 500. Cubeta IA. |
 | `/api/intent` | POST | `recommend.mjs` → `inferIntent()` | Frase corta con la intención del pedido (para estados de búsqueda). |
 | `/api/orb` | POST | `recommend.mjs` → `orbRespond()` | Orbe del control: ¿pregunta sobre el título en pantalla o busca algo nuevo? |
 | `/api/ask` | POST | `recommend.mjs` → `askAboutTitle()` | Pregunta conversacional sobre un título (no re-recomienda). |
@@ -65,6 +66,20 @@ Sirve el bundle SSR de la web (`dist/`) **y** expone la API REST que consumen TO
 | `/api/ping` | GET | inline | Warmup barato (cold start de Railway). |
 | `/tv` | — | inline | 302 → `/tv-lite.html` (para tipear con el control remoto). |
 | resto | — | `dist/server/server.js` | SSR de la web app. |
+
+**Modo conversación** de `/api/recommend` (`alternativesCount: 0`, lo usa la app móvil): `recommendSingle()`
+en tres tiempos. **Propone**: `SYSTEM_PROPOSE` pide 6 candidatos rankeados (título/plataforma/tipo/año +
+una línea; ~700 tokens de salida como techo, ~250 reales) y la repregunta si el pedido es vago o hay 2
+descartes secos seguidos. **Verifica**: `validateItems()` sobre los 6; gana el primero `confirmed|corrected`
+por ranking, si no el primero `unknown`; si ninguno está en el país, un reintento con esos títulos
+excluidos; si sigue sin haber, el primero (degradación suave). **Pitchea**: `SYSTEM_PITCH` escribe
+`synopsis` + `reason` (45-75 palabras) + `cinephile_note` + `duration` + `ageRating` para el título ya
+confirmado, viendo el hilo entero, el `tasteProfile` y los `rejected` de la charla, con la regla de nombrar
+UNA señal de la persona cuando influyó. Si la carta falla, sale la película con la línea del paso 1.
+`alternatives` vuelve `[]`, `filters` `{}`. Entradas nuevas (saneadas en `server-node.mjs`): `tasteProfile`
+(≤1500 chars, ya formateado por `lib/taste.ts`) y `rejected` (≤8, `{title, reason|null}`). Cada turno loguea
+`[metrics-single] {propose_ms, tmdb_ms, pitch_ms, retried, picked_rank, avail, profile, rejected}`.
+Costo por turno ≈ 1.3k tokens de entrada / 450 de salida en dos llamadas. `alternativesCount >= 1` no cambió.
 
 **Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20
 (recommend, tv-search, tv-home-more, transcribe, tts, ask, orb, intent) y **blurb 60 en cubeta aparte** (navegar
@@ -94,12 +109,17 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
   voz nativa del dispositivo (`speechSynthesis`).
 - **Groq Whisper** STT (`transcribe.mjs`): `whisper-large-v3`, idioma `es`, `GROQ_API_KEY`.
 - **TMDB** (`availability.mjs`, `TMDB_API_KEY`): valida disponibilidad real por país y alimenta el
-  home de TV vía `discoverPopular(country)` — 6 plataformas × movie/tv × popular/recent = 24 requests
+  home de TV vía `discoverPopular(country)` — 7 plataformas × movie/tv × popular/recent = 28 requests
   paralelos a Discover. Devuelve `{popular, recent, byPlatform}`: `byPlatform` es el ranking POR
   plataforma (para las tiras "Top 6 en X"), dedupe solo dentro de cada plataforma, del MISMO batch.
   ⚠️ El "Top 6" es popularidad TMDB por región, no el ranking oficial de cada plataforma (ese dato no
   tiene API pública). ⚠️ El caché del home no tiene key de región: el top es de `DEFAULT_REGION` (AR)
-  para todos.
+  para todos. **Ids de proveedor:** `PROVIDER_MAP` los trae fijos salvo los que no tenemos verificados
+  (hoy Universal+, `ids: []`); esos los resuelve `resolveProviderIds()` contra
+  `/watch/providers/{movie,tv}` de TMDB matcheando por el mismo regex del mapa (cacheado por región,
+  incluye variantes tipo "… Amazon Channel"). Si TMDB no lista la plataforma en esa región se saltean
+  sus Discover —se pierde su tira "Top 6", nada más— con un `console.warn`. La validación de
+  disponibilidad NO depende de esto: `canonicalProvider()` matchea por nombre.
 - **Pósters:** **Cinemeta (Stremio) primero**, iTunes + Wikipedia de fallback (ver §5).
 
 ---
@@ -109,11 +129,39 @@ Los `.mjs` de la raíz son **autónomos** (no dependen del bundle de la web); re
 ### A. `apps/mobile` — app Android Capacitor (LA principal)
 - `appId com.cinefilo.app`, `webDir dist`, **sin `server.url`** → bundlea el front (SPA React + Vite) dentro
   del APK. `capacitor.config.ts` solo setea `androidScheme: "https"`.
-- Entrada: `src/main.tsx` → `src/App.tsx` → **`src/wizard.tsx`** (todo el flujo). Screens:
-  `"welcome" | "magic" | "gallery"`.
-- Flujo: **welcome** (`WelcomeScreen.tsx`, saludo por voz) → búsqueda por **voz** (`VoiceAgent.tsx` + `Orb.tsx`,
-  STT `/api/transcribe`, TTS `/api/tts`) **o texto** → **resultados** (`/api/recommend`), con estado de carga
-  `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos.
+- Entrada: `src/main.tsx` → `src/App.tsx` → **`src/screens/ChatScreen.tsx`** (la conversación, default desde
+  2026-09) o **`src/wizard.tsx`** con **`?full=1`** (la app completa de antes: welcome / magic / gallery).
+- **Conversación (`ChatScreen`)**: un hilo de turnos (`miru` / `user` / `reco` / `thinking`). Cada pedido —voz
+  (orbe press-to-speak → `/api/transcribe`) o texto— llama a `/api/recommend` con **`alternativesCount: 0`** y
+  el historial acumulado, y devuelve UNA película: intro (`cinephile_note`), ficha con el porqué entero y un
+  solo botón "Ver en X". Si vino `clarification_needed`, Miru repregunta DESPUÉS de la ficha. **Voz: "habla si
+  le hablaste"** (TTS solo si el pedido entró por voz y no está muteado). Chip "Dame otra" = descarte seco
+  (suma el título a `excludeTitles`). Sin grilla, sin tops, sin Mi lista: son las capas guardadas.
+- **App completa (`wizard.tsx`, `?full=1`)**: **welcome** (`WelcomeScreen.tsx`, saludo por voz) → búsqueda por
+  **voz** (`VoiceAgent.tsx` + `Orb.tsx`) **o texto** → **resultados** (`/api/recommend`), con estado de carga
+  `SearchLoading.tsx` (rueda de plataformas). `AccountSheet.tsx` = cuenta/galería de gustos (y la entrada a la
+  TV, que en la conversación es la única puerta al control).
+- **Temas** (`src/index.css`): dos juegos de valores sobre los mismos tokens HSL. `.theme-paper` (crema
+  #F8F4EC + tinta #29231F + violeta #6B3FC4 + ocre #96600F) para la conversación; `.theme-dark` (los
+  valores de siempre) para `?full=1` y para `ControlScreen`, que lo fuerza en su raíz. `App.tsx` pone la
+  clase en `<html>` (el `body` pinta el fondo: un div no alcanzaba). Tokens nuevos: `--card` (la
+  jerarquía se invierte — en papel la ficha es blanca sobre crema) y `--accent` (el rótulo del porqué).
+  `textOnPlatform()` en `lib/deeplink.ts` elige blanco o tinta sobre el color de marca por luminancia
+  (el celeste de Prime con blanco da 2.7:1).
+- **La memoria** (`src/lib/taste.ts`, clave `miru:taste`): señales locales —`requests` (texto, hora,
+  voz/texto), `rejected` (título + motivo: el próximo pedido con una peli en pantalla no abierta ES el
+  descarte y su motivo; "Dame otra" = sin motivo), `verdicts` (`stage: "card"` = manito en la ficha,
+  `"return"` = "¿Qué tal estuvo X?" al volver, una vez por título, solo si la apertura fue hace >3 h),
+  `shown` (para `excludeTitles()` a 30 días, junto con `miru:opened`), `sessions`— y el `profile` que
+  devuelve `/api/profile`. `maybeRefreshProfile()` corre tras cada turno/manito/veredicto y sintetiza
+  cuando juntó ≥3 señales (la manito y el veredicto valen 2) o el perfil tiene >7 días. `profileBlock()`
+  arma el texto que viaja como `tasteProfile`: el perfil + las últimas aperturas, opiniones y descartes
+  con motivo (≈120-200 tokens), así el "cómo supo" existe desde la segunda sesión aunque el perfil no
+  se haya sintetizado. El saludo también lee la memoria: "¿Qué tal estuvo X?" / "Hola de nuevo".
+- **Compartido entre las dos pantallas**: `lib/watch.ts` (la cascada de apertura: deeplink confirmado →
+  búsqueda en la app → Google si JustWatch dice que NO está, + registro en "Abiertos recientemente"),
+  `lib/prefs.ts` (plataformas y país del dispositivo), `components/BrandSplash.tsx`, `lib/tv-remote.ts`
+  (`pickTvSession()`: QR con fallback a código tipeado).
 - **Modo control de TV:** `src/screens/ControlScreen.tsx` + `src/hooks/use-tv-channel.ts` + `src/lib/tv-remote.ts`.
   Escanea el QR de la TV (`@capacitor-mlkit/barcode-scanning`) y se conecta como rol "control".
 - Backend: `src/lib/api.ts` → `VITE_API_BASE_URL ?? https://miru-ai.up.railway.app`.

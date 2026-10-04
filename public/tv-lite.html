@@ -451,7 +451,7 @@
   var SUPABASE_URL = "https://gyxooovdwputhznnlqhi.supabase.co";
   var SUPABASE_KEY = "sb_publishable_Rr1Xw4no3qdm2uFSI1kVYg_4asF5n6o";
 
-  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Star+"];
+  var PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+", "Star+"];
   var userPlatforms = null; // plataformas heredadas del control (SET_PLATFORMS); null = todas
   var queryPlatforms = null; // mención explícita del PEDIDO en curso ("en Netflix"); pisa userPlatforms
 
@@ -460,7 +460,7 @@
   // Mantener en sync a mano: misma lista de plataformas, misma regla (la
   // primera precedida de "en/de/para" para evitar el falso positivo de un
   // título como "Mad Max"; de ahí se puede extender a una lista con coma/y/o).
-  var PLATFORM_MENTION_NAME = "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?)";
+  var PLATFORM_MENTION_NAME = "(?:netflix|(?:amazon\\s+)?prime(?:\\s+video)?|disney\\s*\\+?|(?:hbo\\s*)?max|apple\\s*tv\\s*\\+?|paramount\\s*\\+?|universal\\s*(?:\\+|plus))";
   var PLATFORM_MENTION_PREP = "(?:en|de|para)";
   var PLATFORM_MENTION_LIST_RE = new RegExp(
     "\\b" + PLATFORM_MENTION_PREP + "\\s+" + PLATFORM_MENTION_NAME +
@@ -473,7 +473,9 @@
     { canonical: "Disney+", re: /\bdisney\s*\+?\b/i },
     { canonical: "Max", re: /\b(?:hbo\s*)?max\b/i },
     { canonical: "Apple TV+", re: /\bapple\s*tv\s*\+?\b/i },
-    { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i }
+    { canonical: "Paramount+", re: /\bparamount\s*\+?\b/i },
+    // El "+"/"plus" es obligatorio: "algo de Universal" (el estudio) no filtra.
+    { canonical: "Universal+", re: /\buniversal\s*(?:\+|plus)/i }
   ];
   function detectPlatformMentions(text) {
     var t = String(text || "");
@@ -492,10 +494,22 @@
     return found;
   }
   var COLORS = {
-    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#7B2FF7", "Prime Video": "#00A8E1",
-    "Apple TV+": "#444", "Paramount+": "#0064FF", "Star+": "#1CB47A"
+    "Netflix": "#E50914", "Disney+": "#113CCF", "Max": "#000000", "Prime Video": "#00A8E1",
+    "Apple TV+": "#444", "Paramount+": "#0064FF", "Universal+": "#FFC20E", "Star+": "#1CB47A"
   };
   function colorFor(p) { return COLORS[p] || "#2563EB"; }
+  // Texto legible sobre el color de la marca: sobre amarillo (Universal+) o
+  // celeste (Prime) el blanco no se lee. Mismo criterio que textOnPlatform()
+  // del móvil: luminancia relativa > 0.3 → tinta.
+  function textOnColor(hex) {
+    var h = String(hex || "").replace("#", "");
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (h.length !== 6) return "#fff";
+    function ch(i) { var v = parseInt(h.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+    var lum = 0.2126 * ch(0) + 0.7152 * ch(2) + 0.0722 * ch(4);
+    return lum > 0.3 ? "#1A1614" : "#fff";
+  }
+  function onPlat(p) { return "color:" + textOnColor(colorFor(p)); }
   // Star+ fue absorbido por Disney+ en LatAm (2024).
   function platLabel(p) { return p === "Star+" ? "Disney+" : p; }
 
@@ -629,13 +643,18 @@
     "query GetTitleOffers($searchQuery: String!, $country: Country!, $language: Language!, $objectTypes: [ObjectType!]) {" +
     " popularTitles(country: $country, first: 5, filter: { searchQuery: $searchQuery, objectTypes: $objectTypes }) {" +
     " edges { node { objectType" +
-    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
-    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName } } }" +
+    " ... on Movie { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName clearName } } }" +
+    " ... on Show { content(country: $country, language: $language) { title } offers(country: $country, platform: WEB) { monetizationType standardWebURL deeplinkAndroid package { technicalName clearName } } }" +
     " } } } }";
   var JW_PACKAGES = {
     "Netflix": ["nfx"], "Prime Video": ["amp", "prv"], "Disney+": ["dnp"],
-    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"]
+    "Max": ["max", "hbm"], "Apple TV+": ["atp"], "Paramount+": ["pmp"],
+    "Universal+": []
   };
+  // Fallback por NOMBRE del package (JustWatch manda `clearName`): para las
+  // plataformas sin technicalName confirmado y para variantes tipo
+  // "Universal+ Amazon Channel". Mismo criterio que la app móvil.
+  var JW_NAMES = { "Universal+": /universal\s*(?:\+|plus)/i };
   var jwCache = {}; // "titulo|plataforma" → {deeplinkAndroid, standardWebURL} | null (resuelto sin match)
 
   function jwNorm(s) {
@@ -657,7 +676,8 @@
     var key = it.title + "|" + it.platform;
     if (Object.prototype.hasOwnProperty.call(jwCache, key)) return Promise.resolve(jwCache[key]);
     var wanted = JW_PACKAGES[it.platform] || [];
-    if (!wanted.length) { jwCache[key] = null; return Promise.resolve(null); }
+    var wantedName = JW_NAMES[it.platform] || null;
+    if (!wanted.length && !wantedName) { jwCache[key] = null; return Promise.resolve(null); }
     return fetch("https://apis.justwatch.com/graphql", {
       method: "POST",
       headers: { "Content-Type": "application/json", "App-Version": "3.8.2" },
@@ -680,7 +700,9 @@
         var match = null;
         for (var j = 0; j < offers.length; j++) {
           var o = offers[j];
-          if (o && o.monetizationType === "FLATRATE" && o["package"] && wanted.indexOf(o["package"].technicalName) >= 0) { match = o; break; }
+          if (o && o.monetizationType === "FLATRATE" && o["package"] &&
+              (wanted.indexOf(o["package"].technicalName) >= 0 ||
+               (wantedName && wantedName.test(o["package"].clearName || "")))) { match = o; break; }
         }
         if (!match) continue;
         // La búsqueda devuelve títulos "populares" que matchean el texto — el
@@ -986,7 +1008,7 @@
     if (!it.platform) return "";
     var unk = it.avail === "unknown" || it.avail === "pending";
     var label = (unk ? "Por confirmar en " : "Disponible en ") + esc(platLabel(it.platform));
-    return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + '">' + label + "</span>";
+    return '<span class="' + cls + (unk ? " unk" : "") + '" style="background:' + (unk ? "transparent" : colorFor(it.platform)) + (unk ? "" : ";" + onPlat(it.platform)) + '">' + label + "</span>";
   }
 
   // Contenido del .ph (póster + gradiente + info superpuesta + detalle). Se usa en
@@ -1010,7 +1032,7 @@
     if (sub.length) h += '<span class="csub">' + esc(sub.join(" · ")) + "</span>";
     if (it.platform) {
       var unkP = it.avail === "unknown" || it.avail === "pending";
-      h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
+      h += '<span class="pl' + (unkP ? " unk" : "") + '" style="background:' + (unkP ? "transparent" : colorFor(it.platform)) + (unkP ? "" : ";" + onPlat(it.platform)) + '">' + esc(platLabel(it.platform)) + "</span>";
     }
     h += "</div>";
     return h;
@@ -1054,7 +1076,7 @@
       h += '<div class="hactions">';
       h += '<button class="hbtn ico' + (af === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
            (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
-      h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+      h += '<button class="hbtn play' + (af === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + ';' + onPlat(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
       h += "</div>";
     }
     h += "</div></div>"; // cierra .hpanel y .info
@@ -1388,7 +1410,7 @@
     h += '<div class="hactions">';
     h += '<button class="hbtn ico' + (actionFocus === 0 ? " bfoc" : "") + (td ? " on" : "") + '" title="Mi lista">' +
          (td ? "✓" : "+") + '<span class="blab">Mi lista</span></button>';
-    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
+    h += '<button class="hbtn play' + (actionFocus === 1 ? " bfoc" : "") + '" style="background:' + colorFor(it.platform) + ';border-color:' + colorFor(it.platform) + ';' + onPlat(it.platform) + '">▶ Ver en ' + esc(platLabel(it.platform)) + "</button>";
     // 3er botón SOLO en modo RC: marca "Ya la vi" (en modo vinculado ese flujo
     // vive en el control del teléfono, con su hoja de rating).
     if (uiMode === "rc") {

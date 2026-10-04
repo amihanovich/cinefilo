@@ -23,7 +23,7 @@ export function SearchLoading({ query, platforms, fixedPlatform, headline }: Sea
     ? [fixedPlatform]
     : platforms.length > 0
       ? platforms
-      : ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+      : ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+"];
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {

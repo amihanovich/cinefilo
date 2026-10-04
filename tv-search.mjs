@@ -9,7 +9,7 @@ import { validateItems, pickAvailable, availSummary, discoverPopular, availabili
 
 // Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm). Estaba dejando
 // que Haiku la asigne y la TV disparaba el deep link de una app que ya no existe.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+"];
 
 // Texto crudo de Haiku (una sola llamada, sin system). `cfg` permite un
 // timeout más corto para pedidos chicos (el blurb por título) sin tocar los

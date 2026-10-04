@@ -5,7 +5,9 @@ export default {
     extend: {
       colors: {
         background: "hsl(var(--background))",
+        card: "hsl(var(--card))",
         foreground: "hsl(var(--foreground))",
+        accent: "hsl(var(--accent))",
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",

@@ -7,13 +7,17 @@ import { validateItems, pickAvailable, detectPlatformMentions } from "./availabi
 
 // Sin Star+: murió en 2024 (fusionada con Disney+ en LatAm); dejarla acá hacía
 // que Haiku siguiera asignándola y los clientes abrieran una app inexistente.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+", "Universal+"];
 
-const SYSTEM_BASE = `Sos Miru: el experto de tu videoclub de confianza — un cinéfilo apasionado con décadas de inmersión en el cine de todos los géneros y épocas. Tu conocimiento abarca desde el Hollywood clásico hasta el Neorrealismo italiano, la Nouvelle Vague francesa, el New Hollywood de los 70, el cine latinoamericano y el cine asiático contemporáneo. Sos como esos críticos y comunicadores de los programas de televisión de los años 60, 70 y 80 que con una sola frase abrían una puerta a un mundo cinematográfico desconocido — apasionados, directos, con criterio propio.
+// La persona es UNA y la comparten los tres prompts (el camino multi de la TV y
+// el wizard, y los dos pasos del modo conversación). No repetirla.
+const PERSONA = `Sos Miru: el experto de tu videoclub de confianza — un cinéfilo apasionado con décadas de inmersión en el cine de todos los géneros y épocas. Tu conocimiento abarca desde el Hollywood clásico hasta el Neorrealismo italiano, la Nouvelle Vague francesa, el New Hollywood de los 70, el cine latinoamericano y el cine asiático contemporáneo. Sos como esos críticos y comunicadores de los programas de televisión de los años 60, 70 y 80 que con una sola frase abrían una puerta a un mundo cinematográfico desconocido — apasionados, directos, con criterio propio.
 
 Tu trabajo tiene dos caras inseparables:
 1. Decirle al usuario exactamente qué ver esta noche en alguna de las plataformas que ya paga.
-2. Hacerle entender POR QUÉ ESO y POR QUÉ A ÉL: cada recomendación se justifica conectándola explícitamente con lo que pidió, su momento o su gusto conocido. Nunca recomendás "porque es buena": recomendás porque encaja con ESTE pedido de ESTA persona. Cuando viene al caso, sumás un dato de cinéfilo (el director, la época, una conexión con otra obra) que enriquezca la elección — como el experto del videoclub que además de elegirte la película te contaba por qué era especial.
+2. Hacerle entender POR QUÉ ESO y POR QUÉ A ÉL: cada recomendación se justifica conectándola explícitamente con lo que pidió, su momento o su gusto conocido. Nunca recomendás "porque es buena": recomendás porque encaja con ESTE pedido de ESTA persona. Cuando viene al caso, sumás un dato de cinéfilo (el director, la época, una conexión con otra obra) que enriquezca la elección — como el experto del videoclub que además de elegirte la película te contaba por qué era especial.`;
+
+const SYSTEM_BASE = `${PERSONA}
 
 Reglas estrictas:
 - "platform" debe ser EXACTAMENTE una de las plataformas listadas.
@@ -46,13 +50,10 @@ function buildSystem(alternativesCount = 4) {
   return SYSTEM_BASE + format;
 }
 
-async function callAnthropic(messages, alternativesCount = 4) {
+// Una llamada a Haiku que devuelve JSON (tolerante a ```json y a texto alrededor).
+async function callJson({ system, messages, maxTokens, timeoutMs = 40000 }) {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("Falta ANTHROPIC_API_KEY en el servidor.");
-  // Galería necesita más tokens de salida. Cada ítem ahora trae también
-  // synopsis + hook (~45 palabras extra c/u), así que el techo sube: si el JSON
-  // se trunca, la respuesta entera se pierde.
-  const maxTokens = alternativesCount > 6 ? 5500 : 2600;
   const res = await fetchUpstream("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -63,10 +64,10 @@ async function callAnthropic(messages, alternativesCount = 4) {
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: maxTokens,
-      system: buildSystem(alternativesCount),
+      system,
       messages,
     }),
-  }, { timeoutMs: 40000 });
+  }, { timeoutMs });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new Error("Anthropic HTTP " + res.status + " " + detail.slice(0, 160));
@@ -79,6 +80,14 @@ async function callAnthropic(messages, alternativesCount = 4) {
   return JSON.parse(first >= 0 && last > first ? cleaned.slice(first, last + 1) : cleaned);
 }
 
+async function callAnthropic(messages, alternativesCount = 4) {
+  // Galería necesita más tokens de salida. Cada ítem ahora trae también
+  // synopsis + hook (~45 palabras extra c/u), así que el techo sube: si el JSON
+  // se trunca, la respuesta entera se pierde.
+  const maxTokens = alternativesCount > 6 ? 5500 : 2600;
+  return callJson({ system: buildSystem(alternativesCount), messages, maxTokens });
+}
+
 /**
  * @param {object} params
  * @param {{ role: "user"|"assistant", content: string }[]} params.messages - conversation history
@@ -87,10 +96,12 @@ async function callAnthropic(messages, alternativesCount = 4) {
  * @param {string|null} params.seasonHint
  * @param {string|null} params.weatherHint
  * @param {string[]} params.excludeTitles
- * @param {number} [params.alternativesCount=4]
+ * @param {number} [params.alternativesCount=4] - 0 = modo conversación (una sola película)
  * @param {string} [params.country] - ISO2 del usuario (default región del server)
+ * @param {string|null} [params.tasteProfile] - perfil de gusto del dispositivo (texto, ya formateado)
+ * @param {{title:string, reason:string|null}[]} [params.rejected] - descartes de ESTA charla
  */
-export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country }) {
+export async function recommend({ messages, platforms, contextHint, seasonHint, weatherHint, excludeTitles, alternativesCount = 4, country, tasteProfile = null, rejected = [], userName = null, mode = null }) {
   // Si el pedido de ESTE turno nombra una plataforma explícita ("buscame algo
   // en Netflix", "para ver en Disney"), eso PISA el preset de plataformas del
   // perfil — solo para este pedido puntual, no para toda la conversación.
@@ -98,47 +109,34 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   const mentioned = detectPlatformMentions(lastUserQuery);
   const effectivePlatforms = mentioned.length ? mentioned : ((platforms && platforms.length > 0) ? platforms : PLATFORMS);
   const validationPlatforms = mentioned.length ? mentioned : ((platforms && platforms.length) ? platforms : null);
-  // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
-  // por país) puede descartar títulos, y así igual se llega al count pedido.
-  const askCount = alternativesCount + 2;
-  const excludeLine = excludeTitles && excludeTitles.length > 0
-    ? `\n\nTítulos a excluir (ya vistos o mostrados — NO los recomiendes):\n- ${excludeTitles.join("\n- ")}`
-    : "";
   const envParts = [];
   if (seasonHint) envParts.push(`Estación: ${seasonHint}`);
   if (weatherHint) envParts.push(`Clima: ${weatherHint}`);
   const envLine = envParts.length ? `\nContexto ambiental: ${envParts.join(" · ")}` : "";
+  const baseContext = [
+    contextHint ? `Contexto temporal: ${contextHint}` : null,
+    envLine || null,
+    `Plataformas disponibles: ${effectivePlatforms.join(", ")}`,
+    country ? `País del usuario: ${country} (recomendá solo títulos en el catálogo local)` : null,
+  ].filter(Boolean);
 
-  // Build messages array: inject context into first user message
-  const builtMessages = messages.map((m, i) => {
-    if (i === 0 && m.role === "user") {
-      const contextBlock = [
-        contextHint ? `Contexto temporal: ${contextHint}` : null,
-        envLine || null,
-        `Plataformas disponibles: ${effectivePlatforms.join(", ")}`,
-        country ? `País del usuario: ${country} (recomendá solo títulos en el catálogo local)` : null,
-        excludeLine || null,
-        `Alternativas requeridas: ${askCount}`,
-      ].filter(Boolean).join("\n");
-      return { role: "user", content: `${contextBlock}\n\nPedido del usuario: ${m.content}` };
-    }
-    return m;
-  });
+  // Modo conversación (la app móvil): UNA película, elegida y escrita en dos
+  // pasos con la verificación de catálogo en el medio.
+  if (alternativesCount === 0) {
+    if (userName) baseContext.push(`La persona se llama ${userName}. Podés nombrarla como mucho UNA vez, y solo si suena natural (nunca en cada frase).`);
+    return recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected, mode });
+  }
+
+  // Se piden 2 alternativas de margen: la validación de disponibilidad (TMDB,
+  // por país) puede descartar títulos, y así igual se llega al count pedido.
+  const askCount = alternativesCount + 2;
+  const builtMessages = injectContext(messages, [
+    ...baseContext,
+    excludeLine(excludeTitles),
+    `Alternativas requeridas: ${askCount}`,
+  ]);
 
   const parsed = await callAnthropic(builtMessages, askCount);
-
-  // Normalize output
-  const normalize = (r) => ({
-    title: String(r.title || ""),
-    platform: String(r.platform || ""),
-    duration: String(r.duration || ""),
-    type: String(r.type || ""),
-    year: r.year ? String(r.year) : undefined,
-    ageRating: r.ageRating ? String(r.ageRating) : undefined,
-    synopsis: r.synopsis ? String(r.synopsis) : undefined,
-    hook: r.hook ? String(r.hook) : undefined,
-    reason: String(r.reason || ""),
-  });
 
   let main = normalize(parsed.main || {});
   let alternatives = (parsed.alternatives || []).slice(0, askCount).map(normalize);
@@ -164,6 +162,289 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
     clarification_needed: parsed.clarification_needed || null,
     cinephile_note: cinephileNote,
   };
+}
+
+// Normaliza un ítem tal como viene del modelo (strings garantizados).
+function normalize(r) {
+  return {
+    title: String(r.title || ""),
+    platform: String(r.platform || ""),
+    duration: String(r.duration || ""),
+    type: String(r.type || ""),
+    year: r.year ? String(r.year) : undefined,
+    ageRating: r.ageRating ? String(r.ageRating) : undefined,
+    synopsis: r.synopsis ? String(r.synopsis) : undefined,
+    hook: r.hook ? String(r.hook) : undefined,
+    reason: String(r.reason || ""),
+  };
+}
+
+function excludeLine(excludeTitles, single = false) {
+  if (!excludeTitles || !excludeTitles.length) return null;
+  // En conversación el rótulo importa: "ya vistos" hacía que el modelo diera
+  // por vista una película que la persona solo abrió (o que Miru solo propuso).
+  const label = single
+    ? "Títulos a NO proponer (Miru ya se los propuso o los abrió desde Miru — NO significa que los haya visto)"
+    : "Títulos a excluir (ya vistos o mostrados — NO los recomiendes)";
+  return `${label}:\n- ${excludeTitles.join("\n- ")}`;
+}
+
+// El contexto va inyectado en el PRIMER mensaje del usuario (la conversación
+// sigue siendo multi-turno: el modelo ve el hilo entero).
+function injectContext(messages, lines) {
+  const block = lines.filter(Boolean).join("\n");
+  return messages.map((m, i) =>
+    i === 0 && m.role === "user"
+      ? { role: "user", content: `${block}\n\nPedido del usuario: ${m.content}` }
+      : m,
+  );
+}
+
+// ── Modo conversación: propone → verifica → pitchea ──────────────────────────
+// Antes se pedía una película con el porqué ya escrito y se validaba después:
+// si no estaba, se promovía un respaldo y se regeneraba el texto. Ahora el
+// modelo primero ELIGE (6 candidatos rankeados, baratos), el catálogo real
+// decide cuál queda, y recién entonces se escribe la carta — sabiendo que la
+// película existe y dónde. La carta es lo único que la persona lee: por eso va
+// en un paso propio, con el perfil de gusto y los descartes de la charla a la
+// vista, y la regla de nombrar UNA señal suya cuando influyó ("cómo supo").
+
+const SYSTEM_PROPOSE = `${PERSONA}
+
+Estás en una CONVERSACIÓN y en este paso tu tarea es ELEGIR, no escribir: proponé 6 candidatos ordenados del que mejor encaja al que menos, para que un verificador de catálogo se quede con el primero que de verdad esté disponible en el país del usuario. La carta del elegido la escribís después, en otro paso.
+
+Reglas:
+- 6 títulos DISTINTOS entre sí (no seis variaciones de lo mismo): los primeros 3 apuntan al centro del pedido; el 4 y el 5 abren un poco (otra época, otro país, otro tono compatible); el 6 es una apuesta que el perfil no pediría pero que vos jugarías — decilo en su "line".
+- "platform" EXACTAMENTE una de las plataformas listadas. "type": "Película" o "Serie". "year" obligatorio (ej. "2014").
+- TIPO: si el pedido dice "película", "peli", "film" o "largometraje", los 6 candidatos son PELÍCULAS (nada de series ni miniseries); si dice "serie", "miniserie", "temporada" o "capítulo", son SERIES. Si no lo dice, elegí libre. "type" tiene que ser el real del título, no el que pidió.
+- Si el pedido nombra un título o un director, es LA BRÚJULA: buscá por su ADN (época, tono, ritmo, puesta en escena), no por género a secas.
+- Si hay "Perfil de gusto", es una señal FUERTE: rankeá por encaje con ESTA persona, no con el público general. Pero el pedido de HOY manda sobre el perfil: si hoy pide algo distinto a lo de siempre, seguilo.
+- "Descartes en esta charla" con motivo: ese motivo es una restricción dura para TODOS los candidatos. Si hay 2 o más descartes seguidos SIN motivo, la persona no sabe decir qué no le cierra: elegí candidatos en CONTRASTE claro con lo descartado y completá "clarification_needed" con UNA pregunta corta y cálida que lo destrabe.
+- REPREGUNTA ("clarification_needed"): por defecto es null y vas DIRECTO al resultado. Solo preguntás si de verdad amerita: el pedido no trae NINGUNA señal útil (ni género, ni tono, ni compañía, ni momento, ni duración, ni una referencia) o la persona duda en voz alta ("no sé", "lo que sea", "eh…", frases inconclusas). Un pedido corto pero con UNA señal ("algo de acción", "una comedia", "algo para ver con mi mujer") NO amerita pregunta. Ante la duda, NO preguntes. Si preguntás: una sola, cálida, máximo 20 palabras — y proponé igual tu mejor lectura.
+- Títulos a no proponer: JAMÁS los propongas. OJO: estar en esa lista NO significa que la persona los haya visto — son títulos que Miru ya le propuso o que abrió desde Miru.
+- ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
+- Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
+- Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
+- Priorizá títulos con presencia estable en la plataforma; evitá estrenos de los últimos 6 meses salvo certeza.
+- "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
+- RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
+
+FORMATO DE SALIDA: JSON válido y nada más:
+{"candidates":[{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""}],"clarification_needed":null,"remember":null,"only_remember":false,"ack":null}`;
+
+const SYSTEM_PITCH = `${PERSONA}
+
+Ya elegiste la película y el catálogo confirmó dónde está. Ahora escribí la carta: es lo único que la persona va a leer, y es por lo que existe Miru.
+
+Devolvé JSON válido y nada más:
+{"synopsis":"","reason":"","cinephile_note":"","duration":"","ageRating":""}
+
+- "synopsis": 20 a 30 palabras, DE QUÉ VA (planteo y qué está en juego), sin spoilers, sin emojis.
+- "reason": 2 a 4 oraciones (45 a 75 palabras), español rioplatense, sin emojis ni listas. Arrancá por el porqué atado a lo que pidió HOY; seguí con qué la hace especial (quién la dirigió y qué más hizo, la época o el movimiento, con qué obra dialoga, una decisión de puesta en escena); cerrá con qué se va a llevar si la ve. Nada genérico ("gran película", "imperdible", "muy recomendable"). Sin spoilers.
+- LA CARTA: si el "Perfil de gusto" o un descarte de esta charla influyeron en la elección, NOMBRÁ UNA sola señal concreta de esa persona, como quien se acuerda ("como la última vez te fuiste con X…", "como dijiste que la anterior era muy larga…", "como te tira el cine de los 70…"). Una, y VERDADERA: nunca inventes lo que no está en el contexto, y nunca más de una — una es "cómo supo", tres es incómodo. Si nada influyó, no fuerces nada.
+- Usá las señales por lo que SON: si abrió un título, "como fuiste a ver X" / "como te llevaste X" está perfecto; si le puso 👍, "como te gustó X" / "como te cerró X" está perfecto; si dijo que la vio y le gustó, decilo. Lo único prohibido es inventar lo que no pasó: "la terminaste", "acabás de verla", "te encantó" cuando solo la abrió. Un hecho bien citado suma; una suposición equivocada rompe la confianza en un segundo.
+- "cinephile_note": 2 a 3 oraciones (45 a 65 palabras) para ser HABLADAS en voz alta: arrancá con el contexto del pedido ("Para esta noche de finde…"), presentá el título con una frase que enganche y deje claro por qué responde al pedido, y cerrá invitando a verla o a pedirte otra si no le cierra. Sin emojis ni listas.
+- "duration": ej. "1h 52m" o "8 capítulos de 45m". "ageRating": "ATP", "PG", "+13", "+16" o "+18" (el más conservador si dudás).`;
+
+const CANDIDATES = 6;
+
+// Modos de búsqueda: las "habilidades" de Miru. Se eligen en el + del composer
+// y cambian CÓMO elige. Las reglas viven acá (el cliente solo manda el id), así
+// se ajustan sin rebuildear la app.
+export const MODES = {
+  kids: { label: "Con chicos", rule: "Es para ver en familia con chicos: SOLO ATP o PG, nada que asuste, ni violencia ni sexo; que la disfruten también los grandes.", type: null },
+  couple: { label: "Para dos", rule: "Es para ver de a dos: algo que funcione en pareja, que dé para comentar después; ni muy denso ni infantil.", type: null },
+  short: { label: "Algo corto", rule: "Tiene poco tiempo: películas de MENOS de 100 minutos, o series de capítulos de menos de 30.", type: null },
+  binge: { label: "Maratón", rule: "Quiere maratonear: SERIES enganchantes, con varias temporadas o muchos capítulos, de las que piden \"uno más\".", type: "Serie" },
+  auteur: { label: "Cine de autor", rule: "Quiere cine de autor: directores con mirada propia, festivales, lo menos mainstream; nada de franquicias ni tanques.", type: null },
+  classic: { label: "Un clásico", rule: "Quiere un clásico: estrenado ANTES del año 2000, de esos que hay que haber visto.", type: null },
+};
+
+// Tipo pedido explícitamente en el ÚLTIMO pedido (no en toda la charla: "ahora
+// una serie" pisa a la "película" de antes). El prompt ya lo pide, pero el
+// filtro en código es la garantía: pedir película y recibir una serie rompe
+// la confianza en un segundo.
+export function requestedType(text) {
+  const t = String(text || "").toLowerCase();
+  const movie = /\b(pel[ií]cula|peli|pelis|film|largometraje)s?\b/.test(t);
+  const series = /\b(serie|series|miniserie|miniseries|temporada|temporadas|cap[ií]tulo|cap[ií]tulos)\b/.test(t);
+  if (movie && !series) return "Película";
+  if (series && !movie) return "Serie";
+  return null;
+}
+
+function normalizeCandidate(c) {
+  return {
+    title: String(c.title || "").trim(),
+    platform: String(c.platform || "").trim(),
+    type: /serie/i.test(String(c.type || "")) ? "Serie" : "Película",
+    year: c.year ? String(c.year).slice(0, 4) : undefined,
+    line: String(c.line || "").trim(),
+  };
+}
+
+function formatRejected(rejected) {
+  if (!rejected || !rejected.length) return null;
+  const items = rejected.slice(-6).map((r) => `- ${r.title}${r.reason ? ` — dijo: "${r.reason}"` : " — sin motivo"}`);
+  let dry = 0;
+  for (let i = rejected.length - 1; i >= 0 && !rejected[i].reason; i--) dry++;
+  const tail = dry >= 2 ? `\n(${dry} descartes seguidos sin motivo: elegí en contraste y preguntá qué no cierra)` : "";
+  return `Descartes en esta charla (más viejo primero):\n${items.join("\n")}${tail}`;
+}
+
+async function proposeCandidates({ messages, contextLines, wantType = null }) {
+  const attempt = async () => {
+    const parsed = await callJson({
+      system: SYSTEM_PROPOSE,
+      messages: injectContext(messages, contextLines),
+      maxTokens: 700,
+      timeoutMs: 25000,
+    });
+    let candidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
+      .map(normalizeCandidate)
+      .filter((c) => c.title)
+      .slice(0, CANDIDATES);
+    // Si pidió un tipo, solo ese tipo. Si el modelo no trajo NINGUNO del tipo,
+    // la lista queda vacía y se reintenta (mejor que entregar el tipo equivocado).
+    if (wantType) candidates = candidates.filter((c) => c.type === wantType);
+    const txt = (v, n) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+    return {
+      candidates,
+      clarification: txt(parsed.clarification_needed, 200),
+      remember: txt(parsed.remember, 160),
+      onlyRemember: parsed.only_remember === true && !!txt(parsed.remember, 160),
+      ack: txt(parsed.ack, 120),
+    };
+  };
+  // Un hipo del modelo (JSON roto, lista vacía, 5xx que el retry de red no
+  // salvó) no tira el turno: una segunda oportunidad y recién ahí se rinde.
+  try {
+    const first = await attempt();
+    if (first.candidates.length || first.onlyRemember) return first;
+    console.warn("[recommend] el paso 1 vino sin candidatos, reintento");
+  } catch (e) {
+    console.warn("[recommend] el paso 1 falló, reintento:", e.message);
+  }
+  return attempt();
+}
+
+// El primero disponible según el ranking del modelo; "unknown" (TMDB no lo
+// resolvió) va después de los confirmados y antes que nada — nunca peor que hoy.
+function pickWinner(candidates) {
+  const ok = candidates.find((c) => c._avail === "confirmed" || c._avail === "corrected");
+  if (ok) return ok;
+  return candidates.find((c) => c._avail === "unknown" || c._avail === undefined) || null;
+}
+
+async function recommendSingle({ messages, baseContext, validationPlatforms, country, excludeTitles, tasteProfile, rejected, mode = null }) {
+  const t0 = Date.now();
+  const profileBlock = tasteProfile && String(tasteProfile).trim()
+    ? `Perfil de gusto (lo que Miru sabe de esta persona por su historial en el dispositivo):\n${String(tasteProfile).trim().slice(0, 1500)}`
+    : null;
+  const rejectedBlock = formatRejected(rejected);
+  const exclude = [...(excludeTitles || [])];
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const modeDef = mode && MODES[mode] ? MODES[mode] : null;
+  // Lo que pide el mensaje manda sobre el modo ("una peli" en modo Maratón = peli).
+  const wantType = requestedType(lastUser && lastUser.content) || (modeDef ? modeDef.type : null);
+  const typeLine = wantType ? `Tipo pedido: SOLO ${wantType === "Película" ? "películas" : "series"}.` : null;
+  const modeLine = modeDef ? `Modo elegido por la persona: "${modeDef.label}". ${modeDef.rule}` : null;
+
+  // 1) Proponer. Si NINGÚN candidato está en el país, un solo reintento con
+  //    esos títulos excluidos; después, degradar suave (como siempre).
+  let proposed = await proposeCandidates({ messages, wantType, contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine(exclude, true)] });
+  // Solo quería que Miru recordara algo: se confirma y no se recomienda nada.
+  if (proposed.onlyRemember) {
+    console.log(`[metrics-single] ${JSON.stringify({ only_remember: true, propose_ms: Date.now() - t0 })}`);
+    return {
+      filters: {}, main: null, alternatives: [], clarification_needed: null,
+      cinephile_note: proposed.ack || "Anotado, lo voy a tener en cuenta.",
+      remember: proposed.remember,
+    };
+  }
+  let candidates = proposed.candidates;
+  const tProp = Date.now();
+  await validateItems(candidates, validationPlatforms, country);
+  let winner = pickWinner(candidates);
+  let retried = false;
+  // Presupuesto: el reintento por "ninguno disponible" suma otra elección +
+  // otra validación. Si ya pasaron 20 s, mejor degradar suave que dejar al
+  // teléfono esperando hasta que corte.
+  if (!winner && candidates.length && Date.now() - t0 < 20000) {
+    retried = true;
+    const again = await proposeCandidates({
+      messages,
+      wantType,
+      contextLines: [...baseContext, modeLine, typeLine, profileBlock, rejectedBlock, excludeLine([...exclude, ...candidates.map((c) => c.title)], true), "Los candidatos anteriores NO están disponibles en el país del usuario: proponé otros."],
+    });
+    if (again.candidates.length) {
+      candidates = again.candidates;
+      if (!proposed.clarification && again.clarification) proposed = { ...proposed, clarification: again.clarification };
+      if (!proposed.remember && again.remember) proposed = { ...proposed, remember: again.remember };
+      await validateItems(candidates, validationPlatforms, country);
+      winner = pickWinner(candidates);
+    }
+  }
+  if (!winner) winner = candidates[0] || null;
+  if (!winner) throw new Error("El modelo no propuso candidatos.");
+  const tTmdb = Date.now();
+  const avail = winner._avail || "unknown";
+  const pickedRank = candidates.indexOf(winner) + 1;
+  for (const c of candidates) delete c._avail;
+
+  // 2) La carta, con la película ya confirmada. Sigue la conversación (el
+  //    modelo ve el hilo) y recibe el perfil y los descartes para poder citar
+  //    UNA señal. Si esta llamada falla, se cae a la "line" del paso 1: la
+  //    persona igual recibe la película, con un porqué corto.
+  const pitchMessages = [
+    ...injectContext(messages, [...baseContext, profileBlock, rejectedBlock]),
+    {
+      role: "user",
+      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}. Escribí la carta.`,
+    },
+  ];
+  // El hilo tiene que terminar en un turno de usuario y alternar roles: si el
+  // último mensaje del historial ya era del usuario, se fusionan.
+  const merged = mergeTrailingUser(pitchMessages);
+  let pitch = null;
+  try {
+    pitch = await callJson({ system: SYSTEM_PITCH, messages: merged, maxTokens: 650, timeoutMs: 25000 });
+  } catch (e) {
+    console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
+  }
+  const tPitch = Date.now();
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+
+  const main = {
+    title: winner.title,
+    platform: winner.platform,
+    duration: String((pitch && pitch.duration) || ""),
+    type: winner.type,
+    year: winner.year,
+    ageRating: pitch && pitch.ageRating ? String(pitch.ageRating) : undefined,
+    synopsis: pitch && pitch.synopsis ? String(pitch.synopsis) : undefined,
+    reason: String((pitch && pitch.reason) || winner.line || ""),
+    posterUrl: winner.posterUrl || undefined,
+    backdropUrl: winner.backdropUrl || undefined,
+  };
+  return {
+    filters: {},
+    main,
+    alternatives: [],
+    clarification_needed: proposed.clarification,
+    cinephile_note: pitch && pitch.cinephile_note ? String(pitch.cinephile_note) : null,
+    remember: proposed.remember,
+  };
+}
+
+function mergeTrailingUser(messages) {
+  const out = [];
+  for (const m of messages) {
+    const prev = out[out.length - 1];
+    if (prev && prev.role === m.role) out[out.length - 1] = { role: m.role, content: `${prev.content}\n\n${m.content}` };
+    else out.push({ role: m.role, content: m.content });
+  }
+  return out;
 }
 
 // Regenera la intro de voz cuando la validación de disponibilidad bajó al main

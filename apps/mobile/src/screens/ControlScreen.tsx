@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useTvChannel } from "../hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "../lib/tv-protocol";
-import { colorForPlatform, PLATFORM_COLORS } from "../lib/deeplink";
+import { colorForPlatform, PLATFORM_COLORS, textOnPlatform } from "../lib/deeplink";
 import { Orb, type OrbPhase } from "../components/Orb";
 import { ControlSearchOverlay } from "../components/ControlSearchOverlay";
 import { detectPlatformMentions } from "../lib/platform-mentions";
@@ -322,7 +322,7 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
     : todayTitles.map((t, i) => ({ id: "tt" + i, title: t }));
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background safe-top safe-bottom">
+    <div className="theme-dark fixed inset-0 z-50 flex flex-col bg-background text-foreground safe-top safe-bottom">
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
         <button onClick={onClose} className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground active:scale-95">
@@ -441,8 +441,8 @@ export function ControlScreen({ session, onClose }: ControlScreenProps) {
               <p className="truncate text-base font-bold text-foreground">{nowPlaying.title}</p>
               {nowPlaying.platform && (
                 <span
-                  className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                  style={{ backgroundColor: colorForPlatform(nowPlaying.platform) }}
+                  className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ backgroundColor: colorForPlatform(nowPlaying.platform), color: textOnPlatform(nowPlaying.platform) }}
                 >
                   {platformLabel(nowPlaying.platform)}
                 </span>

@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { colorForPlatform } from "../lib/deeplink";
+import { PLATFORMS } from "../lib/prefs";
 
 interface ControlSearchOverlayProps {
   query: string;
@@ -25,7 +26,7 @@ export function ControlSearchOverlay({ query, platforms, fixedPlatform, headline
     ? [fixedPlatform]
     : platforms.length > 0
       ? platforms
-      : ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+      : PLATFORMS;
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {

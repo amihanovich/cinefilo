@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { colorForPlatform } from "../lib/deeplink";
+import { PLATFORMS } from "../lib/prefs";
 
 interface SearchLoadingProps {
   query: string;
@@ -15,7 +16,7 @@ interface SearchLoadingProps {
 }
 
 export function SearchLoading({ query, platforms, type }: SearchLoadingProps) {
-  const list = platforms.length > 0 ? platforms : ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
+  const list = platforms.length > 0 ? platforms : PLATFORMS;
   const [idx, setIdx] = useState(0);
 
   // Ciclado de plataformas para la rueda del medio.

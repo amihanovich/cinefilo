@@ -26,6 +26,16 @@ const PLATFORM_TO_JW: Record<string, string[]> = {
   "Apple TV+": ["atp"],
   "Paramount+": ["pmp"],
   "Star+": ["stp", "sop", "dnp"],
+  // Universal+: no tenemos su technicalName confirmado, se matchea por nombre.
+  "Universal+": [],
+};
+
+// Fallback por NOMBRE del package (JustWatch devuelve `clearName` en la misma
+// query). Sirve para las plataformas cuyo technicalName no tenemos confirmado y
+// para cubrir variantes ("Universal+ Amazon Channel"): un rebrand o un código
+// nuevo no rompe la confirmación de disponibilidad.
+const PLATFORM_TO_JW_NAME: Record<string, RegExp> = {
+  "Universal+": /universal\s*(?:\+|plus)/i,
 };
 
 const QUERY = `
@@ -171,6 +181,7 @@ export async function jwSearch(
 ): Promise<JwResult> {
   const objectTypes = type === "Serie" ? ["SHOW"] : ["MOVIE"];
   const wantedPackages = PLATFORM_TO_JW[platform] ?? [];
+  const wantedName = PLATFORM_TO_JW_NAME[platform];
 
   let data: unknown;
   try {
@@ -227,7 +238,8 @@ export async function jwSearch(
     const match = offers.find(
       (o) =>
         o.monetizationType === "FLATRATE" &&
-        wantedPackages.includes(o.package.technicalName),
+        (wantedPackages.includes(o.package.technicalName) ||
+          (wantedName ? wantedName.test(o.package.clearName ?? "") : false)),
     );
     if (!match) continue;
 

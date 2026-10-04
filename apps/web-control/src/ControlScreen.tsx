@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useTvChannel } from "./hooks/use-tv-channel";
 import type { ControlCommandMessage, MediaItem } from "./lib/tv-protocol";
-import { colorForPlatform, platformLabel, PLATFORM_COLORS } from "./lib/deeplink";
+import { colorForPlatform, platformLabel, PLATFORM_COLORS, textOnPlatform } from "./lib/deeplink";
 import { Orb, type OrbPhase } from "./components/Orb";
 import { SearchLoading } from "./components/SearchLoading";
 import { detectPlatformMentions } from "./lib/platform-mentions";
@@ -432,8 +432,8 @@ export function ControlScreen({ session }: ControlScreenProps) {
               <p className="truncate text-base font-bold text-foreground">{nowPlaying.title}</p>
               {nowPlaying.platform && (
                 <span
-                  className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
-                  style={{ backgroundColor: colorForPlatform(nowPlaying.platform) }}
+                  className="mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  style={{ backgroundColor: colorForPlatform(nowPlaying.platform), color: textOnPlatform(nowPlaying.platform) }}
                 >
                   {platformLabel(nowPlaying.platform)}
                 </span>

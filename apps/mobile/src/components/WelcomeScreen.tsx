@@ -5,7 +5,8 @@
 // el splash lleva directo a una reco fresca ("Sorprendeme" automático).
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, Loader2, Shuffle, QrCode } from "lucide-react";
+import { Send, Shuffle, QrCode } from "lucide-react";
+import { BrandSplash } from "./BrandSplash";
 import { Orb } from "./Orb";
 import { VoicePill } from "./VoicePill";
 import { TopPlatformRows } from "./TopPlatformRows";
@@ -124,18 +125,7 @@ export function WelcomeScreen({ firstTime, busy, error, onSubmit, onSurprise, on
 
   // ── Splash / loading ────────────────────────────────────────────────────────
   if (phase === "splash" || busy) {
-    return (
-      <div className="flex h-[100dvh] flex-col items-center justify-center gap-6 bg-background px-8 text-center safe-top safe-bottom">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-7 w-7 text-primary" />
-          <span className="text-2xl font-bold tracking-tight text-foreground">Miru</span>
-        </div>
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <p className="max-w-xs text-sm text-muted-foreground">
-          {busy ? "Buscando las mejores opciones…" : SPLASH_MSG}
-        </p>
-      </div>
-    );
+    return <BrandSplash message={busy ? "Buscando las mejores opciones…" : SPLASH_MSG} />;
   }
 
   // ── Agente (solo 1ª vez) ────────────────────────────────────────────────────

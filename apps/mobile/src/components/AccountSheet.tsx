@@ -7,9 +7,9 @@ import { colorForPlatform, platformLabel, deepLinkFor } from "../lib/deeplink";
 import { openInApp } from "../lib/justwatch";
 import { fetchPostersClient } from "../lib/posters";
 import { loadOpened, type OpenedItem } from "../lib/opened";
+// La lista canónica vive en lib/prefs.ts (una sola, para todas las pantallas).
+import { PLATFORMS } from "../lib/prefs";
 
-// Star+ se fusionó con Disney+ en LatAm (2024) — ya no es seleccionable.
-const PLATFORMS = ["Netflix", "Disney+", "Max", "Prime Video", "Apple TV+", "Paramount+"];
 // Landing de descargas (muestra cómo instalar la app en el Android TV).
 const LANDING_URL = "https://landing-page-miru.up.railway.app/";
 const PLATFORMS_KEY = "miru:platforms";
@@ -60,9 +60,14 @@ interface AccountSheetProps {
   onPlatformsChange?: (platforms: string[]) => void;
   onCountryChange?: (country: string) => void;
   onOpenTvRemote?: () => void;
+  /** Cuenta (solo la app conversacional las pasa). */
+  user?: { name: string | null; email: string | null; avatarUrl: string | null } | null;
+  onSignIn?: () => void;
+  onSignOut?: () => void;
+  onDeleteAccount?: () => void;
 }
 
-export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote }: AccountSheetProps) {
+export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange, onOpenTvRemote, user, onSignIn, onSignOut, onDeleteAccount }: AccountSheetProps) {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   const [section, setSection] = useState<Section>("main");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -130,6 +135,33 @@ export function AccountSheet({ open, onClose, onPlatformsChange, onCountryChange
 
         {/* Contenido */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
+          {section === "main" && (onSignIn || onSignOut) && (
+            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="" referrerPolicy="no-referrer" className="h-11 w-11 rounded-full object-cover" />
+              ) : (
+                <div className="h-11 w-11 rounded-full bg-muted" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[15px] font-semibold text-foreground">{user ? (user.name ?? "Tu cuenta") : "Sin cuenta"}</p>
+                <p className="truncate text-[12px] text-muted-foreground">{user ? user.email : "Entrá con Google para usar Miru sin límite."}</p>
+              </div>
+              {user ? (
+                <button onClick={onSignOut} className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold text-foreground/80 active:scale-95">Cerrar sesión</button>
+              ) : (
+                <button onClick={onSignIn} className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground active:scale-95">Entrar</button>
+              )}
+            </div>
+          )}
+          {section === "main" && (onSignIn || onSignOut) && (
+            <div className="-mt-3 mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12px] text-muted-foreground">
+              <a href="/privacidad" target="_blank" rel="noreferrer" className="underline">Privacidad</a>
+              <a href="/terminos" target="_blank" rel="noreferrer" className="underline">Términos</a>
+              {user && onDeleteAccount && (
+                <button onClick={onDeleteAccount} className="ml-auto text-red-700 underline">Borrar mi cuenta</button>
+              )}
+            </div>
+          )}
           {section === "main" && (
             <MainSection
               platforms={platforms}
@@ -208,8 +240,8 @@ function MainSection({
                 className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all active:scale-95"
                 style={
                   active
-                    ? { borderColor: color, backgroundColor: `${color}22`, color }
-                    : { borderColor: "var(--color-border)", backgroundColor: "var(--color-muted)", color: "var(--color-muted-foreground)" }
+                    ? { borderColor: color, backgroundColor: `${color}22`, color: "hsl(var(--foreground))" }
+                    : { borderColor: "hsl(var(--border))", backgroundColor: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))" }
                 }
               >
                 <span
