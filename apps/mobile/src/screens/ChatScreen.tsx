@@ -629,7 +629,7 @@ export function ChatScreen() {
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center">
                   <MiruMark size={22} state="thinking" />
                 </span>
-                <span className="text-[14px] text-muted-foreground">Buscando la tuya…</span>
+                <span className="text-[14px] text-muted-foreground">Revisando tus plataformas…</span>
               </div>
             );
           }

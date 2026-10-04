@@ -150,7 +150,7 @@ export function VoiceMode({
   const hablemos = name ? `Hablemos, ${name}` : "Hablemos";
   const headline =
     state === "listening" ? (heard ? "Te escucho" : hablemos)
-    : state === "thinking" ? "Buscando la tuya…"
+    : state === "thinking" ? "Revisando tus plataformas…"
     : state === "speaking" ? (answer?.question ?? "")
     : "En pausa";
 
