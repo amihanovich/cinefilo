@@ -261,8 +261,10 @@ export function ChatScreen() {
         track("memory_note_added", { source: "chat" });
       }
 
-      // Solo pidió que recuerde algo (sin pedir película): Miru acusa recibo y listo.
-      if (!data?.main?.title && remember) {
+      // Sin película: o solo pidió que recuerde algo (Miru acusa recibo), o el
+      // motor no encontró qué proponer y repregunta. En los dos casos es un
+      // mensaje de Miru, no un error.
+      if (!data?.main?.title && (remember || (data?.cinephile_note ?? "").trim())) {
         const ack = (data.cinephile_note ?? "").trim() || "Anotado, lo voy a tener en cuenta.";
         historyRef.current = [...history, { role: "assistant", content: ack }];
         const ackId = uid();

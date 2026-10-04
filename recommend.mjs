@@ -345,7 +345,7 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
   // Si vino sin candidatos (p. ej. el modelo creyó que solo había que
   // recordar algo, al ver las notas del perfil), el reintento le aclara que
   // la persona quiere algo para ver.
-  const NUDGE = "IMPORTANTE: la persona está pidiendo algo para ver y NO pidió que recuerdes nada: proponé los 6 candidatos (only_remember: false).";
+  const NUDGE = "IMPORTANTE: la persona está pidiendo algo para ver y NO pidió que recuerdes nada. Proponé SIEMPRE los 6 candidatos (only_remember: false), aunque además repreguntes, y aunque el perfil choque con el pedido: el pedido de HOY manda.";
   try {
     const first = await attempt();
     if (first.candidates.length || first.onlyRemember) return first;
@@ -410,6 +410,13 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     };
   }
   let candidates = proposed.candidates;
+  // Ni con el reintento hubo películas (repregunta sola, o todo lo propuesto
+  // estaba excluido): en vez de un error, Miru pregunta o pide más detalle.
+  if (!candidates.length) {
+    const ask = proposed.clarification || "No encontré algo que cierre del todo con eso. ¿Me contás un poco más qué tenés ganas de ver?";
+    console.log(`[metrics-single] ${JSON.stringify({ no_candidates: true, clarification: !!proposed.clarification, propose_ms: Date.now() - t0 })}`);
+    return { filters: {}, main: null, alternatives: [], clarification_needed: ask, cinephile_note: ask, remember: null };
+  }
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
   // Para la sorpresa cuenta lo recién llegado Y producido en los últimos años.
