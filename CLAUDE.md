@@ -107,6 +107,7 @@ no se borró nada.
 - **Motor en dos pasos** (`recommendSingle` en `recommend.mjs`): Haiku **propone 6 candidatos**
   rankeados (barato), **TMDB decide** cuál está en el país, y recién ahí Haiku **escribe la carta** para
   ese título. Nunca más "Ver en Netflix" de algo que no está. Ver "Notas de desarrollo".
+- **Época**: por defecto la mayoría de los candidatos son de los últimos 15 años y como máximo uno anterior al 2000, salvo que pida algo viejo; los recién llegados de más de 20 años no entran salvo ese pedido. Lo inesperado se busca en otro país u otro tono, no décadas atrás.
 - **Balance conocido / inesperado + recién llegados** (`fresh.mjs`, decisión 2026-10): no todos vieron
   todo (un conocido que encaja sigue valiendo), pero Miru vale por lo que la persona no encontraría sola
   en la portada de su plataforma. `fresh.mjs` lee el feed "Nuevo" de **JustWatch** (GraphQL no oficial;
@@ -130,7 +131,7 @@ no se borró nada.
   (`only_remember`), el motor no busca película: vuelve `main: null` + `cinephile_note` = acuse, y la
   app lo muestra sin gastar un uso de prueba (en el modo voz, Miru lo dice y sigue escuchando). Las
   notas encabezan el `tasteProfile` ("respetalo SIEMPRE") y van a `/api/profile`.
-- **Modos de búsqueda (las "habilidades")**: arriba del "¿Dónde busco?", **"¿Qué buscás?"** con 6
+- **Modos de búsqueda (las "habilidades") — APAGADOS por ahora** (`MODES_ENABLED = false` en `lib/prefs.ts`: sin sección en el +, sin chip, `mode` viaja null; el backend los sigue entendiendo): arriba del "¿Dónde busco?", **"¿Qué buscás?"** con 6
   modos (`MODES` en `lib/prefs.ts` y en `recommend.mjs`: Con chicos, Para dos, Algo corto, Maratón
   →serie, Cine de autor, Un clásico). Queda puesto (`miru:mode`) y se ve como chip en el composer
   hasta que lo sacás; viaja como `mode` y entra al prompt del paso 1 como regla dura.

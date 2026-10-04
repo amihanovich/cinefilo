@@ -142,7 +142,11 @@ export type ModeId = (typeof MODES)[number]["id"];
 
 const MODE_KEY = "miru:mode";
 
+/** Los modos ("habilidades") quedan apagados por ahora (decisión 2026-10). */
+export const MODES_ENABLED = false;
+
 export function loadMode(): ModeId | null {
+  if (!MODES_ENABLED) return null;
   try {
     const v = localStorage.getItem(MODE_KEY);
     return MODES.some((m) => m.id === v) ? (v as ModeId) : null;

@@ -4,7 +4,7 @@
 // guardado y se ve en el composer.
 
 import { Check, Eye, X } from "lucide-react";
-import { PLATFORMS, MODES, isAllPlatforms, togglePlatformIn, type ModeId } from "../lib/prefs";
+import { PLATFORMS, MODES, MODES_ENABLED, isAllPlatforms, togglePlatformIn, type ModeId } from "../lib/prefs";
 import { platformLabel } from "../lib/deeplink";
 import { PlatformIcon } from "./PlatformIcon";
 
@@ -39,6 +39,7 @@ export function PlatformSheet({
       <div className="fade-in fixed inset-x-0 bottom-0 z-[70] max-h-[90dvh] overflow-y-auto rounded-t-3xl border-t border-border bg-card px-5 pb-6 pt-4 shadow-2xl safe-bottom">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" />
 
+        {MODES_ENABLED && (<>
         <div className="mb-2 flex items-center justify-between">
           <div>
             <p className="text-base font-bold text-foreground">¿Qué buscás?</p>
@@ -64,6 +65,7 @@ export function PlatformSheet({
             );
           })}
         </div>
+        </>)}
 
         <div className="mb-3 flex items-center justify-between">
           <div>
@@ -72,6 +74,11 @@ export function PlatformSheet({
               {all ? "En todas tus plataformas." : "Tocá para sumar o sacar. Si sacás todas, vuelvo a buscar en todas."}
             </p>
           </div>
+          {!MODES_ENABLED && (
+            <button onClick={onClose} aria-label="Cerrar" className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground active:scale-90">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <button

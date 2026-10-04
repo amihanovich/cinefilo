@@ -207,7 +207,7 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
   const plats = platforms && platforms.length ? new Set(platforms) : null;
   const ex = new Set((exclude || []).map(norm));
   const now = Date.now();
-  const base = snap.items
+  const recentBase = snap.items
     .filter((it) => (!plats || plats.has(it.platform)) && (!type || it.type === type))
     .filter((it) => !ex.has(norm(it.title)) && !(it.originalTitle && ex.has(norm(it.originalTitle))))
     // Lo flojo no suma: sin puntaje o con poco consenso queda afuera.
@@ -216,6 +216,11 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
     // hace un descubrimiento. Lo archiconocido no entra como recién llegado.
     .filter((it) => it.votes === null || it.votes < 400000)
     .map((it) => ({ ...it, days: Math.max(0, Math.round((now - new Date(it.addedAt).getTime()) / 86400000)) }));
+  // Que una de 1957 "llegue" a Prime no la vuelve una buena sorpresa: salvo
+  // que pida algo viejo, los recién llegados son de los últimos 20 años.
+  const wantsOld = /\b(cl[aá]sic[ao]s?|viej[ao]s?|antigu[ao]s?|de los (40|50|60|70|80|90)|a[nñ]os (40|50|60|70|80|90)|blanco y negro)\b/i.test(String(query || ""));
+  const minYear = new Date().getFullYear() - 20;
+  const base = wantsOld ? recentBase : recentBase.filter((it) => !it.year || Number(it.year) >= minYear);
   const wanted = genresIn(query);
   let pool = base;
   if (wanted.length) {
