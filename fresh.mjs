@@ -212,6 +212,9 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
     .filter((it) => !ex.has(norm(it.title)) && !(it.originalTitle && ex.has(norm(it.originalTitle))))
     // Lo flojo no suma: sin puntaje o con poco consenso queda afuera.
     .filter((it) => it.imdb !== null && it.imdb >= 6 && (it.votes === null || it.votes >= 5000))
+    // Las plataformas rotan clásicos: que Interstellar "vuelva" a Prime no la
+    // hace un descubrimiento. Lo archiconocido no entra como recién llegado.
+    .filter((it) => it.votes === null || it.votes < 400000)
     .map((it) => ({ ...it, days: Math.max(0, Math.round((now - new Date(it.addedAt).getTime()) / 86400000)) }));
   const wanted = genresIn(query);
   let pool = base;

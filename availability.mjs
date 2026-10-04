@@ -404,6 +404,37 @@ export async function resolveTitle(title, year, type, country) {
 }
 
 /**
+ * Director/creador y elenco principal de un título ya resuelto (para que la
+ * carta cite datos verdaderos: Haiku inventaba directores de lo reciente).
+ * @returns {Promise<{directors:string[], cast:string[]}|null>}
+ */
+export async function titleCredits(tmdbId, type) {
+  if (!availabilityEnabled() || !tmdbId) return null;
+  const kind = /serie/i.test(String(type || "")) ? "tv" : "movie";
+  const key = `credits|${kind}|${tmdbId}`;
+  const hit = cacheGet(key, false);
+  if (hit !== undefined) return hit;
+  try {
+    const [credits, details] = await Promise.all([
+      tmdbGet(`/${kind}/${tmdbId}/credits`, "language=es-AR"),
+      kind === "tv" ? tmdbGet(`/tv/${tmdbId}`, "language=es-AR") : Promise.resolve(null),
+    ]);
+    const directors = kind === "tv"
+      ? ((details && details.created_by) || []).map((c) => c.name)
+      : (credits.crew || []).filter((c) => c.job === "Director").map((c) => c.name);
+    const value = {
+      directors: [...new Set(directors)].slice(0, 3),
+      cast: (credits.cast || []).slice(0, 4).map((c) => c.name),
+    };
+    cacheSet(key, value);
+    return value;
+  } catch (e) {
+    console.warn(`[availability] créditos fallaron para ${kind}/${tmdbId}: ${e.message}`);
+    return null;
+  }
+}
+
+/**
  * Valida una tanda de ítems del LLM contra la disponibilidad real.
  * Anota cada ítem con `_avail`:
  *   "confirmed"  → está en la plataforma que dijo Haiku
@@ -430,6 +461,7 @@ export async function validateItems(items, userPlatforms, country) {
   await Promise.all(items.map(async (it) => {
     const r = await resolveTitle(it.title, it.year, it.type, country);
     if (!r) { it._avail = "unknown"; return; }
+    it._tmdbId = r.tmdbId;
     if (r.posterUrl && !it.posterUrl) it.posterUrl = r.posterUrl;
     if (r.backdropUrl && !it.backdropUrl) it.backdropUrl = r.backdropUrl;
     if (!r.providers.length) { it._avail = "none"; return; }
@@ -484,6 +516,7 @@ export function pickAvailable(items, want, minFill, expose) {
   for (const it of items || []) {
     const a = it._avail;
     delete it._avail;
+    delete it._tmdbId;
     if (a === "confirmed" || a === "corrected") {
       if (expose) it.avail = "confirmed";
       ok.push(it);

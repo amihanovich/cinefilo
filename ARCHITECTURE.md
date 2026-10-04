@@ -87,7 +87,7 @@ por ser nuevos), junto a ≥2 menos obvios; más dosis si el perfil tiene varios
 `pickWinner` tiene una **sorpresa** (`SURPRISE_RATE` 0.33): si el primero disponible no es recién llegado
 y hay uno confirmado en el top 4, gana ese. `excludeTitles` se aplica también en código sobre los
 candidatos (antes solo iba en el prompt). La carta NO menciona que es nuevo (regla en `SYSTEM_PITCH`);
-`main.fresh = {platform, days}` es solo para métricas (log: `winner_fresh`, `surprise`).
+`main.fresh = {platform, days}` es solo para métricas (log: `winner_fresh`, `surprise`). Lo archiconocido (≥400k votos en IMDb) no entra como recién llegado: las plataformas rotan clásicos. En los 3 primeros candidatos, a lo sumo UNO archiconocido. La carta recibe director/creador y elenco reales (`titleCredits()` de `availability.mjs`, TMDB, cacheado) y solo puede citar esos.
 Costo por turno ≈ 1.3k tokens de entrada / 450 de salida en dos llamadas. `alternativesCount >= 1` no cambió.
 
 **Rate limit** por IP y minuto (`ratelimit.mjs`, en memoria por proceso): general 90 (`/api/*` salvo ping), IA 20

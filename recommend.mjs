@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable, detectPlatformMentions } from "./availability.mjs";
+import { validateItems, pickAvailable, detectPlatformMentions, titleCredits } from "./availability.mjs";
 import { freshArrivals, freshBlock, matchFresh, norm } from "./fresh.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
@@ -151,6 +151,7 @@ export async function recommend({ messages, platforms, contextHint, seasonHint, 
   const mainOk = main._avail === "confirmed" || main._avail === "corrected" || main._avail === "unknown";
   const pool = pickAvailable(alternatives, askCount, alternativesCount);
   delete main._avail;
+  delete main._tmdbId;
   if (!mainOk && pool.length > 0) {
     main = pool.shift();
     cinephileNote = await renoteFor(main, messages).catch(() => null) || cinephileNote;
@@ -226,7 +227,7 @@ Reglas:
 - ABRIR NO ES VER. "Fue a ver X" quiere decir que tocó "Ver en X" desde Miru; no sabemos si la vio, si la terminó ni si le gustó. Solo un veredicto explícito ("le gustó", "no tanto", "no la vio") dice algo de eso. No razones como si hubiera visto lo que solo abrió.
 - Familia con niños, o cualquier mención de menores: SOLO contenido ATP o PG. Sin excepciones.
 - Ajustá la duración al tiempo disponible; "Capítulo de serie" = solo series.
-- BALANCE ENTRE LO CONOCIDO Y LO INESPERADO: no todos vieron todo, así que un título conocido que encaja perfecto sigue siendo una gran respuesta. Pero Miru vale por lo que la persona NO encontraría sola en la portada de su plataforma: mezclá. Entre los 6, poné al menos 2 que no sean lo primero que sale al buscar ese género (lo menos obvio, otra época u otro país).
+- BALANCE ENTRE LO CONOCIDO Y LO INESPERADO: no todos vieron todo, así que un título conocido que encaja perfecto sigue siendo una buena respuesta. Pero Miru vale por lo que la persona NO encontraría sola en la portada de su plataforma. Entre los 3 PRIMEROS, como máximo UNO archiconocido (de los que están en cualquier top histórico o fueron tanque de taquilla: Cadena perpetua, Interstellar, El padrino, Titanic y compañía); los otros dos, títulos que encajen igual de bien y que la mayoría no tenga vistos. No pongas siempre el archiconocido primero: alternalo según cuál encaje mejor.
 - RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y probablemente no los vio, aunque tengan años (llegaron hace poco al país). Si alguno encaja DE VERDAD con el pedido, incluí 1 o 2 entre los 6, en el lugar que les dé su encaje (no los subas por ser nuevos). Nunca fuerces uno que no encaje.
 - SI YA VIO MUCHO: si el perfil muestra 2 o más "ya la había visto", esta persona ve mucho y lo obvio le rebota: subí la dosis de lo inesperado y de los recién llegados en los primeros puestos.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
@@ -420,8 +421,15 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const avail = winner._avail || "unknown";
   const pickedRank = candidates.indexOf(winner) + 1;
   const surprise = !!winner._surprise;
-  for (const c of candidates) { delete c._avail; delete c._surprise; }
+  const winnerTmdbId = winner._tmdbId;
+  for (const c of candidates) { delete c._avail; delete c._surprise; delete c._tmdbId; }
   const freshHit = matchFresh(fresh, winner.title);
+  // Datos verdaderos para la carta (director/elenco de TMDB): sin esto, Haiku
+  // inventaba directores, sobre todo de lo reciente.
+  const credits = winnerTmdbId ? await titleCredits(winnerTmdbId, winner.type) : null;
+  const factsLine = credits && (credits.directors.length || credits.cast.length)
+    ? ` Datos verificados: ${credits.directors.length ? `${winner.type === "Serie" ? "creada por" : "dirigida por"} ${credits.directors.join(", ")}` : ""}${credits.directors.length && credits.cast.length ? "; " : ""}${credits.cast.length ? `con ${credits.cast.join(", ")}` : ""}. Si nombrás director o elenco, usá SOLO estos.`
+    : " No tenés datos verificados de director ni elenco: si no estás seguro, no los nombres.";
   const freshCandidates = candidates.filter((c) => matchFresh(fresh, c.title)).length;
 
   // 2) La carta, con la película ya confirmada. Sigue la conversación (el
@@ -432,7 +440,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     ...injectContext(messages, [...baseContext, profileBlock, rejectedBlock]),
     {
       role: "user",
-      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}. Escribí la carta.`,
+      content: `Película elegida y confirmada: "${winner.title}" (${winner.year || "s/f"}, ${winner.type}) en ${winner.platform}. Tu nota de elección: ${winner.line || "-"}.${factsLine} Escribí la carta.`,
     },
   ];
   // El hilo tiene que terminar en un turno de usuario y alternar roles: si el
