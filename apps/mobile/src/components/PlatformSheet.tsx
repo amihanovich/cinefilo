@@ -3,7 +3,7 @@
 // "¿Dónde busco?" (las plataformas: "Todas" o tu combinación). Lo elegido queda
 // guardado y se ve en el composer.
 
-import { Check, X } from "lucide-react";
+import { Check, Eye, X } from "lucide-react";
 import { PLATFORMS, MODES, isAllPlatforms, togglePlatformIn, type ModeId } from "../lib/prefs";
 import { platformLabel } from "../lib/deeplink";
 import { PlatformIcon } from "./PlatformIcon";
@@ -20,13 +20,15 @@ function Switch({ on }: { on: boolean }) {
 }
 
 export function PlatformSheet({
-  open, selected, onChange, mode, onModeChange, onClose,
+  open, selected, onChange, mode, onModeChange, includeSeen, onIncludeSeenChange, onClose,
 }: {
   open: boolean;
   selected: string[];
   onChange: (next: string[]) => void;
   mode: ModeId | null;
   onModeChange: (next: ModeId | null) => void;
+  includeSeen: boolean;
+  onIncludeSeenChange: (next: boolean) => void;
   onClose: () => void;
 }) {
   if (!open) return null;
@@ -101,6 +103,24 @@ export function PlatformSheet({
             </button>
           );
         })}
+
+        <div className="my-1 h-px bg-border" />
+
+        {/* Lo marcado "Ya la vi" queda afuera salvo que pidas volver a ver. */}
+        <button
+          onClick={() => onIncludeSeenChange(!includeSeen)}
+          className="flex w-full items-center gap-3 rounded-2xl px-2 py-3 active:bg-muted"
+          aria-pressed={includeSeen}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Eye className="h-4 w-4" />
+          </span>
+          <span className="flex-1 text-left">
+            <span className="block text-[15px] font-semibold text-foreground">Incluir ya vistas</span>
+            <span className="block text-[11.5px] leading-tight text-muted-foreground">Para volver a ver alguna que marcaste.</span>
+          </span>
+          <Switch on={includeSeen} />
+        </button>
       </div>
     </>
   );

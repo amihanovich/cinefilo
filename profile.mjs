@@ -55,7 +55,7 @@ function formatSignals({ requests, opened, rejected, verdicts, sessions, previou
   const after = verdicts.filter((v) => v.stage !== "card");
   if (card.length) {
     lines.push("\nReaccionó a la propuesta en el momento (sin verla todavía):");
-    for (const v of card) lines.push(`- ${v.title}: ${v.verdict === "liked" ? "👍 le cerró" : "👎 no era para esa persona"}`);
+    for (const v of card) lines.push(`- ${v.title}: ${v.verdict === "liked" ? "👍 le cerró" : v.verdict === "seen" ? "ya la había visto (no dice si le gustó)" : "👎 no era para esa persona"}`);
   }
   if (after.length) {
     lines.push("\nDespués de verla (Miru se lo preguntó al volver):");

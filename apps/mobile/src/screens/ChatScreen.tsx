@@ -11,8 +11,8 @@
 // backend las sintetiza en un perfil de gusto que viaja con cada pedido. Es lo
 // que permite que la carta diga "como la última vez te fuiste con X…".
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { User, Volume2, VolumeX, RefreshCw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { User, Volume2, VolumeX, RefreshCw, ThumbsUp, ThumbsDown, Eye, Check } from "lucide-react";
 import { MiruMark } from "../components/MiruMark";
 import { Composer, type DictationState } from "../components/Composer";
 import { PlatformSheet } from "../components/PlatformSheet";
@@ -32,7 +32,7 @@ import { VoiceRecorder, transcribe } from "../lib/stt";
 import { speak, stopSpeaking, isMuted, setMuted } from "../lib/tts";
 import {
   PLATFORMS, loadPlatforms, seedPlatforms, savePlatforms, detectCountry, getCountry, getName, timeGreeting,
-  loadMode, saveMode, modeLabel, type ModeId,
+  loadMode, saveMode, modeLabel, type ModeId, loadIncludeSeen, saveIncludeSeen,
 } from "../lib/prefs";
 import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
@@ -90,6 +90,7 @@ export function ChatScreen() {
   const [platforms, setPlatforms] = useState<string[]>(loadPlatforms);
   // Modo de búsqueda (las "habilidades" del +): queda puesto hasta que lo saques.
   const [mode, setMode] = useState<ModeId | null>(loadMode);
+  const [includeSeen, setIncludeSeen] = useState<boolean>(loadIncludeSeen);
   const [posters, setPosters] = useState<Record<string, string | null>>({});
   const [brokenPosters, setBrokenPosters] = useState<Set<string>>(new Set());
   const [availability, setAvailability] = useState<Record<string, JwResult>>({});
@@ -215,9 +216,11 @@ export function ChatScreen() {
 
     // Pedir otra cosa con una película en pantalla que no abriste ES un
     // descarte, y lo que dijiste es el motivo ("muy larga", "algo más liviano").
-    // "Dame otra" a secas es un descarte sin motivo. Si le pusiste 👍, no cuenta.
+    // "Dame otra" a secas es un descarte sin motivo. Si le pusiste 👍 o "Ya la
+    // vi", no cuenta: no es que no le cerró.
     const prev = lastRecoRef.current;
-    if (prev && !openedRef.current.has(prev.title) && cardVerdict(prev.title) !== "liked" &&
+    const prevVerdict = prev ? cardVerdict(prev.title) : null;
+    if (prev && !openedRef.current.has(prev.title) && prevVerdict !== "liked" && prevVerdict !== "seen" &&
         !rejectedRef.current.some((r) => r.title === prev.title)) {
       const reason = opts?.dry ? null : q;
       rejectedRef.current = [...rejectedRef.current, { title: prev.title, reason }];
@@ -238,10 +241,10 @@ export function ChatScreen() {
         seasonHint: seasonHintShort(ctx),
         weatherHint: null,
         // Lo de esta charla + lo visto/abierto en 30 días: nunca "ya me la sugeriste".
-        excludeTitles: [...new Set([...tasteExclude(), ...shownRef.current])].slice(-60),
+        excludeTitles: [...new Set([...tasteExclude(includeSeen), ...shownRef.current])].slice(-60),
         alternativesCount: 0, // modo "una sola": el porqué largo es el producto
         country: getCountry(),
-        tasteProfile: profileBlock(),
+        tasteProfile: profileBlock(includeSeen),
         userName: name,
         rejected: rejectedRef.current.slice(-8),
         mode,
@@ -340,7 +343,7 @@ export function ChatScreen() {
       // La memoria se re-sintetiza en segundo plano cuando juntó señales.
       void maybeRefreshProfile();
     }
-  }, [platforms, name, mode]);
+  }, [platforms, name, mode, includeSeen]);
 
   const send = () => {
     const q = text.trim();
@@ -423,6 +426,12 @@ export function ChatScreen() {
     setMode(next);
     saveMode(next);
     track("mode_changed", { mode: next });
+  };
+
+  const changeIncludeSeen = (next: boolean) => {
+    setIncludeSeen(next);
+    saveIncludeSeen(next);
+    track("include_seen_changed", { on: next });
   };
 
   const undoMemory = (turnId: string, noteId: string | null) => {
@@ -720,6 +729,8 @@ export function ChatScreen() {
         onChange={changePlatforms}
         mode={mode}
         onModeChange={changeMode}
+        includeSeen={includeSeen}
+        onIncludeSeenChange={changeIncludeSeen}
         onClose={() => setPlatformsOpen(false)}
       />
     </div>
@@ -792,28 +803,27 @@ function RecoCard({
           <p className="mt-1 text-center text-[9px] text-muted-foreground/80">Disponibilidad: JustWatch</p>
 
           {/* La manito: reacción a la propuesta (no un veredicto de vista). Alimenta
-              el perfil; el swap sigue siendo "Dame otra" o decirle qué no cerró. */}
-          <div className="mt-2 flex items-center justify-center gap-2">
-            <button
-              onClick={() => react("liked")}
-              aria-label="Me cierra"
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95",
-                reaction === "liked" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground",
-              )}
-            >
-              <ThumbsUp className="h-3.5 w-3.5" /> Me cierra
-            </button>
-            <button
-              onClick={() => react("meh")}
-              aria-label="No es para mí"
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all active:scale-95",
-                reaction === "meh" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground",
-              )}
-            >
-              <ThumbsDown className="h-3.5 w-3.5" /> No es para mí
-            </button>
+              el perfil; el swap sigue siendo "Dame otra" o decirle qué no cerró.
+              "Ya la vi" no es gusto: saca el título de las próximas propuestas. */}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
+            {([
+              ["liked", "Me gusta", <ThumbsUp key="i" className="h-3 w-3" />],
+              ["meh", "No me gusta", <ThumbsDown key="i" className="h-3 w-3" />],
+              ["seen", "Ya la vi", <Eye key="i" className="h-3 w-3" />],
+            ] as [Verdict, string, ReactNode][]).map(([v, label, icon]) => (
+              <button
+                key={v}
+                onClick={() => react(v)}
+                aria-label={label}
+                aria-pressed={reaction === v}
+                className={cn(
+                  "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
+                  reaction === v ? "bg-primary/10 text-primary" : "text-muted-foreground",
+                )}
+              >
+                {icon} {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>

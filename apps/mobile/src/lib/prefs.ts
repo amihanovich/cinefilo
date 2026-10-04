@@ -153,6 +153,18 @@ export function saveMode(mode: ModeId | null): void {
   try { if (mode) localStorage.setItem(MODE_KEY, mode); else localStorage.removeItem(MODE_KEY); } catch { /* noop */ }
 }
 
+// "Incluir ya vistas": por defecto lo marcado "Ya la vi" no se vuelve a proponer;
+// con esto prendido entra de nuevo (a veces dan ganas de volver a ver una).
+const INCLUDE_SEEN_KEY = "miru:include-seen";
+
+export function loadIncludeSeen(): boolean {
+  try { return localStorage.getItem(INCLUDE_SEEN_KEY) === "1"; } catch { return false; }
+}
+
+export function saveIncludeSeen(on: boolean): void {
+  try { if (on) localStorage.setItem(INCLUDE_SEEN_KEY, "1"); else localStorage.removeItem(INCLUDE_SEEN_KEY); } catch { /* noop */ }
+}
+
 export function modeLabel(mode: ModeId | null): string | null {
   return MODES.find((m) => m.id === mode)?.label ?? null;
 }

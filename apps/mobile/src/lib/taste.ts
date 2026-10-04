@@ -10,7 +10,8 @@ import { loadOpened } from "./opened";
 
 export const TASTE_KEY = "miru:taste";
 
-export type Verdict = "liked" | "meh" | "unseen";
+/** "seen" = "Ya la vi" en la ficha: no es gusto ni disgusto, es "no me la propongas". */
+export type Verdict = "liked" | "meh" | "unseen" | "seen";
 /** "card" = manito en la ficha (reacción a la propuesta); "return" = "¿qué tal estuvo?" al volver. */
 export type VerdictStage = "card" | "return";
 
@@ -157,20 +158,35 @@ export function markAsked(title: string): void {
   save(t);
 }
 
-/** Títulos que no hay que volver a proponer: mostrados en 30 días + abiertos. */
-export function excludeTitles(): string[] {
+/**
+ * Títulos que no hay que volver a proponer: mostrados en 30 días + abiertos +
+ * "Ya la vi". Con `includeSeen` (el toggle "Incluir ya vistas") lo marcado
+ * como visto vuelve a ser elegible.
+ */
+export function excludeTitles(includeSeen = false): string[] {
   const t = loadTaste();
   const cutoff = Date.now() - EXCLUDE_WINDOW_MS;
   const recent = t.shown.filter((s) => new Date(s.ts).getTime() > cutoff).map((s) => s.title);
   const opened = loadOpened().map((o) => o.title);
-  return [...new Set([...opened, ...recent])].slice(-60);
+  // "Ya la vi" no vence a los 30 días: una peli vista no se vuelve a proponer.
+  const seenIt = t.verdicts.filter((v) => v.verdict === "seen").map((v) => v.title);
+  if (includeSeen) {
+    const seenSet = new Set(seenIt);
+    return [...new Set([...opened, ...recent])].filter((x) => !seenSet.has(x)).slice(-60);
+  }
+  return [...new Set([...seenIt, ...opened, ...recent])].slice(-60);
 }
 
 /** El bloque de texto que viaja con cada pedido (≈120-200 tokens). */
-export function profileBlock(): string | null {
+export function profileBlock(includeSeen = false): string | null {
   const t = loadTaste();
   if (t.memoryOff) return null;
   const lines: string[] = [];
+  // "Incluir ya vistas": además de no excluirlas, se le avisa al motor que vale proponerlas.
+  const seenIt = t.verdicts.filter((v) => v.verdict === "seen").map((v) => v.title);
+  if (includeSeen && seenIt.length) {
+    lines.push(`Acepta volver a ver algo que ya vio: puede proponer una de estas si encaja con el pedido (decíselo, "para volver a ver"): ${seenIt.slice(-15).join("; ")}.`);
+  }
   if (t.notes.length) {
     lines.push(`Lo que te pidió que recuerdes (respetalo SIEMPRE, manda sobre todo lo demás):\n${t.notes.slice(-12).map((n) => `- ${n.text}`).join("\n")}`);
   }
@@ -192,7 +208,7 @@ export function profileBlock(): string | null {
   if (opened.length) lines.push(`Abrió desde Miru (tocó "Ver en X"; NO sabemos si la vio): ${opened.map((o) => `${o.title} (${o.platform}, ${timeAgo(o.openedAt)})`).join("; ")}.`);
   const verdicts = t.verdicts.slice(-4);
   if (verdicts.length) {
-    lines.push(`Opiniones: ${verdicts.map((v) => `${v.title}: ${v.verdict === "liked" ? (v.stage === "card" ? "le gustó la propuesta (👍)" : "la vio y le gustó") : v.verdict === "meh" ? (v.stage === "card" ? "no era para esa persona (👎)" : "la vio y no tanto") : "no la vio"}`).join("; ")}.`);
+    lines.push(`Opiniones: ${verdicts.map((v) => `${v.title}: ${v.verdict === "liked" ? (v.stage === "card" ? "le gustó la propuesta (👍)" : "la vio y le gustó") : v.verdict === "meh" ? (v.stage === "card" ? "no era para esa persona (👎)" : "la vio y no tanto") : v.verdict === "seen" ? "ya la había visto" : "no la vio"}`).join("; ")}.`);
   }
   const rejected = t.rejected.filter((r) => r.reason).slice(-3);
   if (rejected.length) lines.push(`Descartes con motivo: ${rejected.map((r) => `${r.title} ("${r.reason}")`).join("; ")}.`);

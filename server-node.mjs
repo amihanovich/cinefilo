@@ -415,7 +415,7 @@ http
           requests: list(p.requests, 25).map((r) => ({ q: str(r.q, 300) || "", ts: ts(r.ts), source: r.source === "voice" ? "voice" : "text" })).filter((r) => r.q),
           opened: list(p.opened, 20).map((o) => ({ title: str(o.title, 120) || "", platform: str(o.platform, 40) || "", ts: ts(o.ts), q: str(o.q, 200) || "" })).filter((o) => o.title),
           rejected: list(p.rejected, 30).map((r) => ({ title: str(r.title, 120) || "", reason: str(r.reason, 200) || null })).filter((r) => r.title),
-          verdicts: list(p.verdicts, 30).map((v) => ({ title: str(v.title, 120) || "", verdict: ["liked", "meh", "unseen"].includes(v.verdict) ? v.verdict : "unseen", stage: v.stage === "card" ? "card" : "return" })).filter((v) => v.title),
+          verdicts: list(p.verdicts, 30).map((v) => ({ title: str(v.title, 120) || "", verdict: ["liked", "meh", "unseen", "seen"].includes(v.verdict) ? v.verdict : "unseen", stage: v.stage === "card" ? "card" : "return" })).filter((v) => v.title),
           sessions: strArr(p.sessions, 60, 40),
           previous: prev ? { summary: str(prev.summary, 900) || "", likes: strArr(prev.likes, 6, 40), avoid: strArr(prev.avoid, 4, 40) } : null,
           notes: strArr(p.notes, 30, 160),
