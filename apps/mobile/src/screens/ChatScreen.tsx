@@ -40,7 +40,7 @@ import { useBackLayer } from "../lib/back";
 import {
   recordSession, recordRequest, recordRejection, recordVerdict, recordShown, cardVerdict, isSeen, setSeen,
   pendingVerdict, markAsked, excludeTitles as tasteExclude, profileBlock, hasProfile, maybeRefreshProfile,
-  addNote, removeNote, loadTaste,
+  addNote, removeNote, loadTaste, purgeAutoNotes,
   type Verdict,
 } from "../lib/taste";
 
@@ -168,6 +168,7 @@ export function ChatScreen() {
     seedPlatforms();
     void detectCountry();
     warmupBackend();
+    purgeAutoNotes();
     recordSession();
     // Si Miru va a preguntar por la última apertura, ya queda marcado: se
     // pregunta una sola vez, conteste o no.

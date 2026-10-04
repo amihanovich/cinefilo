@@ -257,6 +257,21 @@ export function addNote(text: string, source: "manual" | "chat"): boolean {
   return true;
 }
 
+/**
+ * Limpieza: hasta el 2026-10-04 el motor guardaba como "Lo que me pediste
+ * recordar" preferencias que nadie pidió recordar (y resúmenes repetidos en
+ * cada turno). Se borran las notas de la charla ANTERIORES a ese arreglo; las
+ * cargadas a mano y los "acordate" posteriores quedan. Es idempotente: se
+ * puede correr siempre (al abrir y después de bajar la memoria de la cuenta).
+ */
+const AUTO_NOTES_CUTOFF = "2026-10-04T13:15:00.000Z";
+export function purgeAutoNotes(): void {
+  const t = loadTaste();
+  const before = t.notes.length;
+  t.notes = t.notes.filter((n) => !(n.source === "chat" && n.ts < AUTO_NOTES_CUTOFF));
+  if (t.notes.length !== before) save(t);
+}
+
 export function removeNote(id: string): void {
   const t = loadTaste();
   t.notes = t.notes.filter((n) => n.id !== id);

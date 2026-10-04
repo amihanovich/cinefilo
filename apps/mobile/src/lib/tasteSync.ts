@@ -11,7 +11,7 @@
 // Si la tabla todavía no existe o no hay red, todo sigue andando local.
 
 import { authClient } from "./auth";
-import { loadTaste, replaceTaste, clearTaste, TASTE_CHANGED, type TasteStore } from "./taste";
+import { loadTaste, replaceTaste, clearTaste, purgeAutoNotes, TASTE_CHANGED, type TasteStore } from "./taste";
 import { loadOpened, replaceOpened, clearOpened, type OpenedItem } from "./opened";
 import { loadPlatforms, savePlatforms, PLATFORMS_KEY } from "./prefs";
 
@@ -116,6 +116,9 @@ export async function startTasteSync(userId: string): Promise<boolean> {
 
   if (row) {
     replaceTaste(mergeTaste(loadTaste(), row.data));
+    // Después de fusionar con la cuenta: si no, las notas automáticas viejas
+    // volverían desde la nube. El push de abajo deja la cuenta limpia.
+    purgeAutoNotes();
     replaceOpened(mergeOpened(loadOpened(), row.opened));
     if (row.platforms && row.platforms.length) savePlatforms(row.platforms);
   }

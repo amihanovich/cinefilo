@@ -131,8 +131,12 @@ no se borró nada.
   `profileBlock()` devuelve null) y "Borrar la memoria" · historial (te gustaron / fuiste a ver /
   descartaste) · región · "Conectar la TV" (→ `ControlScreen`) · legales y Borrar mi cuenta. **No
   tiene plataformas ni "Ver luego"**: las plataformas se eligen por búsqueda, en el +.
-- **"Acordate que…" en la charla**: el paso 1 del motor detecta un pedido de recordar o una
-  preferencia firme y duradera, y la devuelve en `remember` (3ª persona, corta). La app la guarda como
+- **"Acordate que…" en la charla**: SOLO si el último mensaje lo pide con palabras ("acordate",
+  "recordá", "no te olvides"…; `askedToRemember()` en `recommend.mjs` lo exige en código), el paso 1
+  devuelve en `remember` esa única cosa (3ª persona, corta). Las preferencias que no se pidieron
+  recordar NO van a notas: las aprende la memoria general (perfil). Hasta 2026-10 se guardaban
+  preferencias deducidas y resúmenes en cada turno: `purgeAutoNotes()` borra las notas de origen
+  "chat" anteriores a ese arreglo (al abrir y al bajar la memoria de la cuenta). La app la guarda como
   nota (`addNote(…, "chat")`) y muestra "✓ Lo voy a recordar: … · Deshacer". Si el mensaje es SOLO eso
   (`only_remember`), el motor no busca película: vuelve `main: null` + `cinephile_note` = acuse, y la
   app lo muestra sin gastar un uso de prueba (en el modo voz, Miru lo dice y sigue escuchando). Las

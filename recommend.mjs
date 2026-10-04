@@ -234,7 +234,7 @@ Reglas:
 - RECIÉN LLEGADOS: si el contexto trae "Recién llegados a sus plataformas", esos títulos están confirmados en su catálogo y probablemente no los vio. La MEJOR sorpresa de Miru son los marcados "PRODUCCIÓN RECIENTE": películas o series de los últimos años que salieron afuera, nunca estuvieron en su radar y recién ahora llegan a su plataforma ("¡qué peliculón y no la conocía!"). Si una de esas encaja DE VERDAD con el pedido y con su estilo, ponela entre los 2 PRIMEROS. Incluí 1 o 2 recién llegados entre los 6 cuando encajen; nunca fuerces uno que no encaje.
 - SI YA VIO MUCHO: si el perfil muestra 2 o más "ya la había visto", esta persona ve mucho y lo obvio le rebota: subí la dosis de lo inesperado y de los recién llegados en los primeros puestos.
 - "line": 10 a 14 palabras, español rioplatense, sin emojis: por qué ESTE para ESTA persona.
-- RECORDAR ("remember"): si la persona te pide explícitamente que recuerdes algo ("acordate que…", "tené en cuenta que siempre…", "no te olvides que…") o dice una preferencia FIRME y duradera sobre ella ("odio el gore", "ya vi todo Nolan", "no tengo Netflix", "veo con mis hijos"), escribila en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore", "Ya vio todo Nolan"). Lo de ESTE momento ("hoy quiero algo liviano", "algo corto") NO va: null. Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
+- RECORDAR ("remember"): SOLO si en su ÚLTIMO mensaje la persona te pide EXPLÍCITAMENTE que recuerdes algo ("acordate que…", "recordá que…", "no te olvides que…", "tené en cuenta siempre que…"), escribí ESO y solo eso en "remember": tercera persona, corta (máximo 14 palabras), sin adornos (ej. "No le gusta el gore"). Una sola cosa, nueva: nunca resumas el perfil, ni repitas lo que ya está en "Lo que te pidió que recuerdes", ni sumes descartes o gustos deducidos. Si no lo pidió con esas palabras, "remember" es null aunque diga algo que parezca una preferencia (eso ya lo aprende la memoria general sola). Si el mensaje es SOLO eso para recordar y no pide nada para ver, poné "only_remember": true, "candidates": [] y en "ack" una frase cálida de máximo 12 palabras confirmando que lo vas a tener en cuenta.
 
 FORMATO DE SALIDA: JSON válido y nada más:
 {"candidates":[{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""},{"title":"","platform":"","type":"","year":"","line":""}],"clarification_needed":null,"remember":null,"only_remember":false,"ack":null}`;
@@ -282,6 +282,13 @@ export function requestedType(text) {
   return null;
 }
 
+// ¿El ÚLTIMO mensaje pide explícitamente que Miru recuerde algo?
+export function askedToRemember(messages) {
+  const last = [...(messages || [])].reverse().find((m) => m.role === "user");
+  const t = String((last && last.content) || "").toLowerCase();
+  return /(?<![a-záéíóúñ])(acord[aá]te|record[aá]|recordalo|recuerd[aá]|no te olvides|no olvides|ten[eé] en cuenta (que )?siempre|tenelo en cuenta|guard[aá] (que|esto)|anot[aá] (que|esto))(?![a-záéíóúñ])/.test(t);
+}
+
 function normalizeCandidate(c) {
   return {
     title: String(c.title || "").trim(),
@@ -321,11 +328,15 @@ async function proposeCandidates({ messages, contextLines, wantType = null, excl
     // ignora: acá es la garantía de que no vuelve lo ya propuesto o visto.
     if (excluded.size) candidates = candidates.filter((c) => !excluded.has(norm(c.title)));
     const txt = (v, n) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+    // "Lo que me pediste recordar" es SOLO lo que la persona pidió recordar con
+    // palabras: el modelo guardaba preferencias deducidas y resúmenes enteros
+    // en cada turno. Sin pedido explícito, nada (lo demás lo aprende el perfil).
+    const remember = askedToRemember(messages) ? txt(parsed.remember, 160) : null;
     return {
       candidates,
       clarification: txt(parsed.clarification_needed, 200),
-      remember: txt(parsed.remember, 160),
-      onlyRemember: parsed.only_remember === true && !!txt(parsed.remember, 160),
+      remember,
+      onlyRemember: parsed.only_remember === true && !!remember,
       ack: txt(parsed.ack, 120),
     };
   };
