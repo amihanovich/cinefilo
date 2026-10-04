@@ -12,6 +12,40 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const distDir = path.join(__dirname, "dist");
 const port = parseInt(process.env.PORT || "3000", 10);
 
+// /api/* → el backend por la red PRIVADA de Railway (ej.
+// http://miru-ai.railway.internal:8080). Así el backend no necesita URL
+// pública: la web (www.mirumovies.com) es lo único expuesto. Para eso el build
+// de la web va con VITE_API_BASE_URL=https://www.mirumovies.com (mismo origen).
+// Sin API_UPSTREAM no se reenvía nada (como antes).
+const API_UPSTREAM = process.env.API_UPSTREAM ? new URL(process.env.API_UPSTREAM) : null;
+
+function proxyApi(req, res) {
+  const headers = { ...req.headers, host: API_UPSTREAM.host };
+  // La IP real del usuario viaja para que el rate limit del backend no meta a
+  // todos en la misma bolsa.
+  const ip = req.socket.remoteAddress || "";
+  if (!headers["x-forwarded-for"] && ip) headers["x-forwarded-for"] = ip;
+  const upstream = http.request({
+    protocol: API_UPSTREAM.protocol,
+    hostname: API_UPSTREAM.hostname,
+    port: API_UPSTREAM.port || 80,
+    method: req.method,
+    path: req.url,
+    headers,
+    timeout: 90000,
+  }, (up) => {
+    res.writeHead(up.statusCode || 502, up.headers);
+    up.pipe(res);
+  });
+  upstream.on("timeout", () => upstream.destroy(new Error("timeout")));
+  upstream.on("error", (e) => {
+    console.warn("[api-proxy]", e.message);
+    if (!res.headersSent) res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "El servidor de Miru no responde." }));
+  });
+  req.pipe(upstream);
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript",
@@ -41,6 +75,10 @@ function sendFile(res, filePath) {
 http
   .createServer((req, res) => {
     const urlPath = new URL(req.url, "http://localhost").pathname;
+    if (API_UPSTREAM && urlPath.startsWith("/api/")) {
+      proxyApi(req, res);
+      return;
+    }
     const filePath = path.join(distDir, urlPath);
 
     // Anti path traversal.
