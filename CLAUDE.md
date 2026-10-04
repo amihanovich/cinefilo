@@ -56,8 +56,7 @@ no se borró nada.
 - **Regla de voz: "habla si le hablaste"** — en el **modo voz** (`components/VoiceMode.tsx`) Miru
   escucha, **corta sola por silencio**, contesta hablado y vuelve a escuchar. Escrito o dictado →
   contesta escrito. La nota se muestra siempre. El modo voz busca la **sensación** del de Claude sin
-  copiarlo: pantalla clara, la marca + frase grande en serif al centro ("Hablemos, Agus" / "Buscando
-  la tuya…"), un **brillo violeta-lavanda que sube desde abajo y late con la voz**, el mic flotando
+  copiarlo: pantalla clara, la marca + frase grande en serif al centro ("Hablemos, Agus" / "Revisando tus plataformas…"), un **brillo violeta-lavanda que sube desde abajo y late con la voz**, el mic flotando
   (pausa/retoma/interrumpe; tocar la frase = "ya terminé") y abajo [+] · dónde busco · voz on/off · X.
   **Si Miru repregunta, la dice y sigue escuchando; si no, el modo voz se cierra solo y la ficha queda
   a la vista mientras Miru la cuenta hablando** (directo al resultado).
