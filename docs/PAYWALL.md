@@ -83,20 +83,14 @@ NO devolver Access Tokens ni la clave secreta.
   según la doc oficial. Flujo: 1) se crea el plan una sola vez; 2) cada suscripción se crea con
   `preapproval_plan_id` + `card_token_id` + `status: authorized` (la tarjeta se tokeniza en una
   página de Mercado Pago o un Brick, nunca como texto plano en el backend).
-- **Plan de PRUEBA — pendiente, crear desde el panel** (para no manejar el Access Token en este
-  chat): Developer Dashboard → "Planes de suscripción" → "Crear nuevo plan", con modo de prueba
-  activo:
-  - Nombre: `Miru Premium`
-  - Precio: `ARS 3.499`
-  - Frecuencia: `Mensual`
-  - Prueba gratis: `7 días`
-  - Duración: `Ilimitada`
-  - Día de facturación: el que sugiera el panel (cobro proporcional activado)
-  - URL de redirección (`back_url`): `https://www.mirumovies.com/?premium=ok`
-  - El `external_reference` (id de usuario) va en cada `preapproval`, no en el plan — no hace falta
-    completarlo acá.
-  ⏳ **Agustín: crear el plan y pasar el `id` resultante** (no es secreto) para completar
-  `MP_PLAN_ID`.
+- **Plan de PRUEBA creado** vía `POST /preapproval_plan` (modo prueba, por Agustín con su propio
+  Access Token de prueba — nunca pasó por el repo):
+  - **`MP_PLAN_ID` = `11b0907c2fa34037864b8756478d81dc`**
+  - Estado: `active`
+  - `reason`: "Miru Premium" · ARS 3.499/mes · frecuencia mensual · prueba gratis 7 días
+    (`first_invoice_offset: 7`) · `back_url`: `https://www.mirumovies.com/?premium=ok`
+  - Link de checkout del plan (sirve para probar el alta de suscripción a mano, con tarjetas de
+    prueba): `https://www.mercadopago.com.ar/subscriptions/checkout?preapproval_plan_id=11b0907c2fa34037864b8756478d81dc`
 - **Webhooks**: configurados vía MCP. URL (prueba y producción): `https://miru-ai.up.railway.app/api/mp/webhook`.
   Eventos activados: `subscription_preapproval`, `subscription_authorized_payment`, `payment`.
   Clave secreta: visible solo en Developer Dashboard → esta app → Webhooks (no se mostró acá) —
@@ -144,9 +138,9 @@ NO devolver Access Tokens ni la clave secreta.
 ## Pendientes (⏳ para Agustín)
 
 1. Confirmar en la cuenta de Mercado Pago que los datos de identidad/fiscales estén completos para
-   cobrar suscripciones.
-2. Crear el plan de prueba desde el panel (ver arriba) y pasar el `plan_id` resultante.
-3. Cargar en Railway (servicio `miru-ai`): `MP_ACCESS_TOKEN` (de prueba), `MP_WEBHOOK_SECRET`, y
-   `MP_PLAN_ID` una vez creado el plan.
-4. Antes de producción: repetir la creación del plan en modo producción, cargar las credenciales de
+   cobrar suscripciones (postergado a propósito: no bloquea las pruebas en modo prueba, solo pasar
+   a producción).
+2. Cargar en Railway (servicio `miru-ai`): `MP_ACCESS_TOKEN` (de prueba), `MP_WEBHOOK_SECRET`, y
+   `MP_PLAN_ID=11b0907c2fa34037864b8756478d81dc`.
+3. Antes de producción: repetir la creación del plan en modo producción, cargar las credenciales de
    producción en Railway, y correr `/mp-review` + el checklist de homologación.
