@@ -12,8 +12,12 @@ export const TASTE_KEY = "miru:taste";
 
 /** "seen" = "Ya la vi" en la ficha: no es gusto ni disgusto, es "no me la propongas". */
 export type Verdict = "liked" | "meh" | "unseen" | "seen";
-/** "card" = manito en la ficha (reacción a la propuesta); "return" = "¿qué tal estuvo?" al volver. */
-export type VerdictStage = "card" | "return";
+/**
+ * "card" = manito en la ficha (reacción a la propuesta); "return" = "¿qué tal
+ * estuvo?" al volver; "seen" = la marca "Ya la vi", aparte para que conviva
+ * con la manito (ya la vi + me gusta).
+ */
+export type VerdictStage = "card" | "return" | "seen";
 
 type TasteStore = {
   requests: { q: string; ts: string; source: "text" | "voice" }[];
@@ -131,8 +135,24 @@ export function recordShown(title: string): void {
 
 /** La manito ya puesta en una ficha (para pintarla al re-renderizar). */
 export function cardVerdict(title: string): Verdict | null {
-  const v = loadTaste().verdicts.find((x) => x.title === title && x.stage === "card");
+  const v = loadTaste().verdicts.find((x) => x.title === title && x.stage === "card" && x.verdict !== "seen");
   return v ? v.verdict : null;
+}
+
+/** ¿La marcó "Ya la vi"? (también lo guardado como manito antes de que fueran aparte) */
+export function isSeen(title: string): boolean {
+  return loadTaste().verdicts.some((x) => x.title === title && x.verdict === "seen");
+}
+
+/** Prende/apaga "Ya la vi" sin tocar la manito. */
+export function setSeen(title: string, on: boolean): void {
+  const t = loadTaste();
+  t.verdicts = t.verdicts.filter((v) => !(v.title === title && v.verdict === "seen"));
+  if (on) {
+    t.verdicts.push({ title, verdict: "seen", stage: "seen", ts: now() });
+    t.pending += 1;
+  }
+  save(t);
 }
 
 /**

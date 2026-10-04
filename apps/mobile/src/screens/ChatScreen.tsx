@@ -38,7 +38,7 @@ import { pickTvSession } from "../lib/tv-remote";
 import { track } from "../lib/analytics";
 import { useBackLayer } from "../lib/back";
 import {
-  recordSession, recordRequest, recordRejection, recordVerdict, recordShown, cardVerdict,
+  recordSession, recordRequest, recordRejection, recordVerdict, recordShown, cardVerdict, isSeen, setSeen,
   pendingVerdict, markAsked, excludeTitles as tasteExclude, profileBlock, hasProfile, maybeRefreshProfile,
   addNote, removeNote, loadTaste,
   type Verdict,
@@ -219,8 +219,7 @@ export function ChatScreen() {
     // "Dame otra" a secas es un descarte sin motivo. Si le pusiste 👍 o "Ya la
     // vi", no cuenta: no es que no le cerró.
     const prev = lastRecoRef.current;
-    const prevVerdict = prev ? cardVerdict(prev.title) : null;
-    if (prev && !openedRef.current.has(prev.title) && prevVerdict !== "liked" && prevVerdict !== "seen" &&
+    if (prev && !openedRef.current.has(prev.title) && cardVerdict(prev.title) !== "liked" && !isSeen(prev.title) &&
         !rejectedRef.current.some((r) => r.title === prev.title)) {
       const reason = opts?.dry ? null : q;
       rejectedRef.current = [...rejectedRef.current, { title: prev.title, reason }];
@@ -374,6 +373,14 @@ export function ChatScreen() {
     recordVerdict(title, verdict, "card");
     track("verdict_given", { verdict, stage: "card" });
     void maybeRefreshProfile();
+  };
+
+  // "Ya la vi": marca aparte de la manito (pueden ir juntas). Saca el título
+  // de las próximas propuestas salvo "Incluir ya vistas".
+  const markSeen = (title: string, on: boolean) => {
+    setSeen(title, on);
+    track("seen_marked", { on });
+    if (on) void maybeRefreshProfile();
   };
 
   // ── Dictado (el mic del composer): press-to-speak / press-to-stop ─────────
@@ -643,6 +650,7 @@ export function ChatScreen() {
               avail={availability[t.item.title]}
               onOpened={() => openedRef.current.add(t.item.title)}
               onReact={(v) => reactToCard(t.item.title, v)}
+              onSeen={(on) => markSeen(t.item.title, on)}
             />
           );
         })}
@@ -740,7 +748,7 @@ export function ChatScreen() {
 // ── La película ──────────────────────────────────────────────────────────────
 // Una sola, con el porqué entero. El póster acompaña; el texto es el producto.
 function RecoCard({
-  turnId, item, poster, avail, onOpened, onReact, onPosterError,
+  turnId, item, poster, avail, onOpened, onReact, onSeen, onPosterError,
 }: {
   onPosterError: (url: string) => void;
   turnId: string;
@@ -749,9 +757,12 @@ function RecoCard({
   avail?: JwResult;
   onOpened: () => void;
   onReact: (verdict: Verdict) => void;
+  onSeen: (on: boolean) => void;
 }) {
   const [reaction, setReaction] = useState<Verdict | null>(() => cardVerdict(item.title));
+  const [seen, setSeenState] = useState<boolean>(() => isSeen(item.title));
   const react = (v: Verdict) => { setReaction(v); onReact(v); };
+  const toggleSeen = () => { const on = !seen; setSeenState(on); onSeen(on); };
   const color = colorForPlatform(item.platform);
   const label = platformLabel(item.platform);
   // El celeste de Prime con texto blanco queda ilegible: el color de la tipografía
@@ -804,12 +815,12 @@ function RecoCard({
 
           {/* La manito: reacción a la propuesta (no un veredicto de vista). Alimenta
               el perfil; el swap sigue siendo "Dame otra" o decirle qué no cerró.
-              "Ya la vi" no es gusto: saca el título de las próximas propuestas. */}
+              "Ya la vi" va aparte y convive con la manito (ya la vi + me gusta):
+              no es gusto, saca el título de las próximas propuestas. */}
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
             {([
               ["liked", "Me gusta", <ThumbsUp key="i" className="h-3 w-3" />],
               ["meh", "No me gusta", <ThumbsDown key="i" className="h-3 w-3" />],
-              ["seen", "Ya la vi", <Eye key="i" className="h-3 w-3" />],
             ] as [Verdict, string, ReactNode][]).map(([v, label, icon]) => (
               <button
                 key={v}
@@ -824,6 +835,18 @@ function RecoCard({
                 {icon} {label}
               </button>
             ))}
+            <span className="h-3 w-px bg-border" aria-hidden />
+            <button
+              onClick={toggleSeen}
+              aria-label="Ya la vi"
+              aria-pressed={seen}
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-all active:scale-95",
+                seen ? "bg-primary/10 text-primary" : "text-muted-foreground",
+              )}
+            >
+              <Eye className="h-3 w-3" /> Ya la vi
+            </button>
           </div>
         </div>
       </div>

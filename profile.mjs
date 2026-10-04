@@ -51,11 +51,17 @@ function formatSignals({ requests, opened, rejected, verdicts, sessions, previou
   // Dos momentos distintos: la manito en la ficha es una REACCIÓN a la
   // propuesta (todavía no la vio); el "¿qué tal estuvo?" al volver es un
   // veredicto después de verla. Pesan distinto y se le dice al modelo.
-  const card = verdicts.filter((v) => v.stage === "card");
-  const after = verdicts.filter((v) => v.stage !== "card");
+  // "Ya la vi" (etapa seen, o seen viejo guardado como manito) va aparte: no es gusto.
+  const seenIt = verdicts.filter((v) => v.verdict === "seen");
+  const card = verdicts.filter((v) => v.stage === "card" && v.verdict !== "seen");
+  const after = verdicts.filter((v) => v.stage === "return");
   if (card.length) {
     lines.push("\nReaccionó a la propuesta en el momento (sin verla todavía):");
-    for (const v of card) lines.push(`- ${v.title}: ${v.verdict === "liked" ? "👍 le cerró" : v.verdict === "seen" ? "ya la había visto (no dice si le gustó)" : "👎 no era para esa persona"}`);
+    for (const v of card) lines.push(`- ${v.title}: ${v.verdict === "liked" ? "👍 le cerró" : "👎 no era para esa persona"}`);
+  }
+  if (seenIt.length) {
+    lines.push(`
+Marcó que ya las había visto (si además puso 👍/👎 arriba, eso dice si le gustaron): ${seenIt.map((v) => v.title).join("; ")}`);
   }
   if (after.length) {
     lines.push("\nDespués de verla (Miru se lo preguntó al volver):");
