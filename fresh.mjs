@@ -54,7 +54,7 @@ const QUERY = `query MiruNew($country: Country!, $date: Date!, $language: Langua
       newOffer(platform: WEB) { monetizationType package { technicalName clearName } }
       node {
         __typename
-        ... on Movie { content(country: $country, language: $language) { title originalTitle originalReleaseYear productionCountries genres { shortName } scoring { imdbScore imdbVotes tmdbPopularity } } }
+        ... on Movie { content(country: $country, language: $language) { title originalTitle originalReleaseYear productionCountries ageCertification genres { shortName } scoring { imdbScore imdbVotes tmdbPopularity } } }
         ... on Season {
           content(country: $country, language: $language) { seasonNumber }
           show { content(country: $country, language: $language) { title originalTitle originalReleaseYear productionCountries genres { shortName } scoring { imdbScore imdbVotes tmdbPopularity } } }
@@ -109,6 +109,8 @@ async function fetchDay(country, date) {
         votes: c.scoring && typeof c.scoring.imdbVotes === "number" ? c.scoring.imdbVotes : null,
         popularity: c.scoring && typeof c.scoring.tmdbPopularity === "number" ? c.scoring.tmdbPopularity : null,
         countries: Array.isArray(c.productionCountries) ? c.productionCountries : [],
+        cert: c.ageCertification ? String(c.ageCertification).trim().toUpperCase() : "",
+        familyGenre: (c.genres || []).some((g) => g.shortName === "fml"),
       });
     }
     if (!block.pageInfo || !block.pageInfo.hasNextPage) break;
@@ -201,7 +203,14 @@ function genresIn(text) {
  * Con `query` (el pedido), si nombra géneros se queda con esos; el orden
  * castiga lo archiconocido (lo que todos vieron) para que no tape lo demás.
  */
-export function freshArrivals({ country, platforms = null, type = null, exclude = [], query = "", profile = "", limit = 50 } = {}) {
+// Calificaciones aptas para chicos (AR, US, UK, BR y las numéricas de JustWatch).
+const KID_CERTS = new Set(["ATP", "G", "PG", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "U", "L", "AL", "0", "6", "7", "10"]);
+export function kidSafeFresh(it) {
+  if (it.cert) return KID_CERTS.has(it.cert);
+  return !!it.familyGenre; // sin calificación: solo si JustWatch la marca familiar
+}
+
+export function freshArrivals({ country, platforms = null, type = null, exclude = [], query = "", profile = "", kids = false, limit = 50 } = {}) {
   const c = String(country || DEFAULT_REGION).toUpperCase();
   void warmFresh(c);
   const snap = snapshots.get(c);
@@ -211,6 +220,7 @@ export function freshArrivals({ country, platforms = null, type = null, exclude 
   const now = Date.now();
   const recentBase = snap.items
     .filter((it) => (!plats || plats.has(it.platform)) && (!type || it.type === type))
+    .filter((it) => !kids || kidSafeFresh(it))
     .filter((it) => !ex.has(norm(it.title)) && !(it.originalTitle && ex.has(norm(it.originalTitle))))
     // Lo flojo no suma: sin puntaje o con poco consenso queda afuera.
     .filter((it) => it.imdb !== null && it.imdb >= 6 && (it.votes === null || it.votes >= 5000))

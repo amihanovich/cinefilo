@@ -434,6 +434,49 @@ export async function titleCredits(tmdbId, type) {
   }
 }
 
+// Calificaciones aptas para chicos (ATP / G / PG y equivalentes).
+const KID_SAFE = new Set(["ATP", "G", "PG", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "U", "L", "AL", "0", "6", "7", "TP"]);
+const KID_UNSAFE = new Set(["+13", "13", "PG-13", "+16", "16", "R", "+18", "18", "NC-17", "TV-14", "TV-MA", "12", "14", "15"]);
+
+/**
+ * ¿Es apto para ver con chicos? Mira la calificación de TMDB (AR primero,
+ * después US). Sin calificación, decide el género (Familia sí; Terror no).
+ * @returns {Promise<boolean|null>} null = no se pudo saber
+ */
+export async function kidSafeTitle(tmdbId, type) {
+  if (!availabilityEnabled() || !tmdbId) return null;
+  const kind = /serie/i.test(String(type || "")) ? "tv" : "movie";
+  const key = `kids|${kind}|${tmdbId}`;
+  const hit = cacheGet(key, false);
+  if (hit !== undefined) return hit;
+  try {
+    const d = await tmdbGet(`/${kind}/${tmdbId}`, `append_to_response=${kind === "tv" ? "content_ratings" : "release_dates"}`);
+    const certs = [];
+    if (kind === "tv") {
+      for (const r of (d.content_ratings && d.content_ratings.results) || []) {
+        if (r.iso_3166_1 === "AR" || r.iso_3166_1 === "US") certs.push({ c: r.iso_3166_1, v: r.rating });
+      }
+    } else {
+      for (const r of (d.release_dates && d.release_dates.results) || []) {
+        if (r.iso_3166_1 !== "AR" && r.iso_3166_1 !== "US") continue;
+        for (const x of r.release_dates || []) if (x.certification) certs.push({ c: r.iso_3166_1, v: x.certification });
+      }
+    }
+    certs.sort((a, b) => (a.c === "AR" ? -1 : 1) - (b.c === "AR" ? -1 : 1));
+    const v = certs.length ? String(certs[0].v).trim().toUpperCase() : "";
+    const genres = (d.genres || []).map((g) => g.id);
+    let value;
+    if (KID_SAFE.has(v)) value = true;
+    else if (KID_UNSAFE.has(v)) value = false;
+    else value = genres.includes(10751) && !genres.includes(27) && !genres.includes(53); // Familia, sin Terror ni Suspenso
+    cacheSet(key, value);
+    return value;
+  } catch (e) {
+    console.warn(`[availability] calificación falló para ${kind}/${tmdbId}: ${e.message}`);
+    return null;
+  }
+}
+
 /**
  * Valida una tanda de ítems del LLM contra la disponibilidad real.
  * Anota cada ítem con `_avail`:

@@ -1,5 +1,5 @@
 import { fetchUpstream } from "./upstream.mjs";
-import { validateItems, pickAvailable, detectPlatformMentions, titleCredits } from "./availability.mjs";
+import { validateItems, pickAvailable, detectPlatformMentions, titleCredits, kidSafeTitle } from "./availability.mjs";
 import { freshArrivals, freshBlock, matchFresh, norm, isRecent } from "./fresh.mjs";
 
 // Motor de recomendaciones para la API REST móvil (/api/recommend).
@@ -282,6 +282,13 @@ export function requestedType(text) {
   return null;
 }
 
+// ¿Es para ver con chicos? (en el pedido de hoy o en el modo)
+export function isKidsRequest(text, mode = null) {
+  if (mode === "kids") return true;
+  const t = String(text || "").toLowerCase();
+  return /(?<![a-záéíóúñ])(chicos|chicas|niñ[oa]s|nenes|nenas|hij[oa]s|peques|pequeñ[oa]s|infantil(es)?|familiar|en familia|kids|menores|criaturas)(?![a-záéíóúñ])/.test(t);
+}
+
 // ¿El ÚLTIMO mensaje pide explícitamente que Miru recuerde algo?
 export function askedToRemember(messages) {
   const last = [...(messages || [])].reverse().find((m) => m.role === "user");
@@ -387,10 +394,12 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   const modeLine = modeDef ? `Modo elegido por la persona: "${modeDef.label}". ${modeDef.rule}` : null;
   // Lo que llegó hace poco a sus plataformas (JustWatch). Nunca espera: si la
   // lista todavía no cargó o JustWatch se cayó, va vacía y todo sigue igual.
+  const kids = isKidsRequest(lastUser && lastUser.content, mode);
   const fresh = freshArrivals({
     country,
     platforms: validationPlatforms,
     type: wantType,
+    kids,
     exclude,
     query: (lastUser && lastUser.content) || "",
     profile: tasteProfile || "",
@@ -419,6 +428,16 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
   }
   const tProp = Date.now();
   await validateItems(candidates, validationPlatforms, country);
+  // Con chicos, la regla del prompt no alcanza (llegó a proponer un anime +16):
+  // la calificación real de TMDB decide en código. Lo no apto queda afuera.
+  const dropUnsafe = async (list) => {
+    if (!kids) return;
+    await Promise.all(list.map(async (c) => {
+      if (!c._tmdbId) return;
+      if ((await kidSafeTitle(c._tmdbId, c.type)) === false) { c._avail = "none"; c._unsafe = true; }
+    }));
+  };
+  await dropUnsafe(candidates);
   // Para la sorpresa cuenta lo recién llegado Y producido en los últimos años.
   const isFresh = (c) => isRecent(matchFresh(fresh, c.title));
   let winner = pickWinner(candidates, isFresh);
@@ -439,17 +458,23 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
       if (!proposed.clarification && again.clarification) proposed = { ...proposed, clarification: again.clarification };
       if (!proposed.remember && again.remember) proposed = { ...proposed, remember: again.remember };
       await validateItems(candidates, validationPlatforms, country);
+      await dropUnsafe(candidates);
       winner = pickWinner(candidates, isFresh);
     }
   }
-  if (!winner) winner = candidates[0] || null;
+  if (!winner) winner = candidates.find((c) => !c._unsafe) || null;
+  if (!winner) {
+    // Todo lo propuesto era para más grandes: mejor preguntar que arriesgar.
+    const ask = "No encontré algo que me deje tranquilo para ver con chicos en tus plataformas. ¿Qué edades tienen? Así busco mejor.";
+    return { filters: {}, main: null, alternatives: [], clarification_needed: ask, cinephile_note: ask, remember: null };
+  }
   if (!winner) throw new Error("El modelo no propuso candidatos.");
   const tTmdb = Date.now();
   const avail = winner._avail || "unknown";
   const pickedRank = candidates.indexOf(winner) + 1;
   const surprise = !!winner._surprise;
   const winnerTmdbId = winner._tmdbId;
-  for (const c of candidates) { delete c._avail; delete c._surprise; delete c._tmdbId; }
+  for (const c of candidates) { delete c._avail; delete c._surprise; delete c._tmdbId; delete c._unsafe; }
   const freshHit = matchFresh(fresh, winner.title);
   // Datos verdaderos para la carta (director/elenco de TMDB): sin esto, Haiku
   // inventaba directores, sobre todo de lo reciente.
@@ -480,7 +505,7 @@ async function recommendSingle({ messages, baseContext, validationPlatforms, cou
     console.warn("[recommend] la carta falló, va con la line del paso 1:", e.message);
   }
   const tPitch = Date.now();
-  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, fresh_pool: fresh.length, fresh_candidates: freshCandidates, winner_fresh: !!freshHit, surprise, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
+  console.log(`[metrics-single] ${JSON.stringify({ propose_ms: tProp - t0, tmdb_ms: tTmdb - tProp, pitch_ms: tPitch - tTmdb, retried, picked_rank: pickedRank, avail, want_type: wantType, mode: modeDef ? mode : null, remember: !!proposed.remember, kids, fresh_pool: fresh.length, fresh_candidates: freshCandidates, winner_fresh: !!freshHit, surprise, poster: !!winner.posterUrl, profile: !!profileBlock, rejected: (rejected || []).length })}`);
 
   const main = {
     title: winner.title,
